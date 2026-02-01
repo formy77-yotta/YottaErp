@@ -268,8 +268,7 @@ export async function removeUserFromOrganization(userId: string) {
 /**
  * Verifica se l'utente corrente è Super Admin
  * 
- * NOTA: Per ora usa una costante. In futuro implementare con tabella separata
- * o con campo 'isSuperAdmin' nel sistema di autenticazione.
+ * AGGIORNATO: Ora legge dal database il campo isSuperAdmin
  * 
  * @returns true se Super Admin, false altrimenti
  */
@@ -280,11 +279,23 @@ async function isSuperAdmin(): Promise<boolean> {
     return false;
   }
   
-  // TODO: Implementare logica reale Super Admin
-  // Per ora, considera Super Admin l'utente con ID specifico o tutti in development
-  const SUPER_ADMIN_IDS = process.env.SUPER_ADMIN_IDS?.split(',') || [];
-  
-  return SUPER_ADMIN_IDS.includes(userIdCookie) || process.env.NODE_ENV === 'development';
+  // Bypass development
+  if (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true') {
+    return true;
+  }
+
+  try {
+    // Verifica nel database
+    const user = await prisma.user.findUnique({
+      where: { id: userIdCookie },
+      select: { isSuperAdmin: true, active: true },
+    });
+
+    return user?.active && user?.isSuperAdmin || false;
+  } catch (error) {
+    console.error('Errore verifica Super Admin:', error);
+    return false;
+  }
 }
 
 /**

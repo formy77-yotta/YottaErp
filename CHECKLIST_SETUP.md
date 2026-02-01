@@ -15,15 +15,20 @@ Usa questa checklist per verificare che tutto sia configurato correttamente.
 
 - [ ] Crea `.env.local` nella root del progetto
 - [ ] Aggiungi `DATABASE_URL` con la tua stringa di connessione
-- [ ] Aggiungi `SUPER_ADMIN_IDS` (lascia vuoto per development)
-- [ ] Imposta `NODE_ENV=development`
+- [ ] Aggiungi `SUPER_ADMIN_IDS` (user IDs separati da virgola)
+- [ ] Aggiungi `DEV_BYPASS_AUTH=true` (SOLO per development!)
 
 Esempio `.env.local`:
 ```env
 DATABASE_URL="postgresql://user:password@localhost:5432/yottaerp"
-SUPER_ADMIN_IDS=
-NODE_ENV=development
+SUPER_ADMIN_IDS="user_1,user_2"
+DEV_BYPASS_AUTH="true"
 ```
+
+⚠️ **IMPORTANTE SICUREZZA:**
+- In development: `DEV_BYPASS_AUTH="true"` permette accesso senza autenticazione
+- In production: RIMUOVI `DEV_BYPASS_AUTH` e usa user ID reali in `SUPER_ADMIN_IDS`
+- Leggi `SECURITY_SUPER_ADMIN_SETUP.md` per dettagli completi
 
 ### 2. Verifica Database
 
@@ -43,6 +48,14 @@ Dovresti vedere:
 - ✅ Connessione database OK
 - ✅ Conteggio organizzazioni (0 o più)
 - ✅ Statistiche globali
+
+## 🔒 Sicurezza e Middleware
+
+- [ ] Verifica che `src/middleware.ts` esista
+- [ ] Verifica che `src/app/access-denied/page.tsx` esista
+- [ ] Leggi `SECURITY_SUPER_ADMIN_SETUP.md` per configurazione completa
+- [ ] Testa accesso senza autenticazione (dovrebbe redirect a /access-denied)
+- [ ] Testa accesso con Super Admin (dovrebbe funzionare)
 
 ## 🚀 Avvio Applicazione
 

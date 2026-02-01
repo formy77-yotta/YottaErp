@@ -4,6 +4,7 @@
  * Esegui con: npx tsx scripts/test-super-admin.ts
  */
 
+import 'dotenv/config'; // ✅ Carica variabili d'ambiente da .env
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';

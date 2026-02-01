@@ -51,19 +51,25 @@ cd YottaErp
 npm install
 \`\`\`
 
-### 3. Configura Database
+### 3. Configura Ambiente
 
-Copia `.env.example` in `.env` e configura la stringa di connessione PostgreSQL:
+Copia `env.example` in `.env.local` e configura:
 
 \`\`\`bash
-cp .env.example .env
+cp env.example .env.local
 \`\`\`
 
-Modifica `.env`:
+Modifica `.env.local`:
 
 \`\`\`env
+# Database
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/yottaerp?schema=public"
+
+# OPZIONALE: Development bypass
+# DEV_BYPASS_AUTH="true"  # Commentato per usare auth reale
 \`\`\`
+
+⚠️ **IMPORTANTE**: Il file `.env.local` non viene committato (è in `.gitignore`).
 
 ### 4. Esegui Migrazioni Database
 
@@ -81,13 +87,25 @@ npx prisma generate
 npx prisma db seed
 \`\`\`
 
-### 6. Avvia Server Sviluppo
+### 6. Crea il primo Super Admin
+
+\`\`\`bash
+npx tsx scripts/create-super-admin.ts
+\`\`\`
+
+Segui il prompt e inserisci i dati del Super Admin.
+
+### 7. Avvia Server Sviluppo
 
 \`\`\`bash
 npm run dev
 \`\`\`
 
 Apri [http://localhost:3000](http://localhost:3000) nel browser.
+
+### 8. Login
+
+Vai su [http://localhost:3000/login](http://localhost:3000/login) e accedi con le credenziali del Super Admin.
 
 ## 📁 Struttura Progetto
 
@@ -137,10 +155,45 @@ YottaErp/
 
 ## 🔒 Sicurezza
 
-- **MAI** committare il file `.env`
-- Usare variabili d'ambiente per configurazioni sensibili
-- Validazione input sempre server-side con Zod
-- Rate limiting su API pubbliche
+### Autenticazione
+
+Il sistema implementa **autenticazione completa** con:
+
+1. **Hash Password** - bcrypt con 10 rounds
+2. **Cookie HttpOnly** - Sessioni sicure
+3. **Super Admin** - Flag database (`User.isSuperAdmin`)
+4. **Middleware Protection** - Verifica DB per ogni richiesta
+
+📖 **Leggi**: `AUTHENTICATION_GUIDE.md` per guida completa
+
+### Quick Start Login
+
+```bash
+# 1. Crea Super Admin
+npx tsx scripts/create-super-admin.ts
+
+# 2. Avvia server
+npm run dev
+
+# 3. Login
+http://localhost:3000/login
+```
+
+### Protezione Route Admin
+
+Il sistema implementa **doppia protezione** per le route sensibili:
+
+1. **Middleware** (`src/middleware.ts`) - Blocca accesso a `/organizations` per non-Super Admin
+2. **Server Actions** - Verifica permessi lato server prima di ogni operazione
+
+### Best Practices
+
+- ✅ **MAI** committare file `.env` o `.env.local`
+- ✅ Usare variabili d'ambiente per configurazioni sensibili
+- ✅ Validazione input sempre server-side con Zod
+- ✅ Cookie HttpOnly per sessioni
+- ✅ HTTPS in produzione
+- ❌ **MAI** usare `DEV_BYPASS_AUTH="true"` in production
 
 ## 🧪 Testing
 

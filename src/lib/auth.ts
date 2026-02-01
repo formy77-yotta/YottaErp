@@ -67,14 +67,21 @@ export class ForbiddenError extends Error {
  * ```
  */
 export async function getAuthContext(): Promise<AuthContext> {
-  // TODO: Implementare integrazione con NextAuth, Clerk, o altro provider
-  // Per ora, simuliamo lettura da cookie
-  
   const userIdCookie = cookies().get('userId')?.value;
   const organizationIdCookie = cookies().get('currentOrganizationId')?.value;
   
   if (!userIdCookie) {
     throw new UnauthorizedError('Utente non autenticato');
+  }
+  
+  // Verifica che l'utente esista e sia attivo
+  const user = await prisma.user.findUnique({
+    where: { id: userIdCookie },
+    select: { id: true, active: true },
+  });
+
+  if (!user || !user.active) {
+    throw new UnauthorizedError('Utente non trovato o disattivato');
   }
   
   if (!organizationIdCookie) {
