@@ -9,9 +9,8 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Connection pooling per query (più veloce)
-    url: process.env["DATABASE_URL"],
-    // Direct connection per migrazioni (richiesto da Supabase)
-    directUrl: process.env["DIRECT_URL"],
+    // Per Supabase: usa DIRECT_URL (porta 5432) per evitare PgBouncer
+    // PgBouncer (porta 6543) non supporta prepared statements richiesti dalle migrazioni
+    url: process.env["DIRECT_URL"],
   },
 });

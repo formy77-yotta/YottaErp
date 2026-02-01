@@ -7,7 +7,8 @@
 // - Giacenza calcolata da movimenti (MAI campo stock statico)
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "library" // ✅ Usa library engine (tradizionale) per compatibilità Supabase
 }
 
 datasource db {
