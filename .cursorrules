@@ -1,0 +1,740 @@
+# Regole di Sviluppo YottaErp - Cursor AI
+
+## Linguaggio e Comunicazione
+- Rispondi SEMPRE in italiano
+- Usa terminologia tecnica appropriata in inglese quando necessario
+- Sii chiaro, conciso e professionale
+
+## Stack Tecnologico
+- TypeScript strict mode (mai usare `any`, preferire `unknown`)
+- React con hooks moderni
+- Next.js 14 con App Router e Server Actions
+- Node.js per backend
+- Prisma ORM
+- SQL/PostgreSQL per database
+- Zod per validazione
+- decimal.js per calcoli monetari
+- Git per version control
+
+---
+
+# 🏗️ REGOLE ARCHITETTURALI ERP (MANDATORIE)
+
+## 1. ⚠️ GESTIONE FISCALE E NUMERICA (PILASTRO FONDAMENTALE)
+
+### REGOLA ASSOLUTA: MAI USARE `number` PER VALORI MONETARI
+
+**❌ VIETATO:**
+```typescript
+const price: number = 19.99;
+const vatRate: number = 0.22;
+const total = price * (1 + vatRate); // ❌ ERRORE!
+```
+
+**✅ OBBLIGATORIO:**
+```typescript
+import { Decimal } from 'decimal.js';
+
+const price = new Decimal('19.99');
+const vatRate = new Decimal('0.22');
+const total = price.mul(vatRate.plus(1)); // ✅ CORRETTO
+```
+
+### Database (Prisma Schema)
+```prisma
+model Product {
+  id          String   @id @default(cuid())
+  price       Decimal  @db.Decimal(12, 2)  // ✅ Per valute
+  weight      Decimal  @db.Decimal(12, 4)  // ✅ Per quantità/pesi
+  vatRate     Decimal  @db.Decimal(5, 4)   // ✅ Per aliquote (es. 0.2200)
+}
+```
+
+### Arrotondamento Fiscale
+```typescript
+import { Decimal } from 'decimal.js';
+
+// Imposta modalità arrotondamento globale
+Decimal.set({ rounding: Decimal.ROUND_HALF_UP }); // ✅ Sempre usare ROUND_HALF_UP
+
+// Calcolo IVA
+function calculateVAT(netAmount: Decimal, vatRate: Decimal): Decimal {
+  return netAmount.mul(vatRate).toDecimalPlaces(2); // Arrotonda a 2 decimali
+}
+
+// Scorporo IVA
+function extractVAT(grossAmount: Decimal, vatRate: Decimal): {
+  net: Decimal;
+  vat: Decimal;
+} {
+  const divisor = new Decimal(1).plus(vatRate);
+  const net = grossAmount.div(divisor).toDecimalPlaces(2);
+  const vat = grossAmount.minus(net).toDecimalPlaces(2);
+  return { net, vat };
+}
+```
+
+### Validazione Zod per Decimal
+```typescript
+import { z } from 'zod';
+import { Decimal } from 'decimal.js';
+
+export const decimalSchema = z.string().transform((val) => new Decimal(val));
+
+export const invoiceLineSchema = z.object({
+  quantity: decimalSchema,
+  unitPrice: decimalSchema,
+  vatRate: decimalSchema,
+});
+```
+
+---
+
+## 2. 📸 IMMUTABILITÀ DEI DOCUMENTI (SNAPSHOT RULE)
+
+### PRINCIPIO: Ogni documento è una fotografia immutabile del momento
+
+**Quando si genera un documento (Preventivo, DDT, Fattura), i dati DEVONO essere COPIATI, non referenziati.**
+
+### ❌ ERRORE CRITICO
+```typescript
+// ❌ MAI fare questo!
+model InvoiceLine {
+  id         String   @id
+  invoiceId  String
+  productId  String   // ❌ Solo il riferimento
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Decimal
+  // ❌ Mancano: descrizione, prezzoUnitario, aliquotaIVA
+}
+```
+
+Se il prezzo del prodotto cambia domani, la fattura di oggi mostrerebbe il prezzo sbagliato!
+
+### ✅ DESIGN CORRETTO
+```prisma
+model InvoiceLine {
+  id                  String   @id @default(cuid())
+  invoiceId           String
+  
+  // SNAPSHOT del prodotto
+  productId           String?  // Riferimento opzionale per statistica
+  productCode         String   // ✅ Codice prodotto al momento della fattura
+  description         String   // ✅ Descrizione al momento della fattura
+  unitPrice           Decimal  @db.Decimal(12, 2) // ✅ Prezzo al momento
+  quantity            Decimal  @db.Decimal(12, 4)
+  vatRate             Decimal  @db.Decimal(5, 4)  // ✅ Aliquota al momento
+  
+  // Campi calcolati (per performance)
+  netAmount           Decimal  @db.Decimal(12, 2)
+  vatAmount           Decimal  @db.Decimal(12, 2)
+  grossAmount         Decimal  @db.Decimal(12, 2)
+  
+  invoice             Invoice  @relation(fields: [invoiceId], references: [id])
+  product             Product? @relation(fields: [productId], references: [id])
+}
+
+model Invoice {
+  id                  String   @id @default(cuid())
+  number              String   @unique
+  
+  // SNAPSHOT del cliente
+  customerId          String?  // Riferimento opzionale
+  customerName        String   // ✅ Ragione sociale al momento
+  customerVatNumber   String   // ✅ P.IVA al momento
+  customerAddress     String   // ✅ Indirizzo al momento
+  customerCity        String
+  customerZip         String
+  
+  // Totali
+  netTotal            Decimal  @db.Decimal(12, 2)
+  vatTotal            Decimal  @db.Decimal(12, 2)
+  grossTotal          Decimal  @db.Decimal(12, 2)
+  
+  lines               InvoiceLine[]
+  customer            Customer? @relation(fields: [customerId], references: [id])
+}
+```
+
+### Logica di creazione documento
+```typescript
+async function createInvoiceFromOrder(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { customer: true, lines: { include: { product: true } } }
+  });
+  
+  if (!order) throw new Error('Order not found');
+  
+  // ✅ SNAPSHOT dei dati cliente
+  const customerSnapshot = {
+    customerId: order.customer.id,
+    customerName: order.customer.name,
+    customerVatNumber: order.customer.vatNumber,
+    customerAddress: order.customer.address,
+    customerCity: order.customer.city,
+    customerZip: order.customer.zip,
+  };
+  
+  // ✅ SNAPSHOT delle righe prodotto
+  const linesSnapshot = order.lines.map(line => ({
+    productId: line.product.id,
+    productCode: line.product.code,
+    description: line.product.description,
+    unitPrice: line.unitPrice, // Dal ordine, non dal prodotto!
+    quantity: line.quantity,
+    vatRate: line.vatRate,
+    // ... calcoli totali
+  }));
+  
+  return await prisma.invoice.create({
+    data: {
+      ...customerSnapshot,
+      lines: { create: linesSnapshot },
+      // ... altri campi
+    }
+  });
+}
+```
+
+---
+
+## 3. 📦 GESTIONE MAGAZZINO (CALCULATED STOCK)
+
+### PRINCIPIO: La giacenza non è un campo, è un calcolo
+
+**❌ MAI fare questo:**
+```prisma
+model Product {
+  id       String  @id
+  name     String
+  stock    Int     // ❌ Campo statico = disallineamenti garantiti
+}
+```
+
+**✅ DESIGN CORRETTO:**
+```prisma
+model Product {
+  id              String          @id @default(cuid())
+  code            String          @unique
+  name            String
+  // ❌ Nessun campo 'stock'
+  
+  stockMovements  StockMovement[]
+}
+
+model StockMovement {
+  id              String   @id @default(cuid())
+  productId       String
+  warehouseId     String
+  
+  // Quantità algebrica: + per carichi, - per scarichi
+  quantity        Decimal  @db.Decimal(12, 4)
+  
+  // Tipo movimento
+  type            MovementType // CARICO, SCARICO, RETTIFICA, etc.
+  
+  // Documento origine
+  documentType    String?  // "DDT", "INVOICE", "PURCHASE_ORDER"
+  documentId      String?
+  
+  // Audit
+  createdAt       DateTime @default(now())
+  notes           String?
+  
+  product         Product   @relation(fields: [productId], references: [id])
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
+}
+
+enum MovementType {
+  CARICO_INIZIALE
+  CARICO_FORNITORE
+  SCARICO_VENDITA
+  SCARICO_DDT
+  RETTIFICA_INVENTARIO
+  RESO_CLIENTE
+  RESO_FORNITORE
+}
+```
+
+### Calcolo giacenza
+```typescript
+async function getProductStock(
+  productId: string, 
+  warehouseId?: string
+): Promise<Decimal> {
+  const movements = await prisma.stockMovement.findMany({
+    where: {
+      productId,
+      ...(warehouseId && { warehouseId }),
+    },
+  });
+  
+  // Somma algebrica di tutti i movimenti
+  const stock = movements.reduce(
+    (acc, mov) => acc.plus(new Decimal(mov.quantity.toString())),
+    new Decimal(0)
+  );
+  
+  return stock;
+}
+```
+
+### Generazione movimenti automatica
+```typescript
+async function createDeliveryNote(data: CreateDDTInput) {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Crea DDT
+    const ddt = await tx.deliveryNote.create({ data });
+    
+    // 2. Per ogni riga, genera movimento di magazzino
+    for (const line of data.lines) {
+      await tx.stockMovement.create({
+        data: {
+          productId: line.productId,
+          warehouseId: data.warehouseId,
+          quantity: new Decimal(line.quantity.toString()).neg(), // ✅ Negativo = scarico
+          type: 'SCARICO_DDT',
+          documentType: 'DDT',
+          documentId: ddt.id,
+        },
+      });
+    }
+    
+    return ddt;
+  });
+}
+```
+
+---
+
+## 4. 🇮🇹 VALIDAZIONE ITALIANA
+
+### P.IVA e Codice Fiscale (Zod)
+```typescript
+import { z } from 'zod';
+
+// Validazione P.IVA italiana (11 cifre numeriche)
+export const italianVatNumberSchema = z
+  .string()
+  .regex(/^\d{11}$/, 'P.IVA deve contenere esattamente 11 cifre')
+  .refine(validateItalianVAT, 'P.IVA non valida');
+
+function validateItalianVAT(vat: string): boolean {
+  if (!/^\d{11}$/.test(vat)) return false;
+  
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    let digit = parseInt(vat[i]);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(vat[10]);
+}
+
+// Validazione Codice Fiscale italiano (16 caratteri)
+export const italianFiscalCodeSchema = z
+  .string()
+  .regex(/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/, 'Formato Codice Fiscale non valido')
+  .refine(validateItalianFiscalCode, 'Codice Fiscale non valido');
+
+function validateItalianFiscalCode(cf: string): boolean {
+  // Algoritmo di validazione completo
+  // (implementazione dettagliata con tabelle di controllo)
+  return cf.length === 16; // Placeholder
+}
+
+// Schema completo anagrafica italiana
+export const italianCustomerSchema = z.object({
+  businessName: z.string().min(2, 'Ragione sociale obbligatoria'),
+  vatNumber: italianVatNumberSchema.optional(),
+  fiscalCode: italianFiscalCodeSchema.optional(),
+  address: z.string().min(5, 'Indirizzo obbligatorio'),
+  city: z.string().min(2, 'Città obbligatoria'),
+  province: z.string().length(2, 'Provincia deve essere 2 caratteri (es. MI)'),
+  zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere 5 cifre'),
+  country: z.string().default('IT'),
+}).refine(
+  (data) => data.vatNumber || data.fiscalCode,
+  'Inserire almeno P.IVA o Codice Fiscale'
+);
+```
+
+---
+
+## 5. 📁 STRUTTURA CARTELLE (Next.js 14 + Prisma)
+
+```
+src/
+├── app/                      # Next.js App Router
+│   ├── (auth)/              # Route group autenticazione
+│   ├── (dashboard)/         # Route group dashboard
+│   ├── api/                 # API routes (se necessario)
+│   └── layout.tsx
+├── components/
+│   ├── common/              # Button, Input, Modal, etc.
+│   └── features/            # InvoiceForm, ProductCard, etc.
+├── lib/
+│   ├── prisma.ts            # Prisma client singleton
+│   ├── decimal-utils.ts     # ✅ Helper per calcoli monetari
+│   └── validators.ts        # ✅ Validatori P.IVA/CF
+├── schemas/                 # ✅ Schemi Zod
+│   ├── entity-schema.ts     # Customer, Supplier, Product
+│   ├── document-schema.ts   # Invoice, Order, DDT
+│   └── common-schema.ts     # Schemi condivisi
+├── services/
+│   ├── actions/             # ✅ Next.js Server Actions
+│   │   ├── customer-actions.ts
+│   │   ├── invoice-actions.ts
+│   │   └── stock-actions.ts
+│   └── business/            # Business logic pura
+├── hooks/                   # Custom React hooks
+├── types/                   # TypeScript types
+├── utils/                   # Utility generiche
+└── prisma/
+    ├── schema.prisma        # Schema database
+    ├── migrations/
+    └── seed.ts
+```
+
+### File mandatori da creare subito
+
+#### `src/lib/decimal-utils.ts`
+```typescript
+import { Decimal } from 'decimal.js';
+
+// Configura modalità arrotondamento globale
+Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
+
+export function calculateVAT(net: Decimal, rate: Decimal): Decimal {
+  return net.mul(rate).toDecimalPlaces(2);
+}
+
+export function calculateGross(net: Decimal, rate: Decimal): Decimal {
+  return net.plus(calculateVAT(net, rate)).toDecimalPlaces(2);
+}
+
+export function extractVAT(gross: Decimal, rate: Decimal) {
+  const divisor = new Decimal(1).plus(rate);
+  const net = gross.div(divisor).toDecimalPlaces(2);
+  const vat = gross.minus(net).toDecimalPlaces(2);
+  return { net, vat };
+}
+
+export function toDecimal(value: string | number | Decimal): Decimal {
+  return new Decimal(value.toString());
+}
+```
+
+#### `src/lib/validators.ts`
+```typescript
+// Implementare funzioni validateItalianVAT e validateItalianFiscalCode
+```
+
+---
+
+## 🚨 CHECKLIST AGGIUNTIVA PER ERP
+
+Quando crei codice ERP, verifica:
+
+- [ ] ✅ Stai usando `Decimal` per tutti i valori monetari?
+- [ ] ✅ Hai fatto snapshot dei dati nelle tabelle documento?
+- [ ] ✅ I movimenti di magazzino sono registrati correttamente?
+- [ ] ✅ Le validazioni P.IVA/CF sono applicate?
+- [ ] ✅ I calcoli IVA usano ROUND_HALF_UP?
+- [ ] ✅ Non stai usando `JOIN` per dati storici nei documenti?
+- [ ] ✅ La giacenza è calcolata, non memorizzata?
+
+---
+
+## Convenzioni di Naming
+
+### File
+- PascalCase per componenti React: `UserProfile.tsx`, `OrderList.tsx`
+- kebab-case per utility: `string-utils.ts`, `date-helper.ts`
+- lowercase per directory: `components/`, `services/`, `utils/`
+
+### Codice
+```typescript
+// camelCase per variabili e funzioni
+const userName = "Mario";
+function calculateTotal() {}
+
+// PascalCase per classi, interfacce, componenti
+class UserService {}
+interface UserData {}
+export const Button = () => {};
+
+// UPPER_SNAKE_CASE per costanti
+const MAX_ATTEMPTS = 3;
+const API_URL = "https://api.example.com";
+```
+
+## Struttura del Progetto
+```
+src/
+├── components/
+│   ├── common/       # Componenti riutilizzabili
+│   └── features/     # Componenti specifici
+├── pages/            # Route/Pagine
+├── services/         # API e business logic
+├── hooks/            # Custom React hooks
+├── utils/            # Funzioni utility
+├── types/            # TypeScript types/interfaces
+├── constants/        # Costanti globali
+└── styles/           # Stili globali
+```
+
+## Ordine Import
+```typescript
+// 1. Librerie esterne
+import React, { useState } from 'react';
+
+// 2. Componenti interni
+import { Button } from '@/components/common/Button';
+
+// 3. Types
+import type { User } from '@/types';
+
+// 4. Stili
+import styles from './Component.module.css';
+```
+
+## Principi di Codice
+
+### Clean Code
+- Funzioni piccole e focalizzate (max 20-30 righe)
+- Nomi descrittivi e auto-esplicativi
+- DRY (Don't Repeat Yourself)
+- KISS (Keep It Simple, Stupid)
+- SOLID principles
+
+### TypeScript
+- Sempre tipizzare parametri e return types
+- Usare interfacce per oggetti complessi
+- Evitare `any`, usare `unknown` se necessario
+- Type guards per type narrowing
+- Strict mode sempre attivo
+
+### Gestione Errori
+```typescript
+// Sempre gestire errori esplicitamente
+try {
+  const result = await operation();
+  return result;
+} catch (error) {
+  logger.error('Errore:', error);
+  throw new CustomError('Operazione fallita', { cause: error });
+}
+
+// Validare input
+function processData(data: unknown) {
+  if (!isValidData(data)) {
+    throw new ValidationError('Dati non validi');
+  }
+  // ...
+}
+```
+
+### Async/Await
+- Preferire async/await a Promise chains
+- Sempre gestire rejection
+- Promise.all per operazioni parallele
+- Evitare async in loop quando possibile
+
+## React Best Practices
+
+### Componenti
+```typescript
+// Props interface con suffisso Props
+interface ButtonProps {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+// Export named, non default
+export const Button: React.FC<ButtonProps> = ({ 
+  label, 
+  onClick, 
+  disabled = false 
+}) => {
+  return (
+    <button onClick={onClick} disabled={disabled}>
+      {label}
+    </button>
+  );
+};
+```
+
+### Hooks
+- Custom hooks iniziano con `use`: `useAuth`, `useLocalStorage`
+- Rispettare Rules of Hooks
+- useMemo/useCallback solo quando necessario per performance
+- Evitare re-renders inutili
+
+### Performance
+- Lazy loading componenti pesanti
+- Code splitting appropriato
+- React.memo per componenti puri
+- Virtualization per liste lunghe
+
+## Testing
+
+### Requisiti
+- Coverage minimo 80% per business logic
+- Test per ogni feature
+- AAA pattern (Arrange, Act, Assert)
+
+### Naming
+```typescript
+describe('UserService', () => {
+  describe('createUser', () => {
+    it('should create user with valid data', () => {});
+    it('should throw error with invalid email', () => {});
+  });
+});
+```
+
+## Documentazione
+
+### JSDoc per funzioni complesse
+```typescript
+/**
+ * Calcola il totale ordine con tasse
+ * 
+ * @param order - Ordine da processare
+ * @param taxRate - Aliquota IVA (es. new Decimal('0.22'))
+ * @returns Totale lordo con tasse
+ * @throws {ValidationError} Se ordine invalido
+ * 
+ * @example
+ * ```typescript
+ * const net = new Decimal('100.00');
+ * const vat = new Decimal('0.22');
+ * const total = calculateTotal(order, vat);
+ * ```
+ */
+function calculateTotal(order: Order, taxRate: Decimal): Decimal {
+  // ...
+}
+```
+
+## Git Workflow
+
+### Branch
+- `main` → Produzione
+- `develop` → Sviluppo
+- `feature/*` → Nuove feature
+- `bugfix/*` → Bug fix
+- `hotfix/*` → Fix urgenti
+
+### Commit Messages (Conventional Commits)
+```
+feat(auth): add JWT refresh token
+fix(orders): correct tax calculation
+docs(api): update endpoints
+refactor(user): simplify validation
+test(orders): add integration tests
+chore(deps): update dependencies
+```
+
+### Pull Request
+- Titolo chiaro e descrittivo
+- Descrizione dettagliata
+- Link a issue/ticket
+- Screenshot per UI changes
+- Test passati
+- Review richiesta
+
+## Security
+
+### Must Have
+- MAI committare secrets/credenziali
+- Usare variabili d'ambiente per config sensibili
+- Validare e sanitize input utente
+- Rate limiting su API
+- HTTPS sempre
+- Seguire OWASP Top 10
+
+### Dati Sensibili
+- Crittografare at rest
+- TLS/SSL per comunicazioni
+- Authorization checks
+- Audit log per operazioni critiche
+- GDPR compliance
+
+## Performance
+
+### Frontend
+- Lazy loading
+- Code splitting
+- Ottimizzazione assets
+- Minimizzare re-renders
+- Virtualization liste lunghe
+
+### Backend
+- Caching appropriato
+- Query ottimizzate
+- Indici database
+- Pagination
+- Connection pooling
+
+## Code Review Checklist
+
+### Quando crei codice:
+- [ ] Codice leggibile e comprensibile
+- [ ] Segue convenzioni progetto
+- [ ] **Usa `Decimal` per valori monetari (MAI `number`)**
+- [ ] **Documenti con snapshot, non JOIN per dati storici**
+- [ ] **Movimenti magazzino registrati correttamente**
+- [ ] **Validazione P.IVA/CF italiana applicata**
+- [ ] Ha test adeguati
+- [ ] Documentazione sufficiente
+- [ ] Nessun console.log dimenticato
+- [ ] Gestione errori e casi edge
+- [ ] Performance accettabili
+- [ ] Security check
+
+### Cosa evitare:
+❌ Codice commentato/debug
+❌ console.log in produzione
+❌ any in TypeScript
+❌ **`number` per valori monetari (USA `Decimal`!)**
+❌ **JOIN per dati storici in documenti**
+❌ **Campo `stock` statico nel database**
+❌ Funzioni troppo lunghe
+❌ Duplicazione codice
+❌ Magic numbers
+❌ Variabili con nomi poco chiari
+❌ Mancanza di gestione errori
+
+## Quando generi codice:
+
+1. **Chiedi chiarimenti** se requirements non sono chiari
+2. **Proponi soluzioni** con pro/contro quando ci sono opzioni
+3. **Spiega il codice** complesso che generi
+4. **Suggerisci miglioramenti** quando vedi opportunità
+5. **Avvisa** di potenziali problemi o breaking changes
+6. **Testa mentalmente** il codice prima di proporlo
+7. **Considera edge cases** e gestione errori
+8. **Pensa alla manutenibilità** a lungo termine
+
+## Priorità
+
+1. **Correttezza Fiscale** - Calcoli monetari precisi (Decimal.js)
+2. **Integrità Dati** - Snapshot immutabili per documenti
+3. **Correttezza** - Il codice deve funzionare
+4. **Leggibilità** - Deve essere comprensibile
+5. **Manutenibilità** - Deve essere modificabile
+6. **Performance** - Deve essere efficiente
+7. **Eleganza** - Deve essere pulito
+
+---
+
+**Ricorda:** Queste regole servono a mantenere qualità e consistenza in un sistema ERP mission-critical. In caso di dubbi, chiedi!
