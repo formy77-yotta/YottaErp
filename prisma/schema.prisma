@@ -5,6 +5,7 @@
 // - SEMPRE usare Decimal per valori monetari (MAI number)
 // - Documenti immutabili con snapshot (MAI JOIN per dati storici)
 // - Giacenza calcolata da movimenti (MAI campo stock statico)
+// - MULTITENANT: Ogni tabella ha organizationId per isolamento dati
 
 generator client {
   provider   = "prisma-client-js"
@@ -16,6 +17,99 @@ datasource db {
 }
 
 // ============================================================================
+// MULTITENANT - ORGANIZZAZIONI
+// ============================================================================
+
+/**
+ * Organization: Organizzazione/Azienda (Multitenant)
+ * 
+ * REGOLA MULTITENANT:
+ * - Ogni organizzazione è completamente isolata dalle altre
+ * - Tutti i dati (clienti, prodotti, documenti, magazzino) appartengono a un'organizzazione
+ * - Gli utenti possono appartenere a più organizzazioni (con ruoli diversi)
+ */
+model Organization {
+  id                String              @id @default(cuid())
+  
+  // Dati azienda
+  businessName      String              // Ragione sociale dell'azienda ERP
+  vatNumber         String?             @unique // P.IVA dell'azienda
+  fiscalCode        String?             // Codice Fiscale
+  
+  // Indirizzo sede legale
+  address           String?
+  city              String?
+  province          String?
+  zipCode           String?
+  country           String              @default("IT")
+  
+  // Contatti
+  email             String?
+  pec               String?
+  phone             String?
+  sdiCode           String?             // Codice SDI per fatturazione elettronica
+  
+  // Logo e branding
+  logoUrl           String?
+  
+  // Subscription e limiti
+  plan              String              @default("FREE") // FREE, BASIC, PREMIUM
+  maxUsers          Int                 @default(5)
+  maxInvoicesPerYear Int               @default(500)
+  
+  // Metadata
+  active            Boolean             @default(true)
+  
+  // Timestamp
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  // Relazioni (tutte le entità appartengono a un'organizzazione)
+  users             UserOrganization[]  // Utenti con accesso a questa org
+  entities          Entity[]
+  products          Product[]
+  warehouses        Warehouse[]
+  documents         Document[]
+  vatRates          VatRate[]
+  stockMovements    StockMovement[]
+  
+  @@index([businessName])
+}
+
+/**
+ * UserOrganization: Join table per relazione User-Organization (Many-to-Many)
+ * 
+ * Un utente può appartenere a più organizzazioni con ruoli diversi
+ */
+model UserOrganization {
+  id              String       @id @default(cuid())
+  
+  userId          String       // ID utente (da sistema auth: NextAuth, Clerk, ecc.)
+  organizationId  String
+  
+  // Ruolo utente in questa organizzazione
+  role            UserRole     @default(USER)
+  
+  // Timestamp
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  // Relazioni
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, organizationId]) // Un utente può avere un solo ruolo per org
+  @@index([userId])
+  @@index([organizationId])
+}
+
+enum UserRole {
+  OWNER       // Proprietario (accesso completo)
+  ADMIN       // Amministratore (quasi tutto)
+  USER        // Utente standard (operazioni quotidiane)
+  READONLY    // Solo lettura (report, visualizzazione)
+}
+
+// ============================================================================
 // ANAGRAFICHE UNIFICATE (Cliente/Fornitore)
 // ============================================================================
 
@@ -24,49 +118,56 @@ datasource db {
  * 
  * REGOLA: Un'entità può essere CLIENT, PROVIDER o BOTH
  * I documenti fanno SNAPSHOT di questi dati (non dipendono da relazioni)
+ * 
+ * MULTITENANT: Ogni entità appartiene a un'organizzazione
  */
 model Entity {
-  id            String      @id @default(cuid())
+  id              String       @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni entità appartiene a un'organizzazione
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
   // Tipologia entità
-  type          EntityType  // CLIENT, PROVIDER, BOTH
+  type            EntityType   // CLIENT, PROVIDER, BOTH
   
   // Dati anagrafici
-  businessName  String      // Ragione sociale
-  vatNumber     String?     @unique // P.IVA italiana (11 cifre)
-  fiscalCode    String?     // Codice Fiscale (16 caratteri)
+  businessName    String       // Ragione sociale
+  vatNumber       String?      // P.IVA italiana (11 cifre)
+  fiscalCode      String?      // Codice Fiscale (16 caratteri)
   
   // Indirizzo
-  address       String
-  city          String
-  province      String      // 2 caratteri (es. MI, RM)
-  zipCode       String      // CAP (5 cifre)
-  country       String      @default("IT")
+  address         String
+  city            String
+  province        String       // 2 caratteri (es. MI, RM)
+  zipCode         String       // CAP (5 cifre)
+  country         String       @default("IT")
   
   // Contatti
-  email         String?
-  pec           String?     // PEC (Posta Elettronica Certificata)
-  phone         String?
-  sdiCode       String?     // Codice SDI per fatturazione elettronica (7 caratteri)
+  email           String?
+  pec             String?      // PEC (Posta Elettronica Certificata)
+  phone           String?
+  sdiCode         String?      // Codice SDI per fatturazione elettronica (7 caratteri)
   
   // IVA predefinita per questa entità
-  vatRateId     String?     // Aliquota IVA di default
-  defaultVatRate VatRate?   @relation(fields: [vatRateId], references: [id])
+  vatRateId       String?      // Aliquota IVA di default
+  defaultVatRate  VatRate?     @relation(fields: [vatRateId], references: [id])
   
   // Metadata
-  notes         String?     @db.Text
-  active        Boolean     @default(true)
+  notes           String?      @db.Text
+  active          Boolean      @default(true)
   
   // Timestamp
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
   
   // Relazioni (opzionali, i documenti hanno snapshot)
-  documents     Document[]
+  documents       Document[]
   
-  @@index([vatNumber])
-  @@index([businessName])
-  @@index([type])
+  @@unique([organizationId, vatNumber]) // P.IVA unica per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, businessName])
+  @@index([organizationId, type])
 }
 
 enum EntityType {
@@ -84,27 +185,35 @@ enum EntityType {
  * 
  * REGOLA: Ogni documento fa SNAPSHOT del valore, ma mantiene relazione per ricerca
  * Esempi: 22%, 10%, 4%, 0% (esente)
+ * 
+ * MULTITENANT: Ogni organizzazione può avere le proprie aliquote
  */
 model VatRate {
-  id            String    @id @default(cuid())
-  name          String    @unique // Es. "Standard 22%", "Ridotta 10%", "Esente"
-  value         Decimal   @db.Decimal(5, 4) // Es. 0.2200 per 22%
-  description   String?   @db.Text
+  id              String       @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni aliquota appartiene a un'organizzazione
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  name            String       // Es. "Standard 22%", "Ridotta 10%", "Esente"
+  value           Decimal      @db.Decimal(5, 4) // Es. 0.2200 per 22%
+  description     String?      @db.Text
   
   // Metadata
-  active        Boolean   @default(true)
-  isDefault     Boolean   @default(false) // Una sola aliquota di default
+  active          Boolean      @default(true)
+  isDefault       Boolean      @default(false) // Una sola aliquota di default per org
   
   // Timestamp
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
   
   // Relazioni
-  documentLines DocumentLine[]
-  entities      Entity[]
+  documentLines   DocumentLine[]
+  entities        Entity[]
   
-  @@index([name])
-  @@index([isDefault])
+  @@unique([organizationId, name]) // Nome aliquota unico per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, isDefault])
 }
 
 // ============================================================================
@@ -116,35 +225,43 @@ model VatRate {
  * 
  * REGOLA IMPORTANTE: NESSUN campo 'stock'!
  * La giacenza si calcola sommando algebricamente i StockMovement
+ * 
+ * MULTITENANT: Ogni prodotto appartiene a un'organizzazione
  */
 model Product {
-  id            String    @id @default(cuid())
-  code          String    @unique // Codice articolo
-  name          String
-  description   String?   @db.Text
+  id              String          @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni prodotto appartiene a un'organizzazione
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  code            String          // Codice articolo
+  name            String
+  description     String?         @db.Text
   
   // Prezzi e IVA (SEMPRE Decimal per valori monetari!)
-  price         Decimal   @db.Decimal(12, 2) // Prezzo di listino
+  price           Decimal         @db.Decimal(12, 2) // Prezzo di listino
   
   // IVA predefinita per questo prodotto
-  vatRateId     String?   // Aliquota IVA di default
+  vatRateId       String?         // Aliquota IVA di default
   
   // Note: NESSUN campo 'stock' qui!
   // La giacenza è calcolata da StockMovement (Calculated Stock Rule)
   
   // Metadata
-  active        Boolean   @default(true)
+  active          Boolean         @default(true)
   
   // Timestamp
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   
   // Relazioni
-  stockMovements StockMovement[]
-  documentLines  DocumentLine[]
+  stockMovements  StockMovement[]
+  documentLines   DocumentLine[]
   
-  @@index([code])
-  @@index([name])
+  @@unique([organizationId, code]) // Codice prodotto unico per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, name])
 }
 
 // ============================================================================
@@ -153,19 +270,29 @@ model Product {
 
 /**
  * Warehouse: Magazzini fisici
+ * 
+ * MULTITENANT: Ogni magazzino appartiene a un'organizzazione
  */
 model Warehouse {
-  id            String    @id @default(cuid())
-  code          String    @unique
-  name          String
-  address       String?
+  id              String          @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni magazzino appartiene a un'organizzazione
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  code            String          // Codice magazzino
+  name            String
+  address         String?
   
   // Timestamp
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   
   // Relazioni
-  stockMovements StockMovement[]
+  stockMovements  StockMovement[]
+  
+  @@unique([organizationId, code]) // Codice magazzino unico per organizzazione
+  @@index([organizationId])
 }
 
 /**
@@ -176,14 +303,21 @@ model Warehouse {
  * - quantity < 0 = SCARICO
  * 
  * La giacenza attuale si ottiene: SUM(quantity) GROUP BY (productId, warehouseId)
+ * 
+ * MULTITENANT: Ogni movimento appartiene a un'organizzazione
  */
 model StockMovement {
-  id              String       @id @default(cuid())
+  id              String        @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni movimento appartiene a un'organizzazione
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
   productId       String
   warehouseId     String
   
   // Quantità algebrica (+ per carichi, - per scarichi)
-  quantity        Decimal      @db.Decimal(12, 4)
+  quantity        Decimal       @db.Decimal(12, 4)
   
   // Tipo movimento
   type            MovementType
@@ -204,10 +338,11 @@ model StockMovement {
   product         Product       @relation(fields: [productId], references: [id])
   warehouse       Warehouse     @relation(fields: [warehouseId], references: [id])
   
-  @@index([productId])
-  @@index([warehouseId])
-  @@index([createdAt])
-  @@index([documentId])
+  @@index([organizationId])
+  @@index([organizationId, productId])
+  @@index([organizationId, warehouseId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, documentId])
 }
 
 enum MovementType {
@@ -234,50 +369,57 @@ enum MovementType {
  * mantiene l'indirizzo originale.
  * 
  * IMPORTANTE: Supporta più tipi di documento (preventivo, ordine, DDT, fattura, nota credito)
+ * 
+ * MULTITENANT: Ogni documento appartiene a un'organizzazione
  */
 model Document {
-  id                  String        @id @default(cuid())
+  id                           String        @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni documento appartiene a un'organizzazione
+  organizationId               String
+  organization                 Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   
   // Tipo documento
-  type                DocumentType  // QUOTE, ORDER, DELIVERY_NOTE, INVOICE, CREDIT_NOTE
+  type                         DocumentType  // QUOTE, ORDER, DELIVERY_NOTE, INVOICE, CREDIT_NOTE
   
-  number              String        @unique // Numero documento progressivo
-  date                DateTime
+  number                       String        // Numero documento progressivo
+  date                         DateTime
   
   // SNAPSHOT FISCALE dell'entità al momento del documento
   // ✅ Questi dati sono IMMUTABILI e indipendenti dall'anagrafica
-  entityId                 String?       // Riferimento opzionale per statistiche
-  customerNameSnapshot     String        // ✅ Ragione sociale al momento
-  customerVatSnapshot      String?       // ✅ P.IVA al momento
-  customerFiscalCodeSnapshot String?     // ✅ Codice Fiscale al momento
-  customerAddressSnapshot  String        // ✅ Indirizzo completo al momento
-  customerSdiSnapshot      String?       // ✅ Codice SDI al momento
-  customerCity             String        // ✅ Città al momento
-  customerProvince         String        // ✅ Provincia al momento
-  customerZip              String        // ✅ CAP al momento
-  customerCountry          String        @default("IT")
+  entityId                     String?       // Riferimento opzionale per statistiche
+  customerNameSnapshot         String        // ✅ Ragione sociale al momento
+  customerVatSnapshot          String?       // ✅ P.IVA al momento
+  customerFiscalCodeSnapshot   String?       // ✅ Codice Fiscale al momento
+  customerAddressSnapshot      String        // ✅ Indirizzo completo al momento
+  customerSdiSnapshot          String?       // ✅ Codice SDI al momento
+  customerCity                 String        // ✅ Città al momento
+  customerProvince             String        // ✅ Provincia al momento
+  customerZip                  String        // ✅ CAP al momento
+  customerCountry              String        @default("IT")
   
   // Totali documento (tutti Decimal per precisione fiscale)
-  netTotal            Decimal       @db.Decimal(12, 2) // Imponibile totale
-  vatTotal            Decimal       @db.Decimal(12, 2) // IVA totale
-  grossTotal          Decimal       @db.Decimal(12, 2) // Totale lordo
+  netTotal                     Decimal       @db.Decimal(12, 2) // Imponibile totale
+  vatTotal                     Decimal       @db.Decimal(12, 2) // IVA totale
+  grossTotal                   Decimal       @db.Decimal(12, 2) // Totale lordo
   
   // Metadata
-  notes               String?       @db.Text
-  paymentTerms        String?       // Condizioni di pagamento
+  notes                        String?       @db.Text
+  paymentTerms                 String?       // Condizioni di pagamento
   
   // Timestamp
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt                    DateTime      @default(now())
+  updatedAt                    DateTime      @updatedAt
   
   // Relazioni
-  lines               DocumentLine[]
-  entity              Entity?       @relation(fields: [entityId], references: [id])
+  lines                        DocumentLine[]
+  entity                       Entity?       @relation(fields: [entityId], references: [id])
   
-  @@index([number])
-  @@index([date])
-  @@index([entityId])
-  @@index([type])
+  @@unique([organizationId, number]) // Numero documento unico per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, date])
+  @@index([organizationId, entityId])
+  @@index([organizationId, type])
 }
 
 enum DocumentType {

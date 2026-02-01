@@ -11,6 +11,7 @@ export default defineConfig({
   datasource: {
     // Per Supabase: usa DIRECT_URL (porta 5432) per evitare PgBouncer
     // PgBouncer (porta 6543) non supporta prepared statements richiesti dalle migrazioni
-    url: process.env["DIRECT_URL"],
+    // Usa DIRECT_URL se disponibile, altrimenti fallback su DATABASE_URL
+    url: process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
   },
 });

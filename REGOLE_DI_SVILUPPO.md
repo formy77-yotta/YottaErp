@@ -8,7 +8,8 @@
    - [Immutabilità dei Documenti](#2-immutabilit-dei-documenti-snapshot-rule)
    - [Gestione Magazzino](#3-gestione-magazzino-calculated-stock)
    - [Validazione Italiana](#4-validazione-italiana)
-   - [Struttura Cartelle](#5-struttura-cartelle)
+   - [Multitenant](#5-multitenant-isolamento-organizzazioni)
+   - [Struttura Cartelle](#6-struttura-cartelle)
 4. [Ingegneria del Software](#ingegneria-del-software)
    - [Database First](#database-first)
    - [Type-Safety Assoluta](#type-safety-assoluta)
@@ -999,7 +1000,545 @@ try {
 
 ---
 
-## 5. 📁 STRUTTURA CARTELLE (Next.js 14 + Prisma)
+## 5. 🏢 MULTITENANT (ISOLAMENTO ORGANIZZAZIONI)
+
+### PRINCIPIO FONDAMENTALE
+
+**YottaErp è un sistema MULTITENANT: più aziende (organizzazioni) utilizzano la stessa istanza dell'applicazione con dati completamente isolati.**
+
+Ogni organizzazione è totalmente indipendente dalle altre:
+- Non può vedere i dati di altre organizzazioni
+- Non può modificare i dati di altre organizzazioni
+- Ha i propri utenti, clienti, prodotti, documenti, magazzini
+
+### Architettura Multitenant
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    YottaErp (Singola Istanza)           │
+├─────────────────────────────────────────────────────────┤
+│  Organization 1: Acme S.r.l.                            │
+│  ├─ Users: Mario (OWNER), Luigi (USER)                  │
+│  ├─ Customers: 150 clienti                              │
+│  ├─ Products: 500 prodotti                              │
+│  ├─ Invoices: 2.000 fatture                             │
+│  └─ Warehouses: 2 magazzini                             │
+├─────────────────────────────────────────────────────────┤
+│  Organization 2: Beta S.p.A.                            │
+│  ├─ Users: Anna (OWNER), Carlo (ADMIN), Giulia (USER)  │
+│  ├─ Customers: 300 clienti                              │
+│  ├─ Products: 1.200 prodotti                            │
+│  ├─ Invoices: 5.000 fatture                             │
+│  └─ Warehouses: 3 magazzini                             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Schema Database
+
+#### ❌ ERRORE: Tabella senza organizationId
+
+```prisma
+// ❌ SBAGLIATO: Prodotti condivisi tra tutte le organizzazioni
+model Product {
+  id       String  @id @default(cuid())
+  code     String  @unique // ❌ Unico globalmente: conflitti garantiti!
+  name     String
+  price    Decimal @db.Decimal(12, 2)
+}
+
+// PROBLEMA:
+// - Organization 1 crea prodotto con code "PROD001"
+// - Organization 2 NON può creare prodotto con lo stesso codice
+// - Organization 2 può vedere/modificare prodotti di Organization 1
+```
+
+#### ✅ DESIGN CORRETTO: Ogni tabella ha organizationId
+
+```prisma
+model Organization {
+  id              String    @id @default(cuid())
+  businessName    String    // Ragione sociale dell'azienda ERP
+  vatNumber       String?   @unique
+  
+  // Subscription
+  plan            String    @default("FREE") // FREE, BASIC, PREMIUM
+  maxUsers        Int       @default(5)
+  
+  // Relazioni
+  users           UserOrganization[]
+  products        Product[]
+  entities        Entity[]
+  documents       Document[]
+  warehouses      Warehouse[]
+  stockMovements  StockMovement[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model UserOrganization {
+  id              String       @id @default(cuid())
+  userId          String       // ID utente (da NextAuth/Clerk)
+  organizationId  String
+  role            UserRole     @default(USER) // OWNER, ADMIN, USER, READONLY
+  
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, organizationId]) // Un utente può avere un solo ruolo per org
+  @@index([userId])
+  @@index([organizationId])
+}
+
+enum UserRole {
+  OWNER       // Proprietario (accesso completo, gestione subscription)
+  ADMIN       // Amministratore (quasi tutto, no billing)
+  USER        // Utente standard (operazioni quotidiane)
+  READONLY    // Solo lettura (report, visualizzazione)
+}
+
+// ✅ CORRETTO: Ogni prodotto appartiene a un'organizzazione
+model Product {
+  id              String       @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni prodotto appartiene a un'organizzazione
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  code            String       // Codice articolo
+  name            String
+  price           Decimal      @db.Decimal(12, 2)
+  
+  stockMovements  StockMovement[]
+  
+  // ✅ Codice unico PER ORGANIZZAZIONE (non globalmente)
+  @@unique([organizationId, code])
+  
+  // ✅ Indici sempre con organizationId per performance
+  @@index([organizationId])
+  @@index([organizationId, name])
+}
+
+// ✅ Lo stesso vale per TUTTE le tabelle
+model Entity {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  businessName    String
+  vatNumber       String?
+  
+  @@unique([organizationId, vatNumber]) // P.IVA unica per organizzazione
+  @@index([organizationId])
+}
+
+model Document {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  number          String
+  type            DocumentType
+  
+  @@unique([organizationId, number]) // Numero fattura unico per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, type])
+}
+
+model Warehouse {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  code            String
+  name            String
+  
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model StockMovement {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  productId       String
+  warehouseId     String
+  quantity        Decimal      @db.Decimal(12, 4)
+  
+  @@index([organizationId])
+  @@index([organizationId, productId])
+  @@index([organizationId, warehouseId])
+}
+```
+
+### Logica Applicativa: Row-Level Security
+
+**REGOLA ASSOLUTA**: Ogni query DEVE filtrare per `organizationId`.
+
+#### ❌ VULNERABILITÀ CRITICA
+
+```typescript
+// ❌ PERICOLOSISSIMO: Restituisce prodotti di TUTTE le organizzazioni!
+export async function getProducts() {
+  return await prisma.product.findMany();
+  // Un utente di Organization 1 vede prodotti di Organization 2!
+}
+
+// ❌ PERICOLOSISSIMO: Nessun controllo organizzazione
+export async function deleteProduct(productId: string) {
+  return await prisma.product.delete({
+    where: { id: productId }
+  });
+  // Un utente di Organization 1 può cancellare prodotti di Organization 2!
+}
+```
+
+#### ✅ SICUREZZA CORRETTA
+
+```typescript
+/**
+ * Context: Informazioni sull'utente autenticato e organizzazione corrente
+ * 
+ * DEVE essere passato a TUTTE le funzioni che accedono al database
+ */
+interface AuthContext {
+  userId: string;           // ID utente autenticato
+  organizationId: string;   // Organizzazione corrente
+  role: UserRole;           // Ruolo utente in questa organizzazione
+}
+
+// ✅ Helper per ottenere il contesto (da NextAuth, Clerk, ecc.)
+export async function getAuthContext(): Promise<AuthContext> {
+  const session = await getServerSession();
+  
+  if (!session?.user) {
+    throw new UnauthorizedError('Utente non autenticato');
+  }
+  
+  // Recupera organizzazione corrente dalla sessione/cookie
+  const organizationId = session.user.currentOrganizationId;
+  
+  if (!organizationId) {
+    throw new Error('Nessuna organizzazione selezionata');
+  }
+  
+  // Verifica che l'utente appartenga all'organizzazione
+  const membership = await prisma.userOrganization.findUnique({
+    where: {
+      userId_organizationId: {
+        userId: session.user.id,
+        organizationId
+      }
+    }
+  });
+  
+  if (!membership) {
+    throw new ForbiddenError('Accesso negato a questa organizzazione');
+  }
+  
+  return {
+    userId: session.user.id,
+    organizationId,
+    role: membership.role
+  };
+}
+
+// ✅ CORRETTO: Sempre filtrare per organizationId
+export async function getProducts(ctx: AuthContext) {
+  return await prisma.product.findMany({
+    where: {
+      organizationId: ctx.organizationId // ✅ Isolamento garantito!
+    },
+    orderBy: { name: 'asc' }
+  });
+}
+
+// ✅ CORRETTO: Verifica appartenenza prima di modificare
+export async function deleteProduct(ctx: AuthContext, productId: string) {
+  // Verifica che il prodotto appartenga all'organizzazione corrente
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { organizationId: true }
+  });
+  
+  if (!product) {
+    throw new NotFoundError('Prodotto non trovato');
+  }
+  
+  if (product.organizationId !== ctx.organizationId) {
+    throw new ForbiddenError('Non puoi eliminare prodotti di altre organizzazioni');
+  }
+  
+  // Verifica permessi ruolo
+  if (ctx.role === 'READONLY') {
+    throw new ForbiddenError('Non hai i permessi per eliminare prodotti');
+  }
+  
+  return await prisma.product.delete({
+    where: { id: productId }
+  });
+}
+
+// ✅ CORRETTO: Create sempre con organizationId
+export async function createProduct(ctx: AuthContext, data: CreateProductInput) {
+  // Verifica permessi
+  if (ctx.role === 'READONLY') {
+    throw new ForbiddenError('Non hai i permessi per creare prodotti');
+  }
+  
+  return await prisma.product.create({
+    data: {
+      ...data,
+      organizationId: ctx.organizationId // ✅ Associa automaticamente all'organizzazione
+    }
+  });
+}
+```
+
+### Server Actions con Multitenant
+
+```typescript
+// src/services/actions/product-actions.ts
+'use server';
+
+import { getAuthContext } from '@/lib/auth';
+import { createProduct as createProductService } from '@/services/business/product-service';
+
+/**
+ * Server Action per creare un prodotto
+ * 
+ * MULTITENANT: Ottiene automaticamente l'organizzazione dal contesto
+ */
+export async function createProductAction(formData: FormData) {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione (include organizationId)
+    const ctx = await getAuthContext();
+    
+    // 2. Valida input
+    const validatedData = productSchema.parse({
+      code: formData.get('code'),
+      name: formData.get('name'),
+      price: formData.get('price'),
+    });
+    
+    // 3. ✅ Passa contesto al service (che filtrerà per organizationId)
+    const product = await createProductService(ctx, validatedData);
+    
+    revalidatePath('/products');
+    return { success: true, product };
+  } catch (error) {
+    if (error instanceof ForbiddenError) {
+      return { success: false, error: 'Non hai i permessi per questa operazione' };
+    }
+    return { success: false, error: 'Errore creazione prodotto' };
+  }
+}
+```
+
+### Cambio Organizzazione
+
+Un utente può appartenere a più organizzazioni e cambiare tra esse:
+
+```typescript
+// src/services/actions/organization-actions.ts
+'use server';
+
+import { getServerSession } from 'next-auth';
+import { cookies } from 'next/headers';
+
+/**
+ * Cambia l'organizzazione corrente dell'utente
+ * 
+ * SICUREZZA: Verifica che l'utente appartenga all'organizzazione richiesta
+ */
+export async function switchOrganization(organizationId: string) {
+  const session = await getServerSession();
+  
+  if (!session?.user) {
+    throw new UnauthorizedError('Utente non autenticato');
+  }
+  
+  // Verifica membership
+  const membership = await prisma.userOrganization.findUnique({
+    where: {
+      userId_organizationId: {
+        userId: session.user.id,
+        organizationId
+      }
+    },
+    include: {
+      organization: true
+    }
+  });
+  
+  if (!membership) {
+    throw new ForbiddenError('Non hai accesso a questa organizzazione');
+  }
+  
+  // Salva organizzazione corrente in cookie/sessione
+  cookies().set('currentOrganizationId', organizationId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 30 // 30 giorni
+  });
+  
+  return {
+    success: true,
+    organization: membership.organization,
+    role: membership.role
+  };
+}
+
+/**
+ * Ottiene lista di organizzazioni accessibili dall'utente
+ */
+export async function getUserOrganizations() {
+  const session = await getServerSession();
+  
+  if (!session?.user) {
+    throw new UnauthorizedError('Utente non autenticato');
+  }
+  
+  return await prisma.userOrganization.findMany({
+    where: { userId: session.user.id },
+    include: {
+      organization: {
+        select: {
+          id: true,
+          businessName: true,
+          logoUrl: true,
+          plan: true
+        }
+      }
+    }
+  });
+}
+```
+
+### UI: Organization Switcher
+
+```typescript
+// src/components/common/OrganizationSwitcher.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+import { switchOrganization, getUserOrganizations } from '@/services/actions/organization-actions';
+
+export const OrganizationSwitcher = () => {
+  const [organizations, setOrganizations] = useState([]);
+  const [currentOrgId, setCurrentOrgId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    getUserOrganizations().then(setOrganizations);
+  }, []);
+  
+  async function handleSwitch(orgId: string) {
+    const result = await switchOrganization(orgId);
+    if (result.success) {
+      setCurrentOrgId(orgId);
+      // Ricarica pagina per aggiornare tutti i dati
+      window.location.reload();
+    }
+  }
+  
+  return (
+    <select 
+      value={currentOrgId || ''} 
+      onChange={(e) => handleSwitch(e.target.value)}
+    >
+      {organizations.map(org => (
+        <option key={org.organization.id} value={org.organization.id}>
+          {org.organization.businessName} ({org.role})
+        </option>
+      ))}
+    </select>
+  );
+};
+```
+
+### Testing Multitenant
+
+```typescript
+describe('Product Service (Multitenant)', () => {
+  let org1: Organization;
+  let org2: Organization;
+  let user1Ctx: AuthContext;
+  let user2Ctx: AuthContext;
+  
+  beforeEach(async () => {
+    // Setup organizzazioni di test
+    org1 = await prisma.organization.create({
+      data: { businessName: 'Organization 1' }
+    });
+    
+    org2 = await prisma.organization.create({
+      data: { businessName: 'Organization 2' }
+    });
+    
+    user1Ctx = { userId: 'user1', organizationId: org1.id, role: 'ADMIN' };
+    user2Ctx = { userId: 'user2', organizationId: org2.id, role: 'ADMIN' };
+  });
+  
+  it('should isolate products between organizations', async () => {
+    // User 1 crea prodotto
+    const product1 = await createProduct(user1Ctx, {
+      code: 'PROD001',
+      name: 'Product 1',
+      price: new Decimal('100.00')
+    });
+    
+    // User 2 crea prodotto con STESSO codice (ma in org diversa)
+    const product2 = await createProduct(user2Ctx, {
+      code: 'PROD001', // ✅ OK: codice unico per organizzazione
+      name: 'Product 2',
+      price: new Decimal('200.00')
+    });
+    
+    // Verifica isolamento
+    const org1Products = await getProducts(user1Ctx);
+    const org2Products = await getProducts(user2Ctx);
+    
+    expect(org1Products).toHaveLength(1);
+    expect(org1Products[0].id).toBe(product1.id);
+    
+    expect(org2Products).toHaveLength(1);
+    expect(org2Products[0].id).toBe(product2.id);
+  });
+  
+  it('should prevent cross-organization access', async () => {
+    // User 1 crea prodotto
+    const product = await createProduct(user1Ctx, {
+      code: 'PROD001',
+      name: 'Product 1',
+      price: new Decimal('100.00')
+    });
+    
+    // User 2 tenta di eliminare prodotto di User 1
+    await expect(
+      deleteProduct(user2Ctx, product.id)
+    ).rejects.toThrow(ForbiddenError);
+  });
+});
+```
+
+### Checklist Multitenant
+
+Quando crei una nuova feature, verifica:
+
+- [ ] ✅ La tabella ha campo `organizationId`?
+- [ ] ✅ Relazione `@relation` a `Organization` presente?
+- [ ] ✅ `onDelete: Cascade` configurato? (se cancello org, cancello tutti i dati)
+- [ ] ✅ Indice su `organizationId` presente per performance?
+- [ ] ✅ Constraint `@@unique([organizationId, campo])` per unicità per org?
+- [ ] ✅ Tutte le query filtrano per `organizationId`?
+- [ ] ✅ Le funzioni accettano `AuthContext` come primo parametro?
+- [ ] ✅ Verifiche di sicurezza implementate (controllo organizationId)?
+- [ ] ✅ Test di isolamento tra organizzazioni presenti?
+
+---
+
+## 6. 📁 STRUTTURA CARTELLE (Next.js 14 + Prisma)
 
 ```
 YottaErp/
@@ -1036,6 +1575,7 @@ YottaErp/
 │   │       └── StockMovementList.tsx
 │   ├── lib/
 │   │   ├── prisma.ts          # ✅ MANDATORIO: Prisma client singleton
+│   │   ├── auth.ts            # ✅ MANDATORIO: Helper autenticazione e AuthContext
 │   │   ├── decimal-utils.ts   # ✅ MANDATORIO: Helper calcoli monetari con Decimal.js
 │   │   └── validators.ts      # ✅ MANDATORIO: Validatori P.IVA/CF italiani
 │   ├── schemas/               # ✅ MANDATORIO: Schemi Zod per validazione
@@ -1048,7 +1588,8 @@ YottaErp/
 │   │   │   ├── product-actions.ts
 │   │   │   ├── invoice-actions.ts
 │   │   │   ├── order-actions.ts
-│   │   │   └── stock-actions.ts
+│   │   │   ├── stock-actions.ts
+│   │   │   └── organization-actions.ts # ✅ MULTITENANT: Cambio organizzazione
 │   │   └── business/          # Business logic pura (senza dipendenze Next.js)
 │   │       ├── invoice-service.ts
 │   │       ├── stock-service.ts
@@ -1183,7 +1724,96 @@ export function validateItalianFiscalCode(cf: string): boolean {
 }
 ```
 
-#### 4. `src/schemas/common-schema.ts`
+#### 3. `src/lib/validators.ts`
+
+```typescript
+/**
+ * Validazione P.IVA italiana
+ */
+export function validateItalianVAT(vat: string): boolean {
+  if (!/^\d{11}$/.test(vat)) return false;
+  
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    let digit = parseInt(vat[i]);
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return checkDigit === parseInt(vat[10]);
+}
+
+/**
+ * Validazione Codice Fiscale italiano
+ */
+export function validateItalianFiscalCode(cf: string): boolean {
+  // Implementazione completa come sopra
+  return cf.length === 16 && /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(cf);
+}
+```
+
+#### 4. `src/lib/auth.ts` (MULTITENANT)
+
+```typescript
+import { getServerSession } from 'next-auth';
+import { cookies } from 'next/headers';
+import { prisma } from './prisma';
+
+/**
+ * Context autenticazione con organizationId
+ */
+export interface AuthContext {
+  userId: string;
+  organizationId: string;
+  role: 'OWNER' | 'ADMIN' | 'USER' | 'READONLY';
+}
+
+/**
+ * Ottiene il contesto autenticazione corrente
+ * 
+ * MULTITENANT: Include organizationId corrente
+ */
+export async function getAuthContext(): Promise<AuthContext> {
+  const session = await getServerSession();
+  
+  if (!session?.user) {
+    throw new Error('Non autenticato');
+  }
+  
+  // Ottieni organizzazione corrente da cookie
+  const organizationId = cookies().get('currentOrganizationId')?.value;
+  
+  if (!organizationId) {
+    throw new Error('Nessuna organizzazione selezionata');
+  }
+  
+  // Verifica membership
+  const membership = await prisma.userOrganization.findUnique({
+    where: {
+      userId_organizationId: {
+        userId: session.user.id,
+        organizationId
+      }
+    }
+  });
+  
+  if (!membership) {
+    throw new Error('Accesso negato a questa organizzazione');
+  }
+  
+  return {
+    userId: session.user.id,
+    organizationId,
+    role: membership.role
+  };
+}
+```
+
+#### 5. `src/schemas/common-schema.ts`
 
 ```typescript
 import { z } from 'zod';
@@ -2156,6 +2786,9 @@ Quando crei o revisioni codice, verifica:
 - [ ] **✅ Calculated Stock**: La giacenza è calcolata da `StockMovement`, non un campo
 - [ ] **✅ Validazione Italiana**: P.IVA e CF validati con algoritmi corretti
 - [ ] **✅ Arrotondamento**: Tutti i calcoli IVA usano `ROUND_HALF_UP`
+- [ ] **✅ Multitenant**: Tabella ha `organizationId` e tutte le query lo filtrano
+- [ ] **✅ AuthContext**: Funzioni accettano `AuthContext` e verificano organizationId
+- [ ] **✅ Isolamento**: Test verificano isolamento tra organizzazioni
 - [ ] **✅ Database First**: Lo schema Prisma è stato aggiornato prima del codice
 - [ ] **✅ Type-Safe**: No `any`, strict mode attivo, tipi Prisma utilizzati
 - [ ] **✅ File Size**: Nessun file supera 150 righe (o è giustificato)
@@ -2184,6 +2817,8 @@ Quando crei o revisioni codice, verifica:
 ❌ **`number` per valori monetari (USA `Decimal`!)**  
 ❌ **JOIN per dati storici in documenti (USA snapshot!)**  
 ❌ **Campo `stock` statico nel database (USA calculated stock!)**  
+❌ **Query senza filtro `organizationId` (VULNERABILITÀ MULTITENANT!)**  
+❌ **Tabelle senza campo `organizationId` (ERRORE ARCHITETTURALE!)**  
 ❌ Funzioni > 150 righe senza giustificazione  
 ❌ Duplicazione codice (DRY!)  
 ❌ Magic numbers (usa costanti)  
@@ -2244,13 +2879,14 @@ Per domande o proposte di modifica a queste regole:
 
 ## 🎯 Priorità Progetto
 
-1. **Correttezza Fiscale** - Calcoli monetari precisi con Decimal.js
-2. **Integrità Dati** - Snapshot immutabili per documenti
-3. **Correttezza Funzionale** - Il codice deve funzionare correttamente
-4. **Leggibilità** - Deve essere comprensibile da altri sviluppatori
-5. **Manutenibilità** - Deve essere facilmente modificabile
-6. **Performance** - Deve essere efficiente
-7. **Eleganza** - Deve essere pulito e ben strutturato
+1. **Sicurezza Multitenant** - Isolamento completo tra organizzazioni
+2. **Correttezza Fiscale** - Calcoli monetari precisi con Decimal.js
+3. **Integrità Dati** - Snapshot immutabili per documenti
+4. **Correttezza Funzionale** - Il codice deve funzionare correttamente
+5. **Leggibilità** - Deve essere comprensibile da altri sviluppatori
+6. **Manutenibilità** - Deve essere facilmente modificabile
+7. **Performance** - Deve essere efficiente
+8. **Eleganza** - Deve essere pulito e ben strutturato
 
 ---
 
