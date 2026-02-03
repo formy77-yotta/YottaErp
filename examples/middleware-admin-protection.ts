@@ -1,10 +1,13 @@
 /**
- * Middleware per proteggere le route admin (ESEMPIO)
+ * Proxy per proteggere le route admin (ESEMPIO)
  * 
  * NOTA: Questo è un esempio. Adattalo al tuo sistema di autenticazione
  * (NextAuth, Clerk, Supabase Auth, ecc.)
  * 
- * POSIZIONAMENTO: src/middleware.ts
+ * POSIZIONAMENTO: src/proxy.ts
+ * 
+ * NOTA: In Next.js 16+, il middleware è stato rinominato in "proxy"
+ * per chiarire meglio il suo scopo di intercettare richieste a livello di rete.
  */
 
 import { NextResponse } from 'next/server';
@@ -38,11 +41,11 @@ async function isSuperAdmin(request: NextRequest): Promise<boolean> {
 }
 
 /**
- * Middleware Next.js
+ * Proxy Next.js
  * 
  * Protegge le route che iniziano con /admin/
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
   // Verifica se la route richiede protezione Super Admin
@@ -62,7 +65,7 @@ export async function middleware(request: NextRequest) {
 }
 
 /**
- * Config: specifica quali route devono passare dal middleware
+ * Config: specifica quali route devono passare dal proxy
  */
 export const config = {
   matcher: [

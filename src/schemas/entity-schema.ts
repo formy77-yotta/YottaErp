@@ -20,71 +20,76 @@ export const italianVatNumberSchema = z
 // SCHEMA CODICE FISCALE ITALIANO
 // ============================================================================
 
+/**
+ * Schema per validazione Codice Fiscale italiano
+ * - 16 caratteri alfanumerici (persone fisiche, formato: RSSMRA80A01H501U)
+ * - 11 cifre numeriche (società, corrisponde alla P.IVA)
+ * - Validazione checksum con algoritmo ufficiale
+ */
 export const italianFiscalCodeSchema = z
   .string()
-  .regex(/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/, 'Formato Codice Fiscale non valido')
+  .refine(
+    (cf) => {
+      // Accetta 16 caratteri (persona fisica) o 11 cifre (società)
+      return /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(cf) || /^\d{11}$/.test(cf);
+    },
+    {
+      message: 'Codice Fiscale deve essere di 16 caratteri (persona fisica) o 11 cifre (società, P.IVA)',
+    }
+  )
   .refine(validateItalianFiscalCode, {
-    message: 'Codice Fiscale non valido (errore nel carattere di controllo)',
+    message: 'Codice Fiscale non valido (errore nel carattere di controllo o checksum P.IVA)',
   });
 
 // ============================================================================
 // SCHEMA CLIENTE/FORNITORE ITALIANO
 // ============================================================================
 
-export const italianBusinessSchema = z
-  .object({
-    businessName: z
-      .string()
-      .min(2, 'Ragione sociale deve contenere almeno 2 caratteri')
-      .max(255, 'Ragione sociale troppo lunga'),
-
-    vatNumber: italianVatNumberSchema.optional(),
-
-    fiscalCode: italianFiscalCodeSchema.optional(),
-
-    address: z.string().min(5, 'Indirizzo deve contenere almeno 5 caratteri'),
-
-    city: z.string().min(2, 'Città deve contenere almeno 2 caratteri'),
-
-    province: z
-      .string()
-      .length(2, 'Provincia deve essere 2 caratteri (es. MI, RM, NA)')
-      .regex(/^[A-Z]{2}$/, 'Provincia deve essere 2 lettere maiuscole')
-      .transform((val) => val.toUpperCase()),
-
-    zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre'),
-
-    country: z.string().length(2, 'Codice paese deve essere 2 caratteri').default('IT'),
-
-    email: z.string().email('Email non valida').optional().or(z.literal('')),
-
-    pec: z.string().email('PEC non valida').optional().or(z.literal('')),
-
-    phone: z.string().optional(),
-
-    sdiCode: z
-      .string()
-      .length(7, 'Codice SDI deve essere 7 caratteri')
-      .optional()
-      .or(z.literal('')),
-
-    notes: z.string().optional(),
-
-    active: z.boolean().default(true),
-  })
-  .refine((data) => data.vatNumber || data.fiscalCode, {
-    message: 'Inserire almeno P.IVA o Codice Fiscale',
-    path: ['vatNumber'],
-  });
-
-// Type inference
-export type ItalianBusinessInput = z.infer<typeof italianBusinessSchema>;
+/**
+ * Schema base per business italiano (senza refine, per permettere .partial())
+ */
+const italianBusinessBaseSchema = z.object({
+  businessName: z
+    .string()
+    .min(2, 'Ragione sociale deve contenere almeno 2 caratteri')
+    .max(255, 'Ragione sociale troppo lunga'),
+  vatNumber: italianVatNumberSchema.optional(),
+  fiscalCode: italianFiscalCodeSchema.optional(),
+  address: z.string().min(5, 'Indirizzo deve contenere almeno 5 caratteri'),
+  city: z.string().min(2, 'Città deve contenere almeno 2 caratteri'),
+  province: z
+    .string()
+    .length(2, 'Provincia deve essere 2 caratteri (es. MI, RM, NA)')
+    .regex(/^[A-Z]{2}$/, 'Provincia deve essere 2 lettere maiuscole')
+    .transform((val) => val.toUpperCase()),
+  zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre'),
+  country: z.string().length(2, 'Codice paese deve essere 2 caratteri').default('IT'),
+  email: z.string().email('Email non valida').optional().or(z.literal('')),
+  pec: z.string().email('PEC non valida').optional().or(z.literal('')),
+  phone: z.string().optional(),
+  sdiCode: z
+    .string()
+    .length(7, 'Codice SDI deve essere 7 caratteri')
+    .optional()
+    .or(z.literal('')),
+  notes: z.string().optional(),
+  active: z.boolean().default(true),
+});
 
 // ============================================================================
 // SCHEMA CUSTOMER (per creazione)
 // ============================================================================
 
-export const createCustomerSchema = italianBusinessSchema;
+/**
+ * Schema per creazione customer (con refine per validazione P.IVA/CF)
+ */
+export const createCustomerSchema = italianBusinessBaseSchema.refine(
+  (data) => data.vatNumber || data.fiscalCode,
+  {
+    message: 'Inserire almeno P.IVA o Codice Fiscale',
+    path: ['vatNumber'],
+  }
+);
 
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 
@@ -92,8 +97,42 @@ export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 // SCHEMA CUSTOMER (per aggiornamento)
 // ============================================================================
 
-export const updateCustomerSchema = italianBusinessSchema.partial().extend({
+/**
+ * Schema per aggiornamento customer
+ * 
+ * NOTA: Non possiamo usare .partial() su schema con .refine()
+ * quindi creiamo manualmente lo schema con tutti i campi opzionali
+ */
+export const updateCustomerSchema = z.object({
   id: z.string().cuid(),
+  businessName: z
+    .string()
+    .min(2, 'Ragione sociale deve contenere almeno 2 caratteri')
+    .max(255, 'Ragione sociale troppo lunga')
+    .optional(),
+  vatNumber: italianVatNumberSchema.optional(),
+  fiscalCode: italianFiscalCodeSchema.optional(),
+  address: z.string().min(5, 'Indirizzo deve contenere almeno 5 caratteri').optional(),
+  city: z.string().min(2, 'Città deve contenere almeno 2 caratteri').optional(),
+  province: z
+    .string()
+    .length(2, 'Provincia deve essere 2 caratteri (es. MI, RM, NA)')
+    .regex(/^[A-Z]{2}$/, 'Provincia deve essere 2 lettere maiuscole')
+    .transform((val) => val.toUpperCase())
+    .optional(),
+  zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre').optional(),
+  country: z.string().length(2, 'Codice paese deve essere 2 caratteri').optional(),
+  email: z.string().email('Email non valida').optional().or(z.literal('')).optional(),
+  pec: z.string().email('PEC non valida').optional().or(z.literal('')).optional(),
+  phone: z.string().optional(),
+  sdiCode: z
+    .string()
+    .length(7, 'Codice SDI deve essere 7 caratteri')
+    .optional()
+    .or(z.literal(''))
+    .optional(),
+  notes: z.string().optional(),
+  active: z.boolean().optional(),
 });
 
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
@@ -133,3 +172,83 @@ export const updateProductSchema = createProductSchema.partial().extend({
 });
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+// ============================================================================
+// SCHEMA ENTITY (Anagrafica unificata: Cliente/Fornitore/Lead)
+// ============================================================================
+
+/**
+ * Enum per tipo entità (frontend)
+ * NOTA: Nel database Prisma, EntityType è CLIENT, PROVIDER, BOTH
+ * Mappatura: CUSTOMER -> CLIENT, SUPPLIER -> PROVIDER, LEAD -> CLIENT
+ */
+export const entityTypeSchema = z.enum(['CUSTOMER', 'SUPPLIER', 'LEAD'], {
+  errorMap: () => ({ message: 'Tipo entità non valido' }),
+});
+
+export type EntityType = z.infer<typeof entityTypeSchema>;
+
+/**
+ * Schema base per entità (senza refine, per permettere .partial())
+ */
+const entityBaseSchema = z.object({
+  type: entityTypeSchema,
+  businessName: z
+    .string()
+    .min(2, 'Ragione sociale deve contenere almeno 2 caratteri')
+    .max(255, 'Ragione sociale troppo lunga'),
+  vatNumber: italianVatNumberSchema.optional().or(z.literal('')),
+  fiscalCode: italianFiscalCodeSchema.optional().or(z.literal('')),
+  address: z.string().min(5, 'Indirizzo deve contenere almeno 5 caratteri'),
+  city: z.string().min(2, 'Città deve contenere almeno 2 caratteri'),
+  province: z
+    .string()
+    .length(2, 'Provincia deve essere 2 caratteri (es. MI, RM, NA)')
+    .regex(/^[A-Z]{2}$/, 'Provincia deve essere 2 lettere maiuscole')
+    .transform((val) => val.toUpperCase()),
+  zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre'),
+  email: z.string().email('Email non valida').optional().or(z.literal('')),
+});
+
+/**
+ * Schema per creazione entità (con refine per validazione P.IVA/CF)
+ */
+export const createEntitySchema = entityBaseSchema.refine(
+  (data) => data.vatNumber || data.fiscalCode,
+  {
+    message: 'Inserire almeno P.IVA o Codice Fiscale',
+    path: ['vatNumber'],
+  }
+);
+
+export type CreateEntityInput = z.infer<typeof createEntitySchema>;
+
+/**
+ * Schema per aggiornamento entità
+ * 
+ * NOTA: Non possiamo usare .partial() su schema con .refine()
+ * quindi creiamo manualmente lo schema con tutti i campi opzionali
+ */
+export const updateEntitySchema = z.object({
+  id: z.string().cuid(),
+  type: entityTypeSchema.optional(),
+  businessName: z
+    .string()
+    .min(2, 'Ragione sociale deve contenere almeno 2 caratteri')
+    .max(255, 'Ragione sociale troppo lunga')
+    .optional(),
+  vatNumber: italianVatNumberSchema.optional().or(z.literal('')).optional(),
+  fiscalCode: italianFiscalCodeSchema.optional().or(z.literal('')).optional(),
+  address: z.string().min(5, 'Indirizzo deve contenere almeno 5 caratteri').optional(),
+  city: z.string().min(2, 'Città deve contenere almeno 2 caratteri').optional(),
+  province: z
+    .string()
+    .length(2, 'Provincia deve essere 2 caratteri (es. MI, RM, NA)')
+    .regex(/^[A-Z]{2}$/, 'Provincia deve essere 2 lettere maiuscole')
+    .transform((val) => val.toUpperCase())
+    .optional(),
+  zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre').optional(),
+  email: z.string().email('Email non valida').optional().or(z.literal('')).optional(),
+});
+
+export type UpdateEntityInput = z.infer<typeof updateEntitySchema>;

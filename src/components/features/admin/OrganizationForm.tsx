@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { 
@@ -19,10 +19,12 @@ import {
 } from '@/schemas/organization-schema';
 import { 
   createOrganizationAdmin, 
-  updateOrganizationAdmin 
+  updateOrganizationAdmin,
+  getOrganizationUsers 
 } from '@/services/actions/organization-actions';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Form,
   FormControl,
@@ -41,7 +43,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 
 interface OrganizationFormProps {
   /**
@@ -85,36 +87,131 @@ export function OrganizationForm({
   onError 
 }: OrganizationFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [adminEmails, setAdminEmails] = useState<string[]>(['']);
+  const [existingUsers, setExistingUsers] = useState<Array<{
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    role: string;
+    active: boolean;
+  }>>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const isEditing = !!organization;
+
+  // Carica utenti esistenti quando si modifica
+  useEffect(() => {
+    if (isEditing && organization?.id) {
+      loadExistingUsers();
+      // Reset adminEmails quando si modifica (solo campo vuoto per nuovi admin)
+      setAdminEmails(['']);
+    } else if (!isEditing) {
+      // In creazione, inizia con un campo vuoto
+      setAdminEmails(['']);
+      setExistingUsers([]);
+    }
+  }, [isEditing, organization?.id]);
+
+  async function loadExistingUsers() {
+    if (!organization?.id) return;
+    
+    setIsLoadingUsers(true);
+    const result = await getOrganizationUsers(organization.id);
+    
+    if (result.success) {
+      setExistingUsers(result.users || []);
+    }
+    
+    setIsLoadingUsers(false);
+  }
 
   // Setup form con validazione Zod
   const form = useForm<OrganizationInput>({
-    resolver: zodResolver(organizationSchema),
+    resolver: zodResolver(organizationSchema) as any,
     defaultValues: {
-      businessName: organization?.businessName || '',
-      vatNumber: organization?.vatNumber || undefined,
-      fiscalCode: organization?.fiscalCode || undefined,
-      address: organization?.address || undefined,
-      city: organization?.city || undefined,
-      province: organization?.province || undefined,
-      zipCode: organization?.zipCode || undefined,
-      country: organization?.country || 'IT',
-      email: organization?.email || undefined,
-      pec: organization?.pec || undefined,
-      phone: organization?.phone || undefined,
-      sdiCode: organization?.sdiCode || undefined,
-      logoUrl: organization?.logoUrl || undefined,
-      plan: (organization?.plan as 'FREE' | 'BASIC' | 'PREMIUM') || 'FREE',
-      maxUsers: organization?.maxUsers || 5,
-      maxInvoicesPerYear: organization?.maxInvoicesPerYear || 500,
-      active: organization?.active ?? true,
+      businessName: '',
+      vatNumber: '',
+      fiscalCode: '',
+      address: '',
+      city: '',
+      province: '',
+      zipCode: '',
+      country: 'IT',
+      email: '',
+      pec: '',
+      phone: '',
+      sdiCode: '',
+      logoUrl: '',
+      plan: 'FREE',
+      maxUsers: 5,
+      maxInvoicesPerYear: 500,
+      active: true,
     },
   });
+
+  // Aggiorna i valori del form quando l'organizzazione viene caricata
+  useEffect(() => {
+    if (organization) {
+      form.reset({
+        businessName: organization.businessName || '',
+        vatNumber: organization.vatNumber ?? '',
+        fiscalCode: organization.fiscalCode ?? '',
+        address: organization.address ?? '',
+        city: organization.city ?? '',
+        province: organization.province ?? '',
+        zipCode: organization.zipCode ?? '',
+        country: organization.country || 'IT',
+        email: organization.email ?? '',
+        pec: organization.pec ?? '',
+        phone: organization.phone ?? '',
+        sdiCode: organization.sdiCode ?? '',
+        logoUrl: organization.logoUrl ?? '',
+        plan: (organization.plan as 'FREE' | 'BASIC' | 'PREMIUM') || 'FREE',
+        maxUsers: organization.maxUsers || 5,
+        maxInvoicesPerYear: organization.maxInvoicesPerYear || 500,
+        active: organization.active ?? true,
+      }, { keepDefaultValues: false });
+    } else {
+      // Reset al form vuoto quando si crea una nuova organizzazione
+      form.reset({
+        businessName: '',
+        vatNumber: '',
+        fiscalCode: '',
+        address: '',
+        city: '',
+        province: '',
+        zipCode: '',
+        country: 'IT',
+        email: '',
+        pec: '',
+        phone: '',
+        sdiCode: '',
+        logoUrl: '',
+        plan: 'FREE',
+        maxUsers: 5,
+        maxInvoicesPerYear: 500,
+        active: true,
+      }, { keepDefaultValues: false });
+    }
+  }, [organization, form]);
 
   /**
    * Handler submit form
    */
   async function onSubmit(data: OrganizationInput) {
+    // #region agent log
+    console.log('[DEBUG] Form onSubmit - raw data:', {
+      address: data.address,
+      zipCode: data.zipCode,
+      pec: data.pec,
+      sdiCode: data.sdiCode,
+      email: data.email,
+      phone: data.phone,
+      addressInData: 'address' in data,
+      zipCodeInData: 'zipCode' in data,
+    });
+    // #endregion
+    
     setIsLoading(true);
 
     try {
@@ -122,6 +219,9 @@ export function OrganizationForm({
 
       if (isEditing) {
         // Aggiornamento organizzazione esistente
+        // Filtra email vuote per nuovi admin da aggiungere
+        const validAdminEmails = adminEmails.filter(email => email.trim() !== '');
+        
         result = await updateOrganizationAdmin(organization.id, {
           ...data,
           // Converti stringhe vuote in null
@@ -136,24 +236,56 @@ export function OrganizationForm({
           phone: data.phone || null,
           sdiCode: data.sdiCode || null,
           logoUrl: data.logoUrl || null,
+          // Aggiungi nuovi admin se specificati
+          adminUserEmails: validAdminEmails.length > 0 ? validAdminEmails : undefined,
         });
       } else {
         // Creazione nuova organizzazione
-        result = await createOrganizationAdmin({
-          ...data,
-          // Converti stringhe vuote in undefined
-          vatNumber: data.vatNumber || undefined,
-          fiscalCode: data.fiscalCode || undefined,
-          address: data.address || undefined,
-          city: data.city || undefined,
-          province: data.province || undefined,
-          zipCode: data.zipCode || undefined,
-          email: data.email || undefined,
-          pec: data.pec || undefined,
-          phone: data.phone || undefined,
-          sdiCode: data.sdiCode || undefined,
-          logoUrl: data.logoUrl || undefined,
+        // Filtra email vuote e valida che almeno una sia presente
+        const validAdminEmails = adminEmails.filter(email => email.trim() !== '');
+        
+        if (validAdminEmails.length === 0) {
+          form.setError('adminUserEmails', {
+            type: 'manual',
+            message: 'Inserire almeno un utente admin',
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // #region agent log
+        console.log('[DEBUG] Form data before transformation:', {
+          address: data.address,
+          zipCode: data.zipCode,
+          pec: data.pec,
+          sdiCode: data.sdiCode,
+          email: data.email,
+          phone: data.phone,
+          addressType: typeof data.address,
+          addressInData: 'address' in data,
+          allKeys: Object.keys(data),
         });
+        // #endregion
+        
+        // Passa i dati così come sono - la Server Action li normalizzerà
+        const transformedData = {
+          ...data,
+          adminUserEmails: validAdminEmails,
+        };
+        
+        // #region agent log
+        console.log('[DEBUG] Form data after transformation:', {
+          address: transformedData.address,
+          zipCode: transformedData.zipCode,
+          pec: transformedData.pec,
+          sdiCode: transformedData.sdiCode,
+          email: transformedData.email,
+          phone: transformedData.phone,
+          addressType: typeof transformedData.address,
+        });
+        // #endregion
+        
+        result = await createOrganizationAdmin(transformedData);
       }
 
       if (result.success) {
@@ -352,7 +484,7 @@ export function OrganizationForm({
               <FormItem>
                 <FormLabel>Indirizzo</FormLabel>
                 <FormControl>
-                  <Input placeholder="Via Roma 1" {...field} />
+                  <Input placeholder="Via Roma 1" {...field} value={field.value ?? ''} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -367,7 +499,7 @@ export function OrganizationForm({
                 <FormItem>
                   <FormLabel>Città</FormLabel>
                   <FormControl>
-                    <Input placeholder="Milano" {...field} />
+                    <Input placeholder="Milano" {...field} value={field.value ?? ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -386,6 +518,7 @@ export function OrganizationForm({
                       maxLength={2}
                       style={{ textTransform: 'uppercase' }}
                       {...field}
+                      value={field.value ?? ''}
                       onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                     />
                   </FormControl>
@@ -405,6 +538,7 @@ export function OrganizationForm({
                       placeholder="20100" 
                       maxLength={5}
                       {...field} 
+                      value={field.value ?? ''}
                     />
                   </FormControl>
                   <FormMessage />
@@ -430,6 +564,7 @@ export function OrganizationForm({
                       type="email" 
                       placeholder="info@azienda.it" 
                       {...field} 
+                      value={field.value ?? ''}
                     />
                   </FormControl>
                   <FormMessage />
@@ -448,6 +583,7 @@ export function OrganizationForm({
                       type="email" 
                       placeholder="pec@azienda.it" 
                       {...field} 
+                      value={field.value ?? ''}
                     />
                   </FormControl>
                   <FormMessage />
@@ -465,6 +601,7 @@ export function OrganizationForm({
                     <Input 
                       placeholder="+39 02 1234567" 
                       {...field} 
+                      value={field.value ?? ''}
                     />
                   </FormControl>
                   <FormMessage />
@@ -484,6 +621,7 @@ export function OrganizationForm({
                       maxLength={7}
                       style={{ textTransform: 'uppercase' }}
                       {...field}
+                      value={field.value ?? ''}
                       onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                     />
                   </FormControl>
@@ -494,6 +632,106 @@ export function OrganizationForm({
                 </FormItem>
               )}
             />
+          </div>
+        </div>
+
+        {/* SEZIONE: Utenti Admin */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">
+            Utenti Amministratori {!isEditing && '*'}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {isEditing 
+              ? 'Aggiungi nuovi utenti admin a questa organizzazione. Gli utenti esistenti sono mostrati sotto.'
+              : 'Inserisci almeno un utente admin per questa organizzazione. Il primo utente sarà OWNER, gli altri ADMIN.'}
+          </p>
+
+          {/* Lista utenti esistenti (solo in modifica) */}
+          {isEditing && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Utenti Esistenti</h4>
+              {isLoadingUsers ? (
+                <p className="text-sm text-muted-foreground">Caricamento utenti...</p>
+              ) : existingUsers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nessun utente trovato</p>
+              ) : (
+                <div className="space-y-2 border rounded-lg p-4">
+                  {existingUsers.map((user) => (
+                    <div 
+                      key={user.id} 
+                      className="flex items-center justify-between py-2 border-b last:border-b-0"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-sm">
+                          {user.firstName && user.lastName 
+                            ? `${user.firstName} ${user.lastName}`
+                            : user.email}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {user.email} • Ruolo: <span className="font-medium">{user.role}</span>
+                        </div>
+                      </div>
+                      <Badge variant={user.role === 'OWNER' ? 'default' : 'secondary'}>
+                        {user.role}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Input per nuovi admin */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">
+              {isEditing ? 'Aggiungi Nuovi Admin' : 'Utenti Admin'}
+            </h4>
+            {adminEmails.map((email, index) => (
+              <div key={index} className="flex gap-2 items-start">
+                <div className="flex-1">
+                  <Input
+                    type="email"
+                    placeholder="admin@azienda.it"
+                    value={email}
+                    onChange={(e) => {
+                      const newEmails = [...adminEmails];
+                      newEmails[index] = e.target.value;
+                      setAdminEmails(newEmails);
+                    }}
+                    className={form.formState.errors.adminUserEmails ? 'border-destructive' : ''}
+                  />
+                  {form.formState.errors.adminUserEmails && index === 0 && (
+                    <p className="text-sm text-destructive mt-1">
+                      {form.formState.errors.adminUserEmails.message}
+                    </p>
+                  )}
+                </div>
+                {adminEmails.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      const newEmails = adminEmails.filter((_, i) => i !== index);
+                      setAdminEmails(newEmails);
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAdminEmails([...adminEmails, ''])}
+              className="w-full"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Aggiungi altro admin
+            </Button>
           </div>
         </div>
 

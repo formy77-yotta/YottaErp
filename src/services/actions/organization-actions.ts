@@ -26,7 +26,8 @@ import { getAuthContext, UnauthorizedError, ForbiddenError, requireRole } from '
 export async function switchOrganization(organizationId: string) {
   try {
     // Ottieni utente corrente (senza verificare organizationId)
-    const userIdCookie = cookies().get('userId')?.value;
+    const cookieStore = await cookies();
+    const userIdCookie = cookieStore.get('userId')?.value;
     
     if (!userIdCookie) {
       throw new UnauthorizedError('Utente non autenticato');
@@ -57,7 +58,7 @@ export async function switchOrganization(organizationId: string) {
     }
     
     // Salva organizzazione corrente in cookie
-    cookies().set('currentOrganizationId', organizationId, {
+    cookieStore.set('currentOrganizationId', organizationId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -84,11 +85,13 @@ export async function switchOrganization(organizationId: string) {
 /**
  * Ottiene lista di organizzazioni accessibili dall'utente corrente
  * 
- * @returns Array di organizzazioni con ruolo utente
+ * @returns Array di organizzazioni con ruolo utente e organizzazione corrente
  */
 export async function getUserOrganizations() {
   try {
-    const userIdCookie = cookies().get('userId')?.value;
+    const cookieStore = await cookies();
+    const userIdCookie = cookieStore.get('userId')?.value;
+    const currentOrgId = cookieStore.get('currentOrganizationId')?.value;
     
     if (!userIdCookie) {
       throw new UnauthorizedError('Utente non autenticato');
@@ -114,6 +117,7 @@ export async function getUserOrganizations() {
     
     return {
       success: true,
+      currentOrganizationId: currentOrgId || null,
       organizations: memberships.map(m => ({
         id: m.organization.id,
         businessName: m.organization.businessName,
@@ -139,7 +143,8 @@ export async function getUserOrganizations() {
  */
 export async function createOrganization(businessName: string) {
   try {
-    const userIdCookie = cookies().get('userId')?.value;
+    const cookieStore = await cookies();
+    const userIdCookie = cookieStore.get('userId')?.value;
     
     if (!userIdCookie) {
       throw new UnauthorizedError('Utente non autenticato');
@@ -273,7 +278,8 @@ export async function removeUserFromOrganization(userId: string) {
  * @returns true se Super Admin, false altrimenti
  */
 async function isSuperAdmin(): Promise<boolean> {
-  const userIdCookie = cookies().get('userId')?.value;
+  const cookieStore = await cookies();
+  const userIdCookie = cookieStore.get('userId')?.value;
   
   if (!userIdCookie) {
     return false;
@@ -335,10 +341,16 @@ export async function getOrganizations() {
         businessName: org.businessName,
         vatNumber: org.vatNumber,
         fiscalCode: org.fiscalCode,
-        email: org.email,
-        phone: org.phone,
+        address: org.address,
         city: org.city,
         province: org.province,
+        zipCode: org.zipCode,
+        country: org.country,
+        email: org.email,
+        pec: org.pec,
+        phone: org.phone,
+        sdiCode: org.sdiCode,
+        logoUrl: org.logoUrl,
         plan: org.plan,
         maxUsers: org.maxUsers,
         maxInvoicesPerYear: org.maxInvoicesPerYear,
@@ -368,22 +380,23 @@ export async function getOrganizations() {
  */
 export async function createOrganizationAdmin(data: {
   businessName: string;
-  vatNumber?: string;
-  fiscalCode?: string;
-  address?: string;
-  city?: string;
-  province?: string;
-  zipCode?: string;
+  vatNumber?: string | null;
+  fiscalCode?: string | null;
+  address?: string | null;
+  city?: string | null;
+  province?: string | null;
+  zipCode?: string | null;
   country?: string;
-  email?: string;
-  pec?: string;
-  phone?: string;
-  sdiCode?: string;
-  logoUrl?: string;
+  email?: string | null;
+  pec?: string | null;
+  phone?: string | null;
+  sdiCode?: string | null;
+  logoUrl?: string | null;
   plan?: string;
   maxUsers?: number;
   maxInvoicesPerYear?: number;
   active?: boolean;
+  adminUserEmails?: string[]; // Email degli utenti admin da associare
 }) {
   try {
     if (!(await isSuperAdmin())) {
@@ -409,37 +422,158 @@ export async function createOrganizationAdmin(data: {
       }
     }
     
-    // Crea organizzazione
-    const organization = await prisma.organization.create({
-      data: {
+    // #region agent log
+    console.log('[DEBUG] Server Action received data:', JSON.stringify({
+      address: data.address,
+      zipCode: data.zipCode,
+      pec: data.pec,
+      sdiCode: data.sdiCode,
+      email: data.email,
+      phone: data.phone,
+      addressType: typeof data.address,
+      zipCodeType: typeof data.zipCode,
+      addressIsUndefined: data.address === undefined,
+      addressIsNull: data.address === null,
+      addressIsString: typeof data.address === 'string',
+      addressLength: typeof data.address === 'string' ? data.address.length : 'N/A',
+    }, null, 2));
+    // #endregion
+    
+    // Crea organizzazione e associa utenti admin in transazione
+    const result = await prisma.$transaction(async (tx) => {
+      // Helper per normalizzare stringhe: preserva stringhe non vuote, converte tutto il resto in null
+      const normalizeString = (value: string | null | undefined): string | null => {
+        if (typeof value === 'string' && value.trim() !== '') {
+          return value.trim();
+        }
+        return null;
+      };
+
+      const orgData = {
         businessName: data.businessName.trim(),
-        vatNumber: data.vatNumber || null,
-        fiscalCode: data.fiscalCode || null,
-        address: data.address || null,
-        city: data.city || null,
-        province: data.province || null,
-        zipCode: data.zipCode || null,
+        vatNumber: normalizeString(data.vatNumber),
+        fiscalCode: normalizeString(data.fiscalCode),
+        address: normalizeString(data.address),
+        city: normalizeString(data.city),
+        province: normalizeString(data.province),
+        zipCode: normalizeString(data.zipCode),
         country: data.country || 'IT',
-        email: data.email || null,
-        pec: data.pec || null,
-        phone: data.phone || null,
-        sdiCode: data.sdiCode || null,
-        logoUrl: data.logoUrl || null,
+        email: normalizeString(data.email),
+        pec: normalizeString(data.pec),
+        phone: normalizeString(data.phone),
+        sdiCode: normalizeString(data.sdiCode),
+        logoUrl: normalizeString(data.logoUrl),
         plan: data.plan || 'FREE',
         maxUsers: data.maxUsers ?? 5,
         maxInvoicesPerYear: data.maxInvoicesPerYear ?? 500,
         active: data.active ?? true,
+      };
+      
+      // #region agent log
+      console.log('[DEBUG] Data before Prisma create:', {
+        address: orgData.address,
+        zipCode: orgData.zipCode,
+        pec: orgData.pec,
+        sdiCode: orgData.sdiCode,
+        email: orgData.email,
+        phone: orgData.phone,
+        addressIsNull: orgData.address === null,
+        zipCodeIsNull: orgData.zipCode === null,
+      });
+      // #endregion
+      
+      // 1. Crea organizzazione
+      const organization = await tx.organization.create({
+        data: orgData
+      });
+      
+      // #region agent log
+      console.log('[DEBUG] Organization created in DB:', {
+        id: organization.id,
+        address: organization.address,
+        zipCode: organization.zipCode,
+        pec: organization.pec,
+        sdiCode: organization.sdiCode,
+        email: organization.email,
+        phone: organization.phone,
+      });
+      // #endregion
+
+      // 2. Associa utenti admin se specificati
+      if (data.adminUserEmails && data.adminUserEmails.length > 0) {
+        const validEmails = data.adminUserEmails.filter(email => email && email.trim() !== '');
+        
+        if (validEmails.length === 0) {
+          throw new Error('Inserire almeno un utente admin valido');
+        }
+
+        for (const email of validEmails) {
+          // Trova utente per email
+          const user = await tx.user.findUnique({
+            where: { email: email.toLowerCase().trim() },
+            select: { id: true, active: true, email: true },
+          });
+
+          if (!user) {
+            throw new Error(`Utente con email ${email} non trovato. Assicurati che l'utente sia registrato nel sistema.`);
+          }
+
+          if (!user.active) {
+            throw new Error(`Utente ${email} non è attivo. Attiva l'utente prima di aggiungerlo all'organizzazione.`);
+          }
+
+          // Verifica se l'utente è già membro dell'organizzazione
+          const existingMembership = await tx.userOrganization.findUnique({
+            where: {
+              userId_organizationId: {
+                userId: user.id,
+                organizationId: organization.id,
+              },
+            },
+          });
+
+          if (existingMembership) {
+            // Se esiste già, aggiorna il ruolo se necessario
+            const isFirstAdmin = validEmails.indexOf(email) === 0;
+            await tx.userOrganization.update({
+              where: {
+                userId_organizationId: {
+                  userId: user.id,
+                  organizationId: organization.id,
+                },
+              },
+              data: {
+                role: isFirstAdmin ? 'OWNER' : 'ADMIN',
+              },
+            });
+          } else {
+            // Crea nuova membership come OWNER (primo utente) o ADMIN (altri)
+            const isFirstAdmin = validEmails.indexOf(email) === 0;
+            await tx.userOrganization.create({
+              data: {
+                userId: user.id,
+                organizationId: organization.id,
+                role: isFirstAdmin ? 'OWNER' : 'ADMIN',
+              },
+            });
+          }
+        }
+      } else {
+        // Se non ci sono admin specificati, errore
+        throw new Error('È obbligatorio specificare almeno un utente admin per l\'organizzazione');
       }
+
+      return organization;
     });
     
-    revalidatePath('/admin/organizations');
+    revalidatePath('/organizations');
     
     return {
       success: true,
       organization: {
-        id: organization.id,
-        businessName: organization.businessName,
-        plan: organization.plan,
+        id: result.id,
+        businessName: result.businessName,
+        plan: result.plan,
       }
     };
   } catch (error: any) {
@@ -452,8 +586,73 @@ export async function createOrganizationAdmin(data: {
         error: 'P.IVA già presente nel sistema' 
       };
     }
+
+    // Gestione errore unique constraint UserOrganization
+    if (error.code === 'P2002' && error.meta?.target?.includes('userId_organizationId')) {
+      return { 
+        success: false, 
+        error: 'Uno degli utenti è già membro di questa organizzazione' 
+      };
+    }
+    
+    // Gestione errori custom (utente non trovato, ecc.)
+    if (error.message) {
+      return { 
+        success: false, 
+        error: error.message 
+      };
+    }
     
     return { success: false, error: 'Errore nella creazione dell\'organizzazione' };
+  }
+}
+
+/**
+ * Ottiene gli utenti di un'organizzazione (Super Admin)
+ * 
+ * PERMESSI: Solo Super Admin
+ * 
+ * @param organizationId - ID organizzazione
+ * @returns Lista utenti con ruoli
+ */
+export async function getOrganizationUsers(organizationId: string) {
+  try {
+    if (!(await isSuperAdmin())) {
+      return { success: false, error: 'Accesso negato: richiesti privilegi Super Admin' };
+    }
+    
+    const memberships = await prisma.userOrganization.findMany({
+      where: { organizationId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            active: true,
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
+    
+    return {
+      success: true,
+      users: memberships.map(m => ({
+        id: m.user.id,
+        email: m.user.email,
+        firstName: m.user.firstName,
+        lastName: m.user.lastName,
+        role: m.role,
+        active: m.user.active,
+      }))
+    };
+  } catch (error) {
+    console.error('Errore recupero utenti organizzazione:', error);
+    return { success: false, error: 'Errore nel recupero degli utenti' };
   }
 }
 
@@ -486,6 +685,7 @@ export async function updateOrganizationAdmin(
     maxUsers: number;
     maxInvoicesPerYear: number;
     active: boolean;
+    adminUserEmails?: string[]; // Email degli utenti admin da aggiungere
   }>
 ) {
   try {
@@ -516,14 +716,81 @@ export async function updateOrganizationAdmin(
       }
     }
     
-    // Aggiorna organizzazione
-    const organization = await prisma.organization.update({
-      where: { id },
-      data: {
-        ...data,
-        // Trim strings se presenti
-        businessName: data.businessName?.trim(),
+    // Estrai adminUserEmails dai dati (se presente)
+    const { adminUserEmails, ...orgData } = data;
+    
+    // Aggiorna organizzazione e aggiungi utenti in transazione
+    const result = await prisma.$transaction(async (tx) => {
+      // Aggiorna organizzazione
+      const organization = await tx.organization.update({
+        where: { id },
+        data: {
+          ...orgData,
+          // Trim strings se presenti
+          businessName: orgData.businessName?.trim(),
+        }
+      });
+      
+      // Aggiungi utenti admin se specificati
+      if (adminUserEmails && adminUserEmails.length > 0) {
+        const validEmails = adminUserEmails.filter(email => email && email.trim() !== '');
+        
+        if (validEmails.length > 0) {
+          for (const email of validEmails) {
+            // Trova utente per email
+            const user = await tx.user.findUnique({
+              where: { email: email.toLowerCase().trim() },
+              select: { id: true, active: true, email: true },
+            });
+
+            if (!user) {
+              throw new Error(`Utente con email ${email} non trovato. Assicurati che l'utente sia registrato nel sistema.`);
+            }
+
+            if (!user.active) {
+              throw new Error(`Utente ${email} non è attivo. Attiva l'utente prima di aggiungerlo all'organizzazione.`);
+            }
+
+            // Verifica se l'utente è già membro dell'organizzazione
+            const existingMembership = await tx.userOrganization.findUnique({
+              where: {
+                userId_organizationId: {
+                  userId: user.id,
+                  organizationId: id,
+                },
+              },
+            });
+
+            if (existingMembership) {
+              // Se esiste già, aggiorna il ruolo ad ADMIN se non è già OWNER
+              if (existingMembership.role !== 'OWNER') {
+                await tx.userOrganization.update({
+                  where: {
+                    userId_organizationId: {
+                      userId: user.id,
+                      organizationId: id,
+                    },
+                  },
+                  data: {
+                    role: 'ADMIN',
+                  },
+                });
+              }
+            } else {
+              // Crea nuova membership come ADMIN
+              await tx.userOrganization.create({
+                data: {
+                  userId: user.id,
+                  organizationId: id,
+                  role: 'ADMIN',
+                },
+              });
+            }
+          }
+        }
       }
+      
+      return organization;
     });
     
     revalidatePath('/admin/organizations');
@@ -531,8 +798,8 @@ export async function updateOrganizationAdmin(
     return {
       success: true,
       organization: {
-        id: organization.id,
-        businessName: organization.businessName,
+        id: result.id,
+        businessName: result.businessName,
       }
     };
   } catch (error: any) {
@@ -543,6 +810,14 @@ export async function updateOrganizationAdmin(
       return { 
         success: false, 
         error: 'P.IVA già presente nel sistema' 
+      };
+    }
+    
+    // Gestione errori custom (utente non trovato, ecc.)
+    if (error.message) {
+      return { 
+        success: false, 
+        error: error.message 
       };
     }
     

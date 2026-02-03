@@ -180,14 +180,14 @@ export default function DevLoginPage() {
             <p className="text-xs font-semibold text-blue-900">📝 Come funziona:</p>
             <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
               <li>Imposta cookie <code>userId</code> nel browser</li>
-              <li>Se l'ID è in <code>SUPER_ADMIN_IDS</code> → accesso OK</li>
+              <li>Se l&apos;ID è in <code>SUPER_ADMIN_IDS</code> → accesso OK</li>
               <li>Altrimenti → redirect a <code>/access-denied</code></li>
             </ul>
             <p className="text-xs text-blue-900 mt-3">
               <strong>Variabili ambiente:</strong>
             </p>
             <pre className="text-xs bg-blue-100 p-2 rounded mt-1 overflow-x-auto">
-SUPER_ADMIN_IDS="dev_admin_1"
+SUPER_ADMIN_IDS=&quot;dev_admin_1&quot;
             </pre>
           </div>
 

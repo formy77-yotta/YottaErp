@@ -7,13 +7,14 @@
 
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ShieldAlert, Home, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
-export default function AccessDeniedPage() {
+function AccessDeniedContent() {
   const searchParams = useSearchParams();
   const reason = searchParams.get('reason');
   const from = searchParams.get('from');
@@ -69,7 +70,7 @@ export default function AccessDeniedPage() {
           {reason === 'super_admin_required' && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
               <p className="text-xs text-amber-800">
-                <strong>Nota:</strong> L'accesso a questa area è limitato per motivi di sicurezza.
+                <strong>Nota:</strong> L&apos;accesso a questa area è limitato per motivi di sicurezza.
                 Solo gli utenti con privilegi di Super Admin possono gestire le organizzazioni.
               </p>
             </div>
@@ -98,5 +99,13 @@ export default function AccessDeniedPage() {
         YottaErp Security v1.0
       </div>
     </div>
+  );
+}
+
+export default function AccessDeniedPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Caricamento...</div>}>
+      <AccessDeniedContent />
+    </Suspense>
   );
 }

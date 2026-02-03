@@ -5,11 +5,51 @@
  * npx tsx scripts/create-super-admin.ts
  */
 
+// Carica variabili d'ambiente dal file .env
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import * as readline from 'readline';
 
-const prisma = new PrismaClient();
+// Configurazione Prisma con adapter PostgreSQL (richiesto per Prisma 7 con engineType = "library")
+const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error('❌ Errore: DATABASE_URL o DIRECT_URL non configurato nel file .env');
+  console.error('   Assicurati di avere una variabile DATABASE_URL o DIRECT_URL nel file .env');
+  process.exit(1);
+}
+
+// Crea il connection pool PostgreSQL
+const pool = new Pool({
+  connectionString,
+});
+
+// Crea l'adapter
+const adapter = new PrismaPg(pool);
+
+// Crea il Prisma Client con l'adapter (richiesto per Prisma 7)
+let prisma: PrismaClient;
+try {
+  prisma = new PrismaClient({
+    adapter,
+    log: ['error', 'warn'],
+  });
+  
+  // Verifica che prisma sia stato creato correttamente
+  if (!prisma) {
+    throw new Error('PrismaClient non è stato creato correttamente');
+  }
+} catch (error) {
+  console.error('❌ Errore nella creazione di PrismaClient:', error);
+  console.error('');
+  console.error('💡 Suggerimento: Esegui prima: npx prisma generate');
+  process.exit(1);
+}
 
 // Utility per input da console
 function prompt(question: string): Promise<string> {
@@ -99,6 +139,16 @@ async function createSuperAdmin() {
     console.log(`   ID: ${superAdmin.id}`);
     console.log(`   Email: ${superAdmin.email}`);
     console.log(`   Nome: ${superAdmin.firstName} ${superAdmin.lastName}`);
+    console.log('');
+    console.log('⚠️  IMPORTANTE: Aggiungi l\'ID al file .env');
+    console.log('');
+    console.log('📝 Apri il file .env e aggiungi/modifica SUPER_ADMIN_IDS:');
+    console.log(`   SUPER_ADMIN_IDS="${superAdmin.id}"`);
+    console.log('');
+    console.log('💡 Se hai già altri ID, aggiungi questo separato da virgola:');
+    console.log(`   SUPER_ADMIN_IDS="id1,id2,${superAdmin.id}"`);
+    console.log('');
+    console.log('🔄 Dopo aver modificato .env, RIAVVIA il server Next.js!');
     console.log('');
     console.log('🔐 Ora puoi accedere su:');
     console.log('   http://localhost:3000/login');

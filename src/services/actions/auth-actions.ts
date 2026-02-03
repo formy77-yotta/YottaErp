@@ -81,7 +81,8 @@ export async function loginAction(data: { email: string; password: string }) {
     }
 
     // Imposta cookie di sessione
-    cookies().set('userId', user.id, {
+    const cookieStore = await cookies();
+    cookieStore.set('userId', user.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -91,7 +92,7 @@ export async function loginAction(data: { email: string; password: string }) {
     // Se l'utente ha organizzazioni, imposta la prima come corrente
     if (user.organizations.length > 0) {
       const firstOrg = user.organizations[0].organization;
-      cookies().set('currentOrganizationId', firstOrg.id, {
+      cookieStore.set('currentOrganizationId', firstOrg.id, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -126,7 +127,7 @@ export async function loginAction(data: { email: string; password: string }) {
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: error.errors[0].message,
+        error: error.issues[0].message,
       };
     }
 
@@ -206,14 +207,15 @@ export async function registerAction(data: {
     });
 
     // Auto-login dopo registrazione
-    cookies().set('userId', result.user.id, {
+    const cookieStore = await cookies();
+    cookieStore.set('userId', result.user.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    cookies().set('currentOrganizationId', result.organization.id, {
+    cookieStore.set('currentOrganizationId', result.organization.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -239,7 +241,7 @@ export async function registerAction(data: {
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: error.errors[0].message,
+        error: error.issues[0].message,
       };
     }
 
@@ -259,8 +261,9 @@ export async function registerAction(data: {
 export async function logoutAction() {
   try {
     // Cancella cookie
-    cookies().delete('userId');
-    cookies().delete('currentOrganizationId');
+    const cookieStore = await cookies();
+    cookieStore.delete('userId');
+    cookieStore.delete('currentOrganizationId');
 
     revalidatePath('/', 'layout');
 
@@ -279,7 +282,8 @@ export async function logoutAction() {
  */
 export async function getCurrentUser() {
   try {
-    const userId = cookies().get('userId')?.value;
+    const cookieStore = await cookies();
+    const userId = cookieStore.get('userId')?.value;
 
     if (!userId) {
       return { success: false, user: null };
@@ -313,8 +317,9 @@ export async function getCurrentUser() {
 
     if (!user || !user.active) {
       // Utente non trovato o disattivato - cancella cookie
-      cookies().delete('userId');
-      cookies().delete('currentOrganizationId');
+      const cookieStore = await cookies();
+      cookieStore.delete('userId');
+      cookieStore.delete('currentOrganizationId');
       return { success: false, user: null };
     }
 

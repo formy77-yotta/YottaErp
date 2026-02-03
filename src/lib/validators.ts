@@ -57,30 +57,41 @@ export function validateItalianVAT(vat: string): boolean {
 }
 
 /**
- * Valida un Codice Fiscale italiano (16 caratteri alfanumerici)
+ * Valida un Codice Fiscale italiano
  * 
- * FORMATO:
- * - 6 lettere: cognome e nome
- * - 2 numeri: anno di nascita
- * - 1 lettera: mese di nascita
- * - 2 numeri: giorno di nascita e sesso
- * - 1 lettera: comune di nascita
- * - 3 numeri: comune di nascita
- * - 1 lettera: carattere di controllo
+ * FORMATI ACCETTATI:
+ * 1. 16 caratteri alfanumerici (persone fisiche):
+ *    - 6 lettere: cognome e nome
+ *    - 2 numeri: anno di nascita
+ *    - 1 lettera: mese di nascita
+ *    - 2 numeri: giorno di nascita e sesso
+ *    - 1 lettera: comune di nascita
+ *    - 3 numeri: comune di nascita
+ *    - 1 lettera: carattere di controllo
+ *    Esempio: RSSMRA80A01H501U
  * 
- * Esempio: RSSMRA80A01H501U
+ * 2. 11 cifre numeriche (società, corrisponde alla P.IVA):
+ *    - 11 cifre numeriche con validazione checksum P.IVA
+ *    Esempio: 12345678901
  * 
  * @param cf - Codice Fiscale da validare
  * @returns true se valido, false altrimenti
  * 
  * @example
  * ```typescript
- * validateItalianFiscalCode('RSSMRA80A01H501U'); // true se valido
+ * validateItalianFiscalCode('RSSMRA80A01H501U'); // true se valido (persona fisica)
+ * validateItalianFiscalCode('12345678901'); // true se valido (società, P.IVA)
  * validateItalianFiscalCode('INVALID'); // false
  * ```
  */
 export function validateItalianFiscalCode(cf: string): boolean {
-  // Verifica lunghezza
+  // Se è di 11 cifre numeriche, è una società (corrisponde alla P.IVA)
+  if (cf.length === 11 && /^\d{11}$/.test(cf)) {
+    // Usa la validazione P.IVA
+    return validateItalianVAT(cf);
+  }
+
+  // Se è di 16 caratteri, è una persona fisica
   if (cf.length !== 16) {
     return false;
   }
@@ -144,15 +155,25 @@ export function formatVAT(vat: string): string {
  * Formatta un Codice Fiscale per visualizzazione
  * Divide in gruppi logici
  * 
- * @param cf - Codice Fiscale (16 caratteri)
+ * @param cf - Codice Fiscale (16 caratteri per persona fisica, 11 cifre per società)
  * @returns Codice Fiscale formattato
  * 
  * @example
  * ```typescript
- * formatFiscalCode('RSSMRA80A01H501U'); // "RSSMRA 80A01 H501U"
+ * formatFiscalCode('RSSMRA80A01H501U'); // "RSSMRA 80A01 H501U" (persona fisica)
+ * formatFiscalCode('12345678901'); // "123 456 789 01" (società, P.IVA)
  * ```
  */
 export function formatFiscalCode(cf: string): string {
-  if (cf.length !== 16) return cf;
-  return `${cf.slice(0, 6)} ${cf.slice(6, 11)} ${cf.slice(11)}`;
+  // Se è di 11 cifre (società), formatta come P.IVA
+  if (cf.length === 11 && /^\d{11}$/.test(cf)) {
+    return formatVAT(cf);
+  }
+  
+  // Se è di 16 caratteri (persona fisica), formatta normalmente
+  if (cf.length === 16) {
+    return `${cf.slice(0, 6)} ${cf.slice(6, 11)} ${cf.slice(11)}`;
+  }
+  
+  return cf;
 }

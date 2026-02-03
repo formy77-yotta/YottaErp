@@ -6,7 +6,7 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   Building2, 
   Users, 
@@ -137,41 +137,49 @@ export default function HomePage() {
         <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           {features.map((feature) => {
             const Icon = feature.icon;
-            const CardWrapper = feature.disabled ? 'div' : Link;
-            const cardProps = feature.disabled ? {} : { href: feature.href };
+            
+            const cardContent = (
+              <Card 
+                className={`h-full transition-all ${
+                  feature.disabled 
+                    ? 'opacity-60 cursor-not-allowed' 
+                    : 'hover:shadow-lg hover:-translate-y-1 cursor-pointer'
+                }`}
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className={`${feature.color} p-3 rounded-lg`}>
+                      <Icon className="h-6 w-6 text-white" />
+                    </div>
+                    {feature.badge && (
+                      <span className={`${feature.badgeColor || 'bg-gray-500'} text-white text-xs px-2 py-1 rounded-full`}>
+                        {feature.badge}
+                      </span>
+                    )}
+                    {feature.disabled && (
+                      <span className="bg-gray-300 text-gray-700 text-xs px-2 py-1 rounded-full">
+                        Prossimamente
+                      </span>
+                    )}
+                  </div>
+                  <CardTitle className="text-xl mt-4">{feature.title}</CardTitle>
+                  <CardDescription className="text-base">
+                    {feature.description}
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            );
             
             return (
-              <CardWrapper key={feature.title} {...cardProps}>
-                <Card 
-                  className={`h-full transition-all ${
-                    feature.disabled 
-                      ? 'opacity-60 cursor-not-allowed' 
-                      : 'hover:shadow-lg hover:-translate-y-1 cursor-pointer'
-                  }`}
-                >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className={`${feature.color} p-3 rounded-lg`}>
-                        <Icon className="h-6 w-6 text-white" />
-                      </div>
-                      {feature.badge && (
-                        <span className={`${feature.badgeColor || 'bg-gray-500'} text-white text-xs px-2 py-1 rounded-full`}>
-                          {feature.badge}
-                        </span>
-                      )}
-                      {feature.disabled && (
-                        <span className="bg-gray-300 text-gray-700 text-xs px-2 py-1 rounded-full">
-                          Prossimamente
-                        </span>
-                      )}
-                    </div>
-                    <CardTitle className="text-xl mt-4">{feature.title}</CardTitle>
-                    <CardDescription className="text-base">
-                      {feature.description}
-                    </CardDescription>
-                  </CardHeader>
-                </Card>
-              </CardWrapper>
+              <div key={feature.title}>
+                {feature.disabled ? (
+                  cardContent
+                ) : (
+                  <Link href={feature.href}>
+                    {cardContent}
+                  </Link>
+                )}
+              </div>
             );
           })}
         </div>

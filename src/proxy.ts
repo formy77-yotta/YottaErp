@@ -1,33 +1,41 @@
 /**
- * Middleware di Sicurezza per YottaErp
+ * Proxy di Sicurezza per YottaErp
  * 
  * SICUREZZA CRITICA:
  * - Protegge route admin (solo Super Admin)
  * - Verifica autenticazione
  * - Previene accesso non autorizzato
+ * 
+ * NOTA: In Next.js 16+, il middleware è stato rinominato in "proxy"
+ * per chiarire meglio il suo scopo di intercettare richieste a livello di rete.
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
 
 /**
- * Lista Super Admin IDs da .env (DEPRECATO - ora usiamo flag DB)
+ * Lista Super Admin IDs da .env
  * 
- * NOTA: Questa variabile è mantenuta per backwards compatibility
- * ma ora si usa il campo `isSuperAdmin` nel database
+ * NOTA: Questa è una verifica leggera per il proxy (Node.js Runtime).
+ * La verifica completa con database avviene nelle Server Actions (Node.js runtime).
+ * 
+ * Per configurare Super Admin, aggiungi al .env:
+ * SUPER_ADMIN_IDS=user_id_1,user_id_2,user_id_3
  */
-const SUPER_ADMIN_IDS = process.env.SUPER_ADMIN_IDS?.split(',').map(id => id.trim()) || [];
+const SUPER_ADMIN_IDS = process.env.SUPER_ADMIN_IDS?.split(',').map(id => id.trim()).filter(Boolean) || [];
 
 /**
- * Verifica se l'utente è Super Admin
+ * Verifica se l'utente è Super Admin (verifica leggera per proxy)
  * 
  * SICUREZZA:
  * 1. Legge userId da cookie
- * 2. Verifica nel database se l'utente è Super Admin
- * 3. In development, puoi abilitare debug mode
+ * 2. Verifica se userId è nella lista SUPER_ADMIN_IDS da env
+ * 3. In development, puoi abilitare bypass mode
+ * 
+ * NOTA: Questa è solo una PRIMA LINEA di difesa. La verifica completa
+ * con database avviene nelle Server Actions che girano in Node.js runtime.
  */
-async function isSuperAdmin(request: NextRequest): Promise<{ isAdmin: boolean; userId?: string }> {
+function isSuperAdmin(request: NextRequest): { isAdmin: boolean; userId?: string } {
   // Leggi userId da cookie
   const userId = request.cookies.get('userId')?.value;
   
@@ -42,46 +50,29 @@ async function isSuperAdmin(request: NextRequest): Promise<{ isAdmin: boolean; u
     return { isAdmin: true, userId };
   }
   
-  try {
-    // Verifica nel database se l'utente è Super Admin
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { 
-        id: true, 
-        isSuperAdmin: true,
-        active: true 
-      },
-    });
-
-    if (!user || !user.active) {
-      console.warn(`[AUTH] User ${userId} non trovato o disattivato`);
-      return { isAdmin: false, userId };
-    }
-
-    const isAdmin = user.isSuperAdmin;
-    
-    if (!isAdmin) {
-      console.warn(`[AUTH] Accesso negato per userId: ${userId} (non Super Admin)`);
-    }
-    
-    return { isAdmin, userId };
-  } catch (error) {
-    console.error('[AUTH] Errore verifica Super Admin:', error);
-    return { isAdmin: false, userId };
+  // Verifica se userId è nella lista Super Admin da env
+  const isAdmin = SUPER_ADMIN_IDS.length > 0 && SUPER_ADMIN_IDS.includes(userId);
+  
+  if (!isAdmin) {
+    console.warn(`[AUTH] Accesso negato per userId: ${userId} (non in SUPER_ADMIN_IDS)`);
   }
+  
+  return { isAdmin, userId };
 }
 
 /**
- * Middleware principale
+ * Proxy principale
+ * 
+ * Intercetta tutte le richieste e applica controlli di sicurezza.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  console.log(`[MIDDLEWARE] ${request.method} ${pathname}`);
+  console.log(`[PROXY] ${request.method} ${pathname}`);
   
   // ===== PROTEZIONE ROUTE ORGANIZATIONS (SUPER ADMIN ONLY) =====
   if (pathname.startsWith('/organizations')) {
-    const { isAdmin, userId } = await isSuperAdmin(request);
+    const { isAdmin, userId } = isSuperAdmin(request);
     
     if (!isAdmin) {
       console.error(`[SECURITY] ❌ Tentativo accesso non autorizzato a ${pathname}`);
@@ -119,9 +110,9 @@ export async function middleware(request: NextRequest) {
 }
 
 /**
- * Config: specifica quali route passano dal middleware
+ * Config: specifica quali route passano dal proxy
  * 
- * NOTA: Il matcher viene eseguato PRIMA delle funzioni middleware
+ * NOTA: Il matcher viene eseguito PRIMA della funzione proxy
  */
 export const config = {
   matcher: [

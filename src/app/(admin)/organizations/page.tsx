@@ -16,7 +16,8 @@
 import { useEffect, useState } from 'react';
 import { 
   getOrganizations, 
-  toggleOrganizationStatus 
+  toggleOrganizationStatus,
+  deleteOrganization 
 } from '@/services/actions/organization-actions';
 import { OrganizationForm } from '@/components/features/admin/OrganizationForm';
 
@@ -29,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -50,7 +52,8 @@ import {
   Plus,
   Pencil,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 
 type Organization = {
@@ -58,10 +61,16 @@ type Organization = {
   businessName: string;
   vatNumber?: string | null;
   fiscalCode?: string | null;
-  email?: string | null;
-  phone?: string | null;
+  address?: string | null;
   city?: string | null;
   province?: string | null;
+  zipCode?: string | null;
+  country?: string;
+  email?: string | null;
+  pec?: string | null;
+  phone?: string | null;
+  sdiCode?: string | null;
+  logoUrl?: string | null;
   plan: string;
   maxUsers: number;
   maxInvoicesPerYear: number;
@@ -80,6 +89,8 @@ export default function OrganizationsAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [deletingOrg, setDeletingOrg] = useState<Organization | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   /**
@@ -152,6 +163,32 @@ export default function OrganizationsAdminPage() {
    */
   function handleFormError(error: string) {
     showToast(error, 'error');
+  }
+
+  /**
+   * Apri dialog per eliminazione
+   */
+  function handleDeleteClick(org: Organization) {
+    setDeletingOrg(org);
+    setIsDeleteDialogOpen(true);
+  }
+
+  /**
+   * Conferma eliminazione organizzazione
+   */
+  async function handleConfirmDelete() {
+    if (!deletingOrg) return;
+
+    const result = await deleteOrganization(deletingOrg.id);
+
+    if (result.success) {
+      showToast(result.message || 'Organizzazione eliminata', 'success');
+      setIsDeleteDialogOpen(false);
+      setDeletingOrg(null);
+      await loadOrganizations();
+    } else {
+      showToast(result.error || 'Errore eliminazione organizzazione', 'error');
+    }
   }
 
   /**
@@ -299,6 +336,50 @@ export default function OrganizationsAdminPage() {
         </div>
       )}
 
+      {/* Dialog Conferma Eliminazione */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Conferma Eliminazione</DialogTitle>
+            <DialogDescription>
+              Sei sicuro di voler eliminare l'organizzazione{' '}
+              <strong>{deletingOrg?.businessName}</strong>?
+              <br />
+              <br />
+              <span className="text-destructive font-medium">
+                ⚠️ Questa operazione è irreversibile e eliminerà tutti i dati associati
+                (utenti, clienti, prodotti, documenti).
+              </span>
+              <br />
+              <br />
+              {deletingOrg && deletingOrg.documentsCount > 0 && (
+                <span className="text-destructive">
+                  ⚠️ Attenzione: questa organizzazione ha {deletingOrg.documentsCount} documenti.
+                  L'eliminazione potrebbe non essere consentita.
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setDeletingOrg(null);
+              }}
+            >
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+            >
+              Elimina
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Tabella Organizzazioni */}
       <Card>
         <CardHeader>
@@ -419,13 +500,25 @@ export default function OrganizationsAdminPage() {
                         />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(org)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(org)}
+                            title="Modifica"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteClick(org)}
+                            title="Elimina"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

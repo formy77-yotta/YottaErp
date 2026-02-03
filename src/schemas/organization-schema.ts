@@ -22,12 +22,21 @@ export const italianVatNumberSchema = z
 
 /**
  * Schema per validazione Codice Fiscale italiano
- * - 16 caratteri alfanumerici (formato: RSSMRA80A01H501U)
+ * - 16 caratteri alfanumerici (persone fisiche, formato: RSSMRA80A01H501U)
+ * - 11 cifre numeriche (società, corrisponde alla P.IVA)
  * - Validazione checksum con algoritmo ufficiale
  */
 export const italianFiscalCodeSchema = z
   .string()
-  .regex(/^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/, 'Formato Codice Fiscale non valido')
+  .refine(
+    (cf) => {
+      // Accetta 16 caratteri (persona fisica) o 11 cifre (società)
+      return /^[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]$/.test(cf) || /^\d{11}$/.test(cf);
+    },
+    {
+      message: 'Codice Fiscale deve essere di 16 caratteri (persona fisica) o 11 cifre (società, P.IVA)',
+    }
+  )
   .refine(validateItalianFiscalCode, 'Codice Fiscale non valido (checksum errato)');
 
 /**
@@ -35,9 +44,10 @@ export const italianFiscalCodeSchema = z
  * - 2 caratteri maiuscoli (es. MI, RM, NA)
  */
 export const italianProvinceSchema = z
-  .string()
-  .length(2, 'Provincia deve essere di 2 caratteri (es. MI)')
-  .regex(/^[A-Z]{2}$/, 'Provincia deve contenere solo lettere maiuscole')
+  .union([
+    z.string().length(2, 'Provincia deve essere di 2 caratteri (es. MI)').regex(/^[A-Z]{2}$/, 'Provincia deve contenere solo lettere maiuscole'),
+    z.literal('')
+  ])
   .optional();
 
 /**
@@ -45,15 +55,17 @@ export const italianProvinceSchema = z
  * - 5 cifre numeriche
  */
 export const italianZipCodeSchema = z
-  .string()
-  .regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre')
+  .union([
+    z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre'),
+    z.literal('')
+  ])
   .optional();
 
 /**
  * Enum per i piani di sottoscrizione
  */
 export const organizationPlanSchema = z.enum(['FREE', 'BASIC', 'PREMIUM'], {
-  errorMap: () => ({ message: 'Piano non valido. Valori ammessi: FREE, BASIC, PREMIUM' }),
+  message: 'Piano non valido. Valori ammessi: FREE, BASIC, PREMIUM',
 });
 
 /**
@@ -78,21 +90,35 @@ export const organizationSchema = z
     fiscalCode: italianFiscalCodeSchema.optional(),
 
     // Indirizzo sede legale (opzionale ma se presente deve essere completo)
-    address: z.string().min(5, 'Indirizzo troppo corto (minimo 5 caratteri)').max(255).optional(),
-    city: z.string().min(2, 'Città troppo corta (minimo 2 caratteri)').max(100).optional(),
-    province: italianProvinceSchema,
-    zipCode: italianZipCodeSchema,
-    country: z.string().length(2).default('IT'),
+    // Usa .nullish() invece di .optional() per preservare i campi anche quando sono undefined
+    address: z.union([
+      z.string().min(5, 'Indirizzo troppo corto (minimo 5 caratteri)').max(255),
+      z.literal('')
+    ]).nullish(),
+    city: z.union([
+      z.string().min(2, 'Città troppo corta (minimo 2 caratteri)').max(100),
+      z.literal('')
+    ]).nullish(),
+    province: z.union([
+      z.string().length(2, 'Provincia deve essere di 2 caratteri (es. MI)').regex(/^[A-Z]{2}$/, 'Provincia deve contenere solo lettere maiuscole'),
+      z.literal('')
+    ]).nullish(),
+    zipCode: z.union([
+      z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre'),
+      z.literal('')
+    ]).nullish(),
+    country: z.string().length(2, 'Paese deve essere di 2 caratteri').default('IT'),
 
     // Contatti (opzionali)
-    email: z.string().email('Email non valida').optional().or(z.literal('')),
-    pec: z.string().email('PEC non valida').optional().or(z.literal('')),
-    phone: z.string().max(50, 'Numero di telefono troppo lungo').optional().or(z.literal('')),
+    email: z.string().email('Email non valida').nullish().or(z.literal('')),
+    pec: z.string().email('PEC non valida').nullish().or(z.literal('')),
+    phone: z.string().max(50, 'Numero di telefono troppo lungo').nullish().or(z.literal('')),
     sdiCode: z
-      .string()
-      .regex(/^[A-Z0-9]{7}$/, 'Codice SDI deve contenere 7 caratteri alfanumerici')
-      .optional()
-      .or(z.literal('')),
+      .union([
+        z.string().regex(/^[A-Z0-9]{7}$/, 'Codice SDI deve contenere 7 caratteri alfanumerici'),
+        z.literal('')
+      ])
+      .nullish(),
 
     // Logo (URL opzionale)
     logoUrl: z.string().url('URL logo non valido').optional().or(z.literal('')),
@@ -104,12 +130,26 @@ export const organizationSchema = z
 
     // Stato
     active: z.boolean().default(true),
+
+    // Utenti admin (opzionale per creazione, obbligatorio almeno uno)
+    adminUserEmails: z.array(z.string().email('Email non valida')).optional(),
   })
   .refine(
     (data) => data.vatNumber || data.fiscalCode,
     {
       message: 'Inserire almeno P.IVA o Codice Fiscale',
       path: ['vatNumber'], // Mostra errore sul campo vatNumber
+    }
+  )
+  .refine(
+    (data) => {
+      // Per la creazione, almeno un admin è obbligatorio
+      // Per l'update, è opzionale (non modifichiamo gli admin esistenti)
+      return data.adminUserEmails === undefined || data.adminUserEmails.length > 0;
+    },
+    {
+      message: 'Inserire almeno un utente admin',
+      path: ['adminUserEmails'],
     }
   )
   .refine(

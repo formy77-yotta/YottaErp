@@ -32,8 +32,25 @@ export default function LoginPage() {
       const result = await loginAction({ email, password });
 
       if (result.success) {
-        // Redirect
-        router.push(result.user?.isSuperAdmin ? '/organizations' : '/');
+        // Logica di redirect migliorata:
+        // PRIORITÀ 1: Se l'utente ha organizzazioni → va all'ERP normale (anche se è Super Admin)
+        // PRIORITÀ 2: Se è Super Admin ma NON ha organizzazioni → va a /organizations
+        // PRIORITÀ 3: Altrimenti va alla home
+        
+        // Forza sempre l'ERP normale se ha organizzazioni, indipendentemente da isSuperAdmin
+        if (result.user?.hasOrganizations) {
+          // Utente con organizzazioni → va al dashboard (entities)
+          console.log('[LOGIN] Utente ha organizzazioni → redirect a /entities');
+          router.push('/entities');
+        } else if (result.user?.isSuperAdmin) {
+          // Super Admin senza organizzazioni → va al pannello Super Admin
+          console.log('[LOGIN] Super Admin senza organizzazioni → redirect a /organizations');
+          router.push('/organizations');
+        } else {
+          // Utente normale senza organizzazioni → va alla home
+          console.log('[LOGIN] Utente normale → redirect a /');
+          router.push('/');
+        }
         router.refresh();
       } else {
         setError(result.error || 'Errore durante il login');

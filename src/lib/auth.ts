@@ -67,8 +67,9 @@ export class ForbiddenError extends Error {
  * ```
  */
 export async function getAuthContext(): Promise<AuthContext> {
-  const userIdCookie = cookies().get('userId')?.value;
-  const organizationIdCookie = cookies().get('currentOrganizationId')?.value;
+  const cookieStore = await cookies();
+  const userIdCookie = cookieStore.get('userId')?.value;
+  const organizationIdCookie = cookieStore.get('currentOrganizationId')?.value;
   
   if (!userIdCookie) {
     throw new UnauthorizedError('Utente non autenticato');
