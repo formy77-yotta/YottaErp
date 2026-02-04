@@ -8,7 +8,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
@@ -18,6 +18,7 @@ import {
   Menu,
   ChevronDown,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -79,7 +80,50 @@ const navItems: NavItem[] = [
       },
     ],
   },
+  {
+    title: 'Impostazioni',
+    icon: Settings,
+    children: [
+      {
+        title: 'Aliquote IVA',
+        href: '/settings/vat-rates',
+        icon: Settings,
+      },
+    ],
+  },
 ];
+
+/**
+ * Helper per verificare se un href corrisponde al pathname corrente
+ * Considera anche i parametri della query string
+ */
+function isHrefActive(href: string | undefined, pathname: string, searchParams: URLSearchParams): boolean {
+  if (!href) return false;
+  
+  const [hrefPath, hrefQuery] = href.split('?');
+  
+  // Se il path non corrisponde, non è attivo
+  if (pathname !== hrefPath && !pathname.startsWith(hrefPath + '/')) {
+    return false;
+  }
+  
+  // Se l'href ha una query string, verifica che i parametri corrispondano
+  if (hrefQuery) {
+    const hrefParams = new URLSearchParams(hrefQuery);
+    
+    // Verifica che tutti i parametri dell'href siano presenti e corrispondano
+    for (const [key, value] of hrefParams.entries()) {
+      if (searchParams.get(key) !== value) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  // Se l'href non ha query string, il path corrisponde è sufficiente
+  return true;
+}
 
 /**
  * Componente per singolo item di navigazione
@@ -91,13 +135,7 @@ function NavItemComponent({ item, isActive, isChild = false }: {
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
-  
-  // Verifica se un item o i suoi figli sono attivi
-  const hasActiveChild = item.children?.some(child => {
-    if (!child.href) return false;
-    const childPath = child.href.split('?')[0];
-    return pathname === childPath || pathname.startsWith(childPath + '/');
-  });
+  const searchParams = useSearchParams();
 
   if (item.children && item.children.length > 0) {
     return (
@@ -106,8 +144,8 @@ function NavItemComponent({ item, isActive, isChild = false }: {
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
             'w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            isActive || hasActiveChild
-              ? 'bg-primary text-primary-foreground'
+            isActive
+              ? 'text-slate-900 font-semibold'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
             isChild && 'pl-8'
           )}
@@ -128,7 +166,7 @@ function NavItemComponent({ item, isActive, isChild = false }: {
               <NavItemComponent
                 key={child.href || child.title}
                 item={child}
-                isActive={pathname === child.href?.split('?')[0]}
+                isActive={isHrefActive(child.href, pathname, searchParams)}
                 isChild={true}
               />
             ))}
@@ -146,9 +184,9 @@ function NavItemComponent({ item, isActive, isChild = false }: {
     <Link
       href={item.href}
       className={cn(
-        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative',
         isActive
-          ? 'bg-primary text-primary-foreground'
+          ? 'text-slate-900 font-semibold border-l-2 border-blue-600'
           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
         isChild && 'pl-8'
       )}
@@ -164,15 +202,14 @@ function NavItemComponent({ item, isActive, isChild = false }: {
  */
 function DesktopSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   return (
     <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:pt-16 lg:border-r lg:bg-background">
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <nav className="space-y-2">
           {navItems.map((item) => {
-            const isActive = item.href
-              ? pathname === item.href.split('?')[0] || pathname.startsWith(item.href.split('?')[0] + '/')
-              : false;
+            const isActive = item.href ? isHrefActive(item.href, pathname, searchParams) : false;
             
             return (
               <NavItemComponent
@@ -195,6 +232,7 @@ function DesktopSidebar() {
  */
 export function MobileSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -210,9 +248,7 @@ export function MobileSidebar() {
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <nav className="space-y-2">
               {navItems.map((item) => {
-                const isActive = item.href
-                  ? pathname === item.href.split('?')[0] || pathname.startsWith(item.href.split('?')[0] + '/')
-                  : false;
+                const isActive = item.href ? isHrefActive(item.href, pathname, searchParams) : false;
                 
                 return (
                   <div key={item.href || item.title} onClick={() => {

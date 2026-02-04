@@ -246,6 +246,7 @@ model VatRate {
 
   name        String // Es. "Standard 22%", "Ridotta 10%", "Esente"
   value       Decimal @db.Decimal(5, 4) // Es. 0.2200 per 22%
+  nature          String?      // Codici SDI: N1, N2, N3, N6 (Reverse Charge)
   description String? @db.Text
 
   // Metadata
