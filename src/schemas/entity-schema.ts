@@ -189,7 +189,11 @@ export const entityTypeSchema = z.enum(['CUSTOMER', 'SUPPLIER', 'LEAD'], {
 export type EntityType = z.infer<typeof entityTypeSchema>;
 
 /**
- * Schema base per entità (senza refine, per permettere .partial())
+ * Schema base per entità
+ * 
+ * REGOLA: Solo la ragione sociale è obbligatoria.
+ * Tutti gli altri campi sono opzionali.
+ * Se viene inserita la P.IVA, viene validata e verificata l'unicità.
  */
 const entityBaseSchema = z.object({
   type: entityTypeSchema,
@@ -197,29 +201,119 @@ const entityBaseSchema = z.object({
     .string()
     .min(2, 'Ragione sociale deve contenere almeno 2 caratteri')
     .max(255, 'Ragione sociale troppo lunga'),
-  vatNumber: italianVatNumberSchema.optional().or(z.literal('')),
-  fiscalCode: italianFiscalCodeSchema.optional().or(z.literal('')),
-  address: z.string().min(5, 'Indirizzo deve contenere almeno 5 caratteri'),
-  city: z.string().min(2, 'Città deve contenere almeno 2 caratteri'),
+  // P.IVA: opzionale, ma se presente deve essere valida
+  vatNumber: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        // Se vuoto o undefined, è valido (opzionale)
+        if (!val || val.trim() === '') return true;
+        // Se presente, deve essere valida
+        return italianVatNumberSchema.safeParse(val).success;
+      },
+      {
+        message: 'P.IVA non valida (deve contenere 11 cifre e passare il checksum)',
+      }
+    ),
+  // Codice Fiscale: opzionale, ma se presente deve essere valido
+  fiscalCode: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        // Se vuoto o undefined, è valido (opzionale)
+        if (!val || val.trim() === '') return true;
+        // Se presente, deve essere valido
+        return italianFiscalCodeSchema.safeParse(val).success;
+      },
+      {
+        message: 'Codice Fiscale non valido',
+      }
+    ),
+  // Indirizzo: opzionale, ma se presente deve avere almeno 5 caratteri
+  address: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return val.length >= 5;
+      },
+      {
+        message: 'Indirizzo deve contenere almeno 5 caratteri',
+      }
+    ),
+  // Città: opzionale, ma se presente deve avere almeno 2 caratteri
+  city: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return val.length >= 2;
+      },
+      {
+        message: 'Città deve contenere almeno 2 caratteri',
+      }
+    ),
+  // Provincia: opzionale, ma se presente deve essere 2 lettere maiuscole
   province: z
     .string()
-    .length(2, 'Provincia deve essere 2 caratteri (es. MI, RM, NA)')
-    .regex(/^[A-Z]{2}$/, 'Provincia deve essere 2 lettere maiuscole')
-    .transform((val) => val.toUpperCase()),
-  zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre'),
-  email: z.string().email('Email non valida').optional().or(z.literal('')),
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return /^[A-Z]{2}$/.test(val.toUpperCase());
+      },
+      {
+        message: 'Provincia deve essere 2 lettere maiuscole (es. MI, RM)',
+      }
+    )
+    .transform((val) => (val ? val.toUpperCase() : val)),
+  // CAP: opzionale, ma se presente deve essere 5 cifre
+  zipCode: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return /^\d{5}$/.test(val);
+      },
+      {
+        message: 'CAP deve contenere esattamente 5 cifre',
+      }
+    ),
+  // Email: opzionale, ma se presente deve essere valida
+  email: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return z.string().email().safeParse(val).success;
+      },
+      {
+        message: 'Email non valida',
+      }
+    ),
 });
 
 /**
- * Schema per creazione entità (con refine per validazione P.IVA/CF)
+ * Schema per creazione entità
+ * 
+ * NOTA: Non richiede più P.IVA o Codice Fiscale obbligatori.
+ * Solo la ragione sociale è obbligatoria.
+ * La verifica della P.IVA duplicata viene fatta nella Server Action.
  */
-export const createEntitySchema = entityBaseSchema.refine(
-  (data) => data.vatNumber || data.fiscalCode,
-  {
-    message: 'Inserire almeno P.IVA o Codice Fiscale',
-    path: ['vatNumber'],
-  }
-);
+export const createEntitySchema = entityBaseSchema;
 
 export type CreateEntityInput = z.infer<typeof createEntitySchema>;
 

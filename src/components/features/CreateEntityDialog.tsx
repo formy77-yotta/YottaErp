@@ -17,7 +17,11 @@ import {
 import { EntityForm } from '@/components/features/EntityForm';
 import { Plus } from 'lucide-react';
 
-export function CreateEntityDialog() {
+interface CreateEntityDialogProps {
+  defaultType?: 'CUSTOMER' | 'SUPPLIER' | 'LEAD';
+}
+
+export function CreateEntityDialog({ defaultType }: CreateEntityDialogProps = {}) {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(0);
 
@@ -38,6 +42,7 @@ export function CreateEntityDialog() {
         </DialogHeader>
         <EntityForm
           key={key}
+          defaultType={defaultType}
           onSuccess={() => {
             setOpen(false);
             setKey((k) => k + 1); // Reset form

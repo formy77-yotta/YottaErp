@@ -2,7 +2,8 @@
  * Pagina gestione Anagrafiche (Entities)
  * 
  * Mostra una DataTable con tutte le entità dell'organizzazione corrente
- * e permette di creare/modificare entità tramite dialog.
+ * filtrate per tipo (CUSTOMER, SUPPLIER, LEAD) tramite query parameter.
+ * MULTITENANT: Tutte le entità sono filtrate per organizationId
  */
 
 import { Suspense } from 'react';
@@ -19,25 +20,45 @@ import { CreateEntityDialog } from '@/components/features/CreateEntityDialog';
 import { EntityTable } from '@/components/features/EntityTable';
 
 /**
+ * Props per la pagina entities
+ */
+interface EntitiesPageProps {
+  searchParams: Promise<{ type?: string }>;
+}
+
+/**
  * Componente principale della pagina
  */
-export default function EntitiesPage() {
+export default async function EntitiesPage({ searchParams }: EntitiesPageProps) {
+  const params = await searchParams;
+  const entityType = params.type as 'CUSTOMER' | 'SUPPLIER' | 'LEAD' | undefined;
+
+  // Mappa tipo a label per il titolo
+  const typeLabels: Record<string, string> = {
+    CUSTOMER: 'Clienti',
+    SUPPLIER: 'Fornitori',
+    LEAD: 'Lead',
+  };
+
+  const pageTitle = entityType ? typeLabels[entityType] || 'Anagrafiche' : 'Anagrafiche';
+  const pageDescription = entityType
+    ? `Gestisci ${pageTitle.toLowerCase()} della tua organizzazione`
+    : 'Gestisci clienti, fornitori e lead';
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Anagrafiche</h1>
-          <p className="text-muted-foreground mt-1">
-            Gestisci clienti, fornitori e lead
-          </p>
+          <h1 className="text-3xl font-bold">{pageTitle}</h1>
+          <p className="text-muted-foreground mt-1">{pageDescription}</p>
         </div>
-        <CreateEntityDialog />
+        <CreateEntityDialog defaultType={entityType} />
       </div>
 
       {/* Tabella Entità */}
       <Suspense fallback={<EntitiesTableSkeleton />}>
-        <EntitiesTable />
+        <EntitiesTable entityType={entityType} />
       </Suspense>
     </div>
   );
@@ -46,8 +67,8 @@ export default function EntitiesPage() {
 /**
  * Tabella entità con dati dal server
  */
-async function EntitiesTable() {
-  const result = await getEntitiesAction();
+async function EntitiesTable({ entityType }: { entityType?: 'CUSTOMER' | 'SUPPLIER' | 'LEAD' }) {
+  const result = await getEntitiesAction(entityType);
 
   if (!result.success) {
     return (
@@ -60,9 +81,17 @@ async function EntitiesTable() {
   const entities = result.data;
 
   if (entities.length === 0) {
+    const typeLabel = entityType
+      ? entityType === 'CUSTOMER'
+        ? 'clienti'
+        : entityType === 'SUPPLIER'
+        ? 'fornitori'
+        : 'lead'
+      : 'anagrafiche';
+
     return (
       <div className="rounded-lg border p-8 text-center">
-        <p className="text-muted-foreground">Nessuna anagrafica trovata</p>
+        <p className="text-muted-foreground">Nessun {typeLabel} trovato</p>
         <p className="text-sm text-muted-foreground mt-2">
           Crea la tua prima anagrafica utilizzando il pulsante "Nuova Anagrafica"
         </p>

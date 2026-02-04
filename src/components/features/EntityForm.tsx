@@ -62,6 +62,11 @@ interface EntityFormProps {
   };
   
   /**
+   * Tipo predefinito per nuove entità
+   */
+  defaultType?: 'CUSTOMER' | 'SUPPLIER' | 'LEAD';
+  
+  /**
    * Callback chiamato dopo salvataggio con successo
    */
   onSuccess?: () => void;
@@ -74,17 +79,21 @@ interface EntityFormProps {
 
 export function EntityForm({ 
   entity, 
+  defaultType,
   onSuccess, 
   onError 
 }: EntityFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const isEditing = !!entity;
 
+  // Tipo predefinito: usa entity.type se editing, altrimenti defaultType o 'CUSTOMER'
+  const initialType = entity?.type || defaultType || 'CUSTOMER';
+
   // Setup form con validazione Zod
   const form = useForm<CreateEntityInput>({
     resolver: zodResolver(createEntitySchema) as any,
     defaultValues: {
-      type: 'CUSTOMER',
+      type: initialType,
       businessName: '',
       vatNumber: '',
       fiscalCode: '',
@@ -113,7 +122,7 @@ export function EntityForm({
     } else {
       // Reset al form vuoto quando si crea una nuova entità
       form.reset({
-        type: 'CUSTOMER',
+        type: defaultType || 'CUSTOMER',
         businessName: '',
         vatNumber: '',
         fiscalCode: '',
@@ -141,15 +150,31 @@ export function EntityForm({
           id: entity.id,
           ...data,
           // Converti stringhe vuote in undefined per permettere aggiornamenti parziali
-          vatNumber: data.vatNumber || undefined,
-          fiscalCode: data.fiscalCode || undefined,
-          email: data.email || undefined,
+          vatNumber: data.vatNumber && data.vatNumber.trim() !== '' ? data.vatNumber : undefined,
+          fiscalCode: data.fiscalCode && data.fiscalCode.trim() !== '' ? data.fiscalCode : undefined,
+          address: data.address && data.address.trim() !== '' ? data.address : undefined,
+          city: data.city && data.city.trim() !== '' ? data.city : undefined,
+          province: data.province && data.province.trim() !== '' ? data.province : undefined,
+          zipCode: data.zipCode && data.zipCode.trim() !== '' ? data.zipCode : undefined,
+          email: data.email && data.email.trim() !== '' ? data.email : undefined,
         };
         
         result = await updateEntityAction(updateData);
       } else {
         // Creazione nuova entità
-        result = await createEntityAction(data);
+        // Converti stringhe vuote in undefined/null per il database
+        const createData: CreateEntityInput = {
+          ...data,
+          vatNumber: data.vatNumber && data.vatNumber.trim() !== '' ? data.vatNumber : undefined,
+          fiscalCode: data.fiscalCode && data.fiscalCode.trim() !== '' ? data.fiscalCode : undefined,
+          address: data.address && data.address.trim() !== '' ? data.address : undefined,
+          city: data.city && data.city.trim() !== '' ? data.city : undefined,
+          province: data.province && data.province.trim() !== '' ? data.province : undefined,
+          zipCode: data.zipCode && data.zipCode.trim() !== '' ? data.zipCode : undefined,
+          email: data.email && data.email.trim() !== '' ? data.email : undefined,
+        };
+        
+        result = await createEntityAction(createData);
       }
 
       if (result.success) {
@@ -237,7 +262,7 @@ export function EntityForm({
                   />
                 </FormControl>
                 <FormDescription>
-                  Almeno P.IVA o Codice Fiscale obbligatorio
+                  Opzionale. Se inserita, verrà verificata l'unicità.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -272,7 +297,7 @@ export function EntityForm({
           name="address"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Indirizzo *</FormLabel>
+              <FormLabel>Indirizzo</FormLabel>
               <FormControl>
                 <Input placeholder="Via Roma 1" {...field} />
               </FormControl>
@@ -288,7 +313,7 @@ export function EntityForm({
             name="city"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Città *</FormLabel>
+                <FormLabel>Città</FormLabel>
                 <FormControl>
                   <Input placeholder="Milano" {...field} />
                 </FormControl>
@@ -303,7 +328,7 @@ export function EntityForm({
             name="province"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Provincia *</FormLabel>
+                <FormLabel>Provincia</FormLabel>
                 <FormControl>
                   <Input 
                     placeholder="MI" 
@@ -324,7 +349,7 @@ export function EntityForm({
             name="zipCode"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>CAP *</FormLabel>
+                <FormLabel>CAP</FormLabel>
                 <FormControl>
                   <Input 
                     placeholder="20100" 

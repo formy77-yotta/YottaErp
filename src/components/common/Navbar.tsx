@@ -9,6 +9,7 @@
 import Link from 'next/link';
 import { Building2, LogOut } from 'lucide-react';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
+import { MobileSidebar } from './Sidebar';
 import { Button } from '@/components/ui/button';
 import { logoutAction } from '@/services/actions/auth-actions';
 import { useRouter } from 'next/navigation';
@@ -22,10 +23,15 @@ export function Navbar() {
   }
 
   return (
-    <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+    <header className="border-b bg-white/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-50">
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          {/* Menu mobile (mostrato solo su mobile) */}
+          <div className="lg:hidden">
+            <MobileSidebar />
+          </div>
+          
+          <Link href="/dashboard" className="flex items-center gap-2">
             <Building2 className="h-8 w-8 text-blue-600" />
             <h1 className="text-2xl font-bold text-gray-900">YottaErp</h1>
           </Link>

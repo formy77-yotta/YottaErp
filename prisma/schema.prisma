@@ -178,17 +178,20 @@ model Entity {
   // Tipologia entità
   type EntityType // CLIENT, PROVIDER, BOTH
 
+  // Flag per distinguere LEAD da CLIENT (entrambi sono CLIENT nel database)
+  isLead Boolean @default(false)
+
   // Dati anagrafici
   businessName String // Ragione sociale
   vatNumber    String? // P.IVA italiana (11 cifre)
   fiscalCode   String? // Codice Fiscale (16 caratteri)
 
-  // Indirizzo
-  address  String
-  city     String
-  province String // 2 caratteri (es. MI, RM)
-  zipCode  String // CAP (5 cifre)
-  country  String @default("IT")
+  // Indirizzo (tutti opzionali, solo ragione sociale obbligatoria)
+  address  String?
+  city     String?
+  province String? // 2 caratteri (es. MI, RM)
+  zipCode  String? // CAP (5 cifre)
+  country  String  @default("IT")
 
   // Contatti
   email   String?
@@ -215,6 +218,7 @@ model Entity {
   @@index([organizationId])
   @@index([organizationId, businessName])
   @@index([organizationId, type])
+  @@index([organizationId, type, isLead]) // Ottimizza query filtro per tipo con isLead
 }
 
 enum EntityType {

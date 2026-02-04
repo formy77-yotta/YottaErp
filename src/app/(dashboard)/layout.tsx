@@ -8,6 +8,7 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { Navbar } from '@/components/common/Navbar';
+import { Sidebar } from '@/components/common/Sidebar';
 
 export default async function DashboardLayout({
   children,
@@ -71,9 +72,17 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Navbar fissa in alto */}
       <Navbar />
-      <main className="container mx-auto py-6">
-        {children}
+      
+      {/* Sidebar (desktop) e menu mobile */}
+      <Sidebar />
+      
+      {/* Main content con padding per sidebar desktop */}
+      <main className="lg:pl-64 pt-16">
+        <div className="container mx-auto px-4 py-6">
+          {children}
+        </div>
       </main>
     </div>
   );
