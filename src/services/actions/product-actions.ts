@@ -22,6 +22,12 @@ import { revalidatePath } from 'next/cache';
 import { Decimal } from 'decimal.js';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError, UnauthorizedError } from '@/lib/auth';
+import {
+  parseSearchParams,
+  parseSortParam,
+  type SearchParams,
+} from '@/lib/validations/search-params';
+import type { Prisma } from '@prisma/client';
 import { 
   createProductSchema, 
   updateProductSchema,
@@ -36,19 +42,8 @@ type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-/**
- * Ottiene tutti i prodotti dell'organizzazione corrente
- * 
- * MULTITENANT: Filtra automaticamente per organizationId
- * 
- * @param filters - Filtri opzionali (categoria, tipologia, attivo)
- * @returns Array di prodotti con classificazioni
- */
-export async function getProductsAction(filters?: {
-  categoryId?: string;
-  typeId?: string;
-  active?: boolean;
-}): Promise<ActionResult<Array<{
+/** Tipo riga prodotto per DataTable / form */
+export type ProductRow = {
   id: string;
   code: string;
   name: string;
@@ -57,7 +52,7 @@ export async function getProductsAction(filters?: {
   category: { id: string; code: string; description: string } | null;
   typeId: string | null;
   type: { id: string; code: string; description: string; manageStock: boolean } | null;
-  price: string; // Decimal come stringa per il frontend
+  price: string;
   vatRateId: string | null;
   vatRate: { id: string; name: string; value: string } | null;
   defaultWarehouseId: string | null;
@@ -65,100 +60,131 @@ export async function getProductsAction(filters?: {
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
-}>>> {
+};
+
+const PRODUCT_SORT_FIELDS = ['code', 'name', 'categoryId', 'typeId', 'price', 'vatRateId', 'active', 'createdAt'] as const;
+
+/**
+ * Ottiene i prodotti con ricerca, ordinamento e paginazione.
+ * MULTITENANT: Filtra automaticamente per organizationId.
+ *
+ * @param filters - Filtri opzionali (categoria, tipologia, attivo)
+ * @param searchParamsRaw - Parametri URL (page, perPage, sort, q) per DataTable
+ * @returns { data: ProductRow[]; count: number }
+ */
+export async function getProductsAction(
+  filters?: {
+    categoryId?: string;
+    typeId?: string;
+    active?: boolean;
+  },
+  searchParamsRaw?: Record<string, string | string[] | undefined>
+): Promise<ActionResult<{ data: ProductRow[]; count: number }>> {
   try {
-    // 1. ✅ Ottieni contesto autenticazione (include organizationId)
     const ctx = await getAuthContext();
 
-    // 2. Costruisci filtro where
-    const where: {
-      organizationId: string;
-      categoryId?: string | null;
-      typeId?: string | null;
-      active?: boolean;
-    } = {
+    const searchParams: SearchParams = searchParamsRaw
+      ? parseSearchParams(searchParamsRaw)
+      : { page: 1, perPage: 10, sort: undefined, q: undefined };
+
+    const { page, perPage, sort: sortParam, q } = searchParams;
+    const skip = (page - 1) * perPage;
+
+    const baseWhere: Prisma.ProductWhereInput = {
       organizationId: ctx.organizationId,
+      ...(filters?.categoryId && { categoryId: filters.categoryId }),
+      ...(filters?.typeId && { typeId: filters.typeId }),
+      ...(filters?.active !== undefined && { active: filters.active }),
     };
 
-    if (filters?.categoryId) {
-      where.categoryId = filters.categoryId;
+    const where: Prisma.ProductWhereInput =
+      q && q.length > 0
+        ? {
+            ...baseWhere,
+            OR: [
+              { code: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+              { description: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : baseWhere;
+
+    const parsedSort = parseSortParam(sortParam);
+    let orderBy: Prisma.ProductOrderByWithRelationInput[] = [{ code: 'asc' }];
+    if (parsedSort && PRODUCT_SORT_FIELDS.includes(parsedSort.field as (typeof PRODUCT_SORT_FIELDS)[number])) {
+      orderBy = [{ [parsedSort.field]: parsedSort.order }];
     }
 
-    if (filters?.typeId) {
-      where.typeId = filters.typeId;
-    }
+    const [products, count] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy,
+        skip,
+        take: perPage,
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          description: true,
+          categoryId: true,
+          typeId: true,
+          price: true,
+          vatRateId: true,
+          defaultWarehouseId: true,
+          active: true,
+          createdAt: true,
+          updatedAt: true,
+          category: {
+            select: {
+              id: true,
+              code: true,
+              description: true,
+            },
+          },
+          type: {
+            select: {
+              id: true,
+              code: true,
+              description: true,
+              manageStock: true,
+            },
+          },
+          vatRate: {
+            select: {
+              id: true,
+              name: true,
+              value: true,
+            },
+          },
+          defaultWarehouse: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      prisma.product.count({ where }),
+    ]);
 
-    if (filters?.active !== undefined) {
-      where.active = filters.active;
-    }
-
-    // 3. Recupera prodotti con classificazioni
-    const products = await prisma.product.findMany({
-      where,
-      orderBy: [
-        { code: 'asc' }, // Ordina per codice
-      ],
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        description: true,
-        categoryId: true,
-        typeId: true,
-        price: true, // Decimal dal DB
-        vatRateId: true,
-        defaultWarehouseId: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-        category: {
-          select: {
-            id: true,
-            code: true,
-            description: true,
-          },
-        },
-        type: {
-          select: {
-            id: true,
-            code: true,
-            description: true,
-            manageStock: true,
-          },
-        },
-        vatRate: {
-          select: {
-            id: true,
-            name: true,
-            value: true,
-          },
-        },
-        defaultWarehouse: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    // 4. Mappa prodotti con aliquote IVA (già incluse nella query)
-    const mappedProducts = products.map((product) => ({
+    const data: ProductRow[] = products.map((product) => ({
       ...product,
-      price: product.price.toString(), // Decimal -> string
+      price: product.price.toString(),
       category: product.category,
       type: product.type,
-      vatRate: product.vatRate ? {
-        id: product.vatRate.id,
-        name: product.vatRate.name,
-        value: product.vatRate.value.toString(), // Decimal -> string
-      } : null,
+      vatRate: product.vatRate
+        ? {
+            id: product.vatRate.id,
+            name: product.vatRate.name,
+            value: product.vatRate.value.toString(),
+          }
+        : null,
     }));
 
     return {
       success: true,
-      data: mappedProducts,
+      data: { data, count },
     };
   } catch (error) {
     console.error('Errore recupero prodotti:', error);

@@ -90,8 +90,29 @@ model Organization {
   warehouses          Warehouse[]
   paymentTypes        PaymentType[]
   paymentConditions   PaymentCondition[]
+  printTemplates      PrintTemplate[]
 
   @@index([businessName])
+}
+
+/// *
+///  * PrintTemplate: Modelli grafici per stampa PDF (colori, layout, font)
+///  * Ogni DocumentTypeConfig può puntare a un template per il rendering PDF.
+///  * MULTITENANT: Ogni modello appartiene a un'organizzazione
+model PrintTemplate {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  config         Json      // Schema grafico: colori, visibilità colonne, layout, etc.
+  isDefault      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documentTypes  DocumentTypeConfig[]
+
+  @@index([organizationId])
+  @@index([organizationId, isDefault])
 }
 
 /// *
@@ -368,8 +389,10 @@ model DocumentTypeConfig {
   updatedAt              DateTime        @updatedAt
   operationSignStock     Int?
   operationSignValuation Int?
+  templateId             String?
   documents              Document[]
   organization           Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template               PrintTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
   stockMovements         StockMovement[]
 
   @@unique([organizationId, code])
@@ -377,6 +400,7 @@ model DocumentTypeConfig {
   @@index([organizationId, active])
   @@index([organizationId, numeratorCode])
   @@index([organizationId, documentDirection])
+  @@index([templateId])
 }
 
 /// *

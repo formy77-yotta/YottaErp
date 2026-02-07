@@ -11,6 +11,12 @@ import 'server-only';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/auth';
+import {
+  parseSearchParams,
+  parseSortParam,
+  type SearchParams,
+} from '@/lib/validations/search-params';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Ottiene tutti i tipi di pagamento dell'organizzazione corrente
@@ -184,4 +190,111 @@ export async function getPaymentDeadlines(
       category: d.document.category,
     },
   }));
+}
+
+/** Tipo riga scadenza per DataTable */
+export type PaymentDeadlineRow = {
+  id: string;
+  documentId: string;
+  dueDate: Date;
+  amount: string;
+  status: string;
+  paidAmount: string;
+  document: {
+    id: string;
+    number: string;
+    date: Date;
+    customerNameSnapshot: string;
+    grossTotal: string;
+    category: string;
+  };
+};
+
+const DEADLINE_SORT_FIELDS = ['dueDate', 'amount', 'status', 'documentNumber', 'documentCustomerName'] as const;
+
+/**
+ * Ottiene le scadenze con ricerca, ordinamento e paginazione (per DataTable).
+ * MULTITENANT: Filtra tramite document.organizationId
+ */
+export async function getPaymentDeadlinesPage(
+  params?: GetPaymentDeadlinesParams,
+  searchParamsRaw?: Record<string, string | string[] | undefined>
+): Promise<{ data: PaymentDeadlineRow[]; count: number }> {
+  const ctx = await getAuthContext();
+
+  const searchParams: SearchParams = searchParamsRaw
+    ? parseSearchParams(searchParamsRaw)
+    : { page: 1, perPage: 10, sort: undefined, q: undefined };
+
+  const { page, perPage, sort: sortParam, q } = searchParams;
+  const skip = (page - 1) * perPage;
+
+  const where: Prisma.PaymentDeadlineWhereInput = {
+    document: {
+      organizationId: ctx.organizationId,
+      ...(q && q.length > 0 && {
+        OR: [
+          { number: { contains: q, mode: 'insensitive' } },
+          { customerNameSnapshot: { contains: q, mode: 'insensitive' } },
+        ],
+      }),
+    },
+    ...(params?.dateFrom && params?.dateTo && { dueDate: { gte: params.dateFrom, lte: params.dateTo } }),
+    ...(params?.dateFrom && !params?.dateTo && { dueDate: { gte: params.dateFrom } }),
+    ...(params?.dateTo && !params?.dateFrom && { dueDate: { lte: params.dateTo } }),
+    ...(params?.status && { status: params.status }),
+  };
+
+  const parsedSort = parseSortParam(sortParam);
+  let orderBy: Prisma.PaymentDeadlineOrderByWithRelationInput[] = [{ dueDate: 'asc' }];
+  if (parsedSort && DEADLINE_SORT_FIELDS.includes(parsedSort.field as (typeof DEADLINE_SORT_FIELDS)[number])) {
+    if (parsedSort.field === 'documentNumber') {
+      orderBy = [{ document: { number: parsedSort.order } }];
+    } else if (parsedSort.field === 'documentCustomerName') {
+      orderBy = [{ document: { customerNameSnapshot: parsedSort.order } }];
+    } else {
+      orderBy = [{ [parsedSort.field]: parsedSort.order }];
+    }
+  }
+
+  const [deadlines, count] = await Promise.all([
+    prisma.paymentDeadline.findMany({
+      where,
+      orderBy,
+      skip,
+      take: perPage,
+      include: {
+        document: {
+          select: {
+            id: true,
+            number: true,
+            date: true,
+            customerNameSnapshot: true,
+            grossTotal: true,
+            category: true,
+          },
+        },
+      },
+    }),
+    prisma.paymentDeadline.count({ where }),
+  ]);
+
+  const data: PaymentDeadlineRow[] = deadlines.map((d) => ({
+    id: d.id,
+    documentId: d.documentId,
+    dueDate: d.dueDate,
+    amount: d.amount.toString(),
+    status: d.status,
+    paidAmount: d.paidAmount.toString(),
+    document: {
+      id: d.document.id,
+      number: d.document.number,
+      date: d.document.date,
+      customerNameSnapshot: d.document.customerNameSnapshot,
+      grossTotal: d.document.grossTotal.toString(),
+      category: d.document.category,
+    },
+  }));
+
+  return { data, count };
 }

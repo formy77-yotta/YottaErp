@@ -1,14 +1,12 @@
 /**
  * Pagina gestione Movimenti Magazzino
- * 
- * Permette di visualizzare tutti i movimenti di magazzino dell'organizzazione
- * con i relativi documenti collegati.
- * MULTITENANT: Tutti i movimenti sono filtrati per organizationId
+ *
+ * DataTable con ricerca e ordinamento server-side; parametri nell'URL
+ * (page, perPage, sort, q). MULTITENANT: movimenti filtrati per organizationId.
  */
 
 import { Suspense } from 'react';
 import { getStockMovementsAction } from '@/services/actions/stock-movement-actions';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -18,31 +16,26 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Activity, ArrowUp, ArrowDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Activity, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Decimal } from 'decimal.js';
+import { parseSearchParams } from '@/lib/validations/search-params';
+import { StockMovementsDataTableHeader } from '@/components/features/stock-movements/StockMovementsDataTableHeader';
+import type { StockMovementWithRelations } from '@/services/actions/stock-movement-actions';
 
-// Forza rendering dinamico perché usa cookies per autenticazione
 export const dynamic = 'force-dynamic';
 
-/**
- * Tipo per i movimenti di magazzino
- */
-type MovementType =
-  | 'CARICO_INIZIALE'
-  | 'CARICO_FORNITORE'
-  | 'SCARICO_VENDITA'
-  | 'SCARICO_DDT'
-  | 'RETTIFICA_INVENTARIO'
-  | 'RESO_CLIENTE'
-  | 'RESO_FORNITORE'
-  | 'TRASFERIMENTO_USCITA'
-  | 'TRASFERIMENTO_ENTRATA';
+type MovementType = StockMovementWithRelations['type'];
 
-/**
- * Mappa MovementType a label italiano e colore
- */
-function getMovementTypeLabel(type: MovementType): { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' } {
-  const labels: Record<MovementType, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+function getMovementTypeLabel(type: MovementType): {
+  label: string;
+  variant: 'default' | 'secondary' | 'destructive' | 'outline';
+} {
+  const labels: Record<
+    MovementType,
+    { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
+  > = {
     CARICO_INIZIALE: { label: 'Carico Iniziale', variant: 'default' },
     CARICO_FORNITORE: { label: 'Carico Fornitore', variant: 'default' },
     SCARICO_VENDITA: { label: 'Scarico Vendita', variant: 'destructive' },
@@ -56,9 +49,6 @@ function getMovementTypeLabel(type: MovementType): { label: string; variant: 'de
   return labels[type];
 }
 
-/**
- * Formatta la quantità con segno e colore
- */
 function formatQuantity(quantity: string): { display: string; isPositive: boolean } {
   const qty = new Decimal(quantity);
   const isPositive = qty.greaterThanOrEqualTo(0);
@@ -68,13 +58,14 @@ function formatQuantity(quantity: string): { display: string; isPositive: boolea
   };
 }
 
-/**
- * Componente principale della pagina
- */
-export default function StockMovementsPage() {
+export default async function StockMovementsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const searchParamsRaw = await searchParams;
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Movimenti Magazzino</h1>
         <p className="text-muted-foreground mt-1">
@@ -82,100 +73,96 @@ export default function StockMovementsPage() {
         </p>
       </div>
 
-      {/* Tabella Movimenti */}
       <Suspense fallback={<StockMovementsTableSkeleton />}>
-        <StockMovementsTable />
+        <StockMovementsTable searchParamsRaw={searchParamsRaw} />
       </Suspense>
     </div>
   );
 }
 
-/**
- * Tabella movimenti con dati dal server
- */
-async function StockMovementsTable() {
-  const result = await getStockMovementsAction();
+async function StockMovementsTable({
+  searchParamsRaw,
+}: {
+  searchParamsRaw: Record<string, string | string[] | undefined>;
+}) {
+  const result = await getStockMovementsAction(undefined, searchParamsRaw);
 
   if (!result.success) {
     return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <p className="text-destructive">Errore: {result.error}</p>
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border p-8 text-center">
+        <p className="text-destructive">Errore: {result.error}</p>
+      </div>
     );
   }
 
-  const movements = result.data;
+  const { data: movements, count } = result.data;
+  const searchParams = parseSearchParams(searchParamsRaw);
+  const { page, perPage } = searchParams;
+  const totalPages = Math.max(1, Math.ceil(count / perPage));
+  const isEmpty = movements.length === 0;
 
-  if (movements.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Nessun movimento registrato</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            I movimenti vengono creati automaticamente quando si generano documenti
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const baseQuery = new URLSearchParams();
+  if (searchParams.q) baseQuery.set('q', searchParams.q);
+  if (searchParams.sort) baseQuery.set('sort', searchParams.sort);
+  baseQuery.set('perPage', String(perPage));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Movimenti Magazzino</CardTitle>
-        <CardDescription>
-          {movements.length} movimento{movements.length !== 1 ? 'i' : ''} registrato{movements.length !== 1 ? 'i' : ''}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
+    <div className="space-y-4">
+      <div className="rounded-lg border">
+        <Table>
+          <StockMovementsDataTableHeader />
+          {isEmpty ? (
+            <TableBody>
               <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Prodotto</TableHead>
-                <TableHead>Magazzino</TableHead>
-                <TableHead>Quantità</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Documento</TableHead>
-                <TableHead>Note</TableHead>
+                <TableCell colSpan={8} className="h-32 text-center">
+                  <Activity className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nessun movimento registrato</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {searchParams.q
+                      ? 'Prova a modificare o cancellare la ricerca per vedere tutti i risultati.'
+                      : 'I movimenti vengono creati automaticamente quando si generano documenti.'}
+                  </p>
+                </TableCell>
               </TableRow>
-            </TableHeader>
+            </TableBody>
+          ) : (
             <TableBody>
               {movements.map((movement) => (
                 <StockMovementRow key={movement.id} movement={movement} />
               ))}
             </TableBody>
-          </Table>
+          )}
+        </Table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Pagina {page} di {totalPages} · {count} movimenti in totale
+          </p>
+          <div className="flex gap-2">
+            <PaginationLink
+              disabled={page <= 1}
+              page={page - 1}
+              baseQuery={baseQuery}
+              label="Precedente"
+              icon={<ChevronLeft className="h-4 w-4" />}
+            />
+            <PaginationLink
+              disabled={page >= totalPages}
+              page={page + 1}
+              baseQuery={baseQuery}
+              label="Successiva"
+              icon={<ChevronRight className="h-4 w-4" />}
+            />
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
-/**
- * Riga singola della tabella
- */
-function StockMovementRow({ movement }: { movement: {
-  id: string;
-  productId: string;
-  warehouseId: string;
-  quantity: string;
-  type: MovementType;
-  documentTypeId: string | null;
-  documentId: string | null;
-  documentNumber: string | null;
-  notes: string | null;
-  userId: string | null;
-  createdAt: Date;
-  product: { id: string; code: string; name: string };
-  warehouse: { id: string; code: string; name: string };
-  documentType: { id: string; code: string; description: string } | null;
-  document: { id: string; number: string; date: Date; category: string } | null;
-} }) {
+function StockMovementRow({ movement }: { movement: StockMovementWithRelations }) {
   const { display: quantityDisplay, isPositive } = formatQuantity(movement.quantity);
   const typeInfo = getMovementTypeLabel(movement.type);
   const date = new Date(movement.createdAt);
@@ -226,16 +213,17 @@ function StockMovementRow({ movement }: { movement: {
         </div>
       </TableCell>
       <TableCell>
-        <Badge variant={typeInfo.variant}>
-          {typeInfo.label}
-        </Badge>
+        <Badge variant={typeInfo.variant}>{typeInfo.label}</Badge>
       </TableCell>
       <TableCell>
         {movement.document ? (
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">
+            <Link
+              href={`/documents/${movement.documentId}`}
+              className="text-sm font-medium hover:underline"
+            >
               {movement.documentType?.code || 'DOC'} {movement.document.number}
-            </span>
+            </Link>
             <span className="text-xs text-muted-foreground">
               {new Date(movement.document.date).toLocaleDateString('it-IT')}
             </span>
@@ -253,70 +241,95 @@ function StockMovementRow({ movement }: { movement: {
       </TableCell>
       <TableCell>
         {movement.notes ? (
-          <span className="text-sm text-muted-foreground line-clamp-2">
-            {movement.notes}
-          </span>
+          <span className="text-sm text-muted-foreground line-clamp-2">{movement.notes}</span>
         ) : (
           <span className="text-muted-foreground text-sm">-</span>
         )}
       </TableCell>
+      <TableCell />
     </TableRow>
   );
 }
 
-/**
- * Skeleton per caricamento tabella
- */
+function PaginationLink({
+  page,
+  baseQuery,
+  label,
+  icon,
+  disabled,
+}: {
+  page: number;
+  baseQuery: URLSearchParams;
+  label: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+}) {
+  const q = new URLSearchParams(baseQuery);
+  q.set('page', String(page));
+  const href = `/stock-movements?${q.toString()}`;
+  if (disabled) {
+    return (
+      <Button variant="outline" size="sm" disabled>
+        {icon}
+        <span className="ml-1">{label}</span>
+      </Button>
+    );
+  }
+  return (
+    <Button variant="outline" size="sm" asChild>
+      <Link href={href}>
+        {icon}
+        <span className="ml-1">{label}</span>
+      </Link>
+    </Button>
+  );
+}
+
 function StockMovementsTableSkeleton() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Movimenti Magazzino</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Prodotto</TableHead>
-                <TableHead>Magazzino</TableHead>
-                <TableHead>Quantità</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Documento</TableHead>
-                <TableHead>Note</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-32 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-6 w-28 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-32 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Data</TableHead>
+            <TableHead>Prodotto</TableHead>
+            <TableHead>Magazzino</TableHead>
+            <TableHead>Quantità</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Documento</TableHead>
+            <TableHead>Note</TableHead>
+            <TableHead className="text-right" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-6 w-28 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell />
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

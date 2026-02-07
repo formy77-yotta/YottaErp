@@ -1,13 +1,13 @@
 /**
  * Pagina gestione Anagrafica Prodotti
- * 
- * Permette di visualizzare, creare e modificare i prodotti dell'organizzazione.
- * MULTITENANT: Tutti i prodotti sono filtrati per organizationId
+ *
+ * DataTable con ricerca e ordinamento server-side; parametri nell'URL
+ * (page, perPage, sort, q). MULTITENANT: prodotti filtrati per organizationId.
  */
 
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { getProductsAction } from '@/services/actions/product-actions';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -16,24 +16,28 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
 import { CreateProductDialog } from '@/components/features/CreateProductDialog';
 import { EditProductDialog } from '@/components/features/EditProductDialog';
 import { DeleteProductButton } from '@/components/features/DeleteProductButton';
 import { Badge } from '@/components/ui/badge';
-import { Package } from 'lucide-react';
+import { Package, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
+import { parseSearchParams } from '@/lib/validations/search-params';
+import { ProductsDataTableHeader } from '@/components/features/products/ProductsDataTableHeader';
+import type { ProductRow } from '@/services/actions/product-actions';
 
-// Forza rendering dinamico perché usa cookies per autenticazione
 export const dynamic = 'force-dynamic';
 
-/**
- * Componente principale della pagina
- */
-export default function ProductsPage() {
+export default async function ProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const searchParamsRaw = await searchParams;
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Anagrafica Prodotti</h1>
@@ -41,24 +45,22 @@ export default function ProductsPage() {
             Gestisci i prodotti e servizi della tua organizzazione
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <CreateProductDialog />
-        </div>
+        <CreateProductDialog />
       </div>
 
-      {/* Tabella Prodotti */}
       <Suspense fallback={<ProductsTableSkeleton />}>
-        <ProductsTable />
+        <ProductsTable searchParamsRaw={searchParamsRaw} />
       </Suspense>
     </div>
   );
 }
 
-/**
- * Tabella prodotti con dati dal server
- */
-async function ProductsTable() {
-  const result = await getProductsAction();
+async function ProductsTable({
+  searchParamsRaw,
+}: {
+  searchParamsRaw: Record<string, string | string[] | undefined>;
+}) {
+  const result = await getProductsAction(undefined, searchParamsRaw);
 
   if (!result.success) {
     return (
@@ -68,88 +70,82 @@ async function ProductsTable() {
     );
   }
 
-  const products = result.data;
+  const { data: products, count } = result.data;
+  const searchParams = parseSearchParams(searchParamsRaw);
+  const { page, perPage } = searchParams;
+  const totalPages = Math.max(1, Math.ceil(count / perPage));
+  const isEmpty = products.length === 0;
 
-  if (products.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Nessun prodotto configurato</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Crea il tuo primo prodotto
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const baseQuery = new URLSearchParams();
+  if (searchParams.q) baseQuery.set('q', searchParams.q);
+  if (searchParams.sort) baseQuery.set('sort', searchParams.sort);
+  baseQuery.set('perPage', String(perPage));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Prodotti Configurati</CardTitle>
-        <CardDescription>
-          {products.length} prodotto{products.length !== 1 ? 'i' : ''} configurato{products.length !== 1 ? 'i' : ''}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
+    <div className="space-y-4">
+      <div className="rounded-lg border">
+        <Table>
+          <ProductsDataTableHeader />
+          {isEmpty ? (
+            <TableBody>
               <TableRow>
-                <TableHead>Codice</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Tipologia</TableHead>
-                <TableHead>Prezzo</TableHead>
-                <TableHead>IVA</TableHead>
-                <TableHead>Stato</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
+                <TableCell colSpan={9} className="h-32 text-center">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nessun prodotto configurato</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {searchParams.q
+                      ? 'Prova a modificare o cancellare la ricerca per vedere tutti i risultati.'
+                      : 'Crea il tuo primo prodotto.'}
+                  </p>
+                </TableCell>
               </TableRow>
-            </TableHeader>
+            </TableBody>
+          ) : (
             <TableBody>
               {products.map((product) => (
                 <ProductRow key={product.id} product={product} />
               ))}
             </TableBody>
-          </Table>
+          )}
+        </Table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Pagina {page} di {totalPages} · {count} prodotti in totale
+          </p>
+          <div className="flex gap-2">
+            <PaginationLink
+              disabled={page <= 1}
+              page={page - 1}
+              baseQuery={baseQuery}
+              label="Precedente"
+              icon={<ChevronLeft className="h-4 w-4" />}
+            />
+            <PaginationLink
+              disabled={page >= totalPages}
+              page={page + 1}
+              baseQuery={baseQuery}
+              label="Successiva"
+              icon={<ChevronRight className="h-4 w-4" />}
+            />
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
-/**
- * Riga singola della tabella
- */
-function ProductRow({ product }: { product: {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  categoryId: string | null;
-  category: { id: string; code: string; description: string } | null;
-  typeId: string | null;
-  type: { id: string; code: string; description: string; manageStock: boolean } | null;
-  price: string; // Decimal come stringa
-  vatRateId: string | null;
-  vatRate: { id: string; name: string; value: string } | null;
-  defaultWarehouseId: string | null;
-  defaultWarehouse: { id: string; code: string; name: string } | null;
-  active: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-} }) {
+function ProductRow({ product }: { product: ProductRow }) {
   const priceDecimal = new Decimal(product.price);
-  const vatPercent = product.vatRate 
+  const vatPercent = product.vatRate
     ? (parseFloat(product.vatRate.value) * 100).toFixed(0)
     : null;
 
   return (
     <TableRow>
-      <TableCell className="font-medium font-mono">
-        {product.code}
-      </TableCell>
+      <TableCell className="font-medium font-mono">{product.code}</TableCell>
       <TableCell>
         <div>
           <div className="font-medium">{product.name}</div>
@@ -162,9 +158,7 @@ function ProductRow({ product }: { product: {
       </TableCell>
       <TableCell>
         {product.category ? (
-          <Badge variant="outline">
-            {product.category.code}
-          </Badge>
+          <Badge variant="outline">{product.category.code}</Badge>
         ) : (
           <span className="text-muted-foreground text-sm">-</span>
         )}
@@ -172,9 +166,7 @@ function ProductRow({ product }: { product: {
       <TableCell>
         {product.type ? (
           <div className="flex items-center gap-1">
-            <Badge variant="outline">
-              {product.type.code}
-            </Badge>
+            <Badge variant="outline">{product.type.code}</Badge>
             {product.type.manageStock && (
               <Badge variant="secondary" className="text-xs">
                 Magazzino
@@ -190,9 +182,7 @@ function ProductRow({ product }: { product: {
       </TableCell>
       <TableCell>
         {vatPercent ? (
-          <Badge variant="outline">
-            {vatPercent}%
-          </Badge>
+          <Badge variant="outline">{vatPercent}%</Badge>
         ) : (
           <span className="text-muted-foreground text-sm">-</span>
         )}
@@ -202,6 +192,7 @@ function ProductRow({ product }: { product: {
           {product.active ? 'Attivo' : 'Disattivo'}
         </Badge>
       </TableCell>
+      <TableCell />
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-2">
           <EditProductDialog product={product} />
@@ -212,63 +203,89 @@ function ProductRow({ product }: { product: {
   );
 }
 
-/**
- * Skeleton per caricamento tabella
- */
+function PaginationLink({
+  page,
+  baseQuery,
+  label,
+  icon,
+  disabled,
+}: {
+  page: number;
+  baseQuery: URLSearchParams;
+  label: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+}) {
+  const q = new URLSearchParams(baseQuery);
+  q.set('page', String(page));
+  const href = `/products?${q.toString()}`;
+  if (disabled) {
+    return (
+      <Button variant="outline" size="sm" disabled>
+        {icon}
+        <span className="ml-1">{label}</span>
+      </Button>
+    );
+  }
+  return (
+    <Button variant="outline" size="sm" asChild>
+      <Link href={href}>
+        {icon}
+        <span className="ml-1">{label}</span>
+      </Link>
+    </Button>
+  );
+}
+
 function ProductsTableSkeleton() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Prodotti Configurati</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Codice</TableHead>
-                <TableHead>Nome</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Tipologia</TableHead>
-                <TableHead>Prezzo</TableHead>
-                <TableHead>IVA</TableHead>
-                <TableHead>Stato</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[1, 2, 3].map((i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-40 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-12 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="h-8 w-16 bg-muted animate-pulse rounded ml-auto" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Codice</TableHead>
+            <TableHead>Nome</TableHead>
+            <TableHead>Categoria</TableHead>
+            <TableHead>Tipologia</TableHead>
+            <TableHead>Prezzo</TableHead>
+            <TableHead>IVA</TableHead>
+            <TableHead>Stato</TableHead>
+            <TableHead className="text-right" />
+            <TableHead className="text-right">Azioni</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-40 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-12 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell />
+              <TableCell className="text-right">
+                <div className="h-8 w-16 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

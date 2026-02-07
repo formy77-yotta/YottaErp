@@ -19,6 +19,12 @@
 
 import { prisma } from '@/lib/prisma';
 import { getAuthContext } from '@/lib/auth';
+import {
+  parseSearchParams,
+  parseSortParam,
+  type SearchParams,
+} from '@/lib/validations/search-params';
+import type { Prisma } from '@prisma/client';
 import { MovementType } from '@prisma/client';
 
 /**
@@ -79,118 +85,127 @@ export interface StockMovementFilters {
   dateTo?: Date;
 }
 
+const MOVEMENT_SORT_FIELDS = ['createdAt', 'quantity', 'type', 'productCode', 'warehouseCode', 'documentNumber', 'notes'] as const;
+
 /**
- * Ottiene tutti i movimenti magazzino dell'organizzazione corrente
- * 
- * MULTITENANT: Filtra automaticamente per organizationId
- * 
+ * Ottiene i movimenti magazzino con ricerca, ordinamento e paginazione.
+ * MULTITENANT: Filtra automaticamente per organizationId.
+ *
  * @param filters - Filtri opzionali (prodotto, magazzino, tipo, documento, date)
- * @returns Array di movimenti con relazioni complete
+ * @param searchParamsRaw - Parametri URL (page, perPage, sort, q) per DataTable
+ * @returns { data: StockMovementWithRelations[]; count: number }
  */
 export async function getStockMovementsAction(
-  filters?: StockMovementFilters
-): Promise<ActionResult<StockMovementWithRelations[]>> {
+  filters?: StockMovementFilters,
+  searchParamsRaw?: Record<string, string | string[] | undefined>
+): Promise<ActionResult<{ data: StockMovementWithRelations[]; count: number }>> {
   try {
-    // 1. ✅ Ottieni contesto autenticazione (include organizationId)
     const ctx = await getAuthContext();
 
-    // 2. Costruisci filtro where
-    const where: {
-      organizationId: string;
-      productId?: string;
-      warehouseId?: string;
-      type?: MovementType;
-      documentId?: string;
-      createdAt?: {
-        gte?: Date;
-        lte?: Date;
-      };
-    } = {
+    const searchParams: SearchParams = searchParamsRaw
+      ? parseSearchParams(searchParamsRaw)
+      : { page: 1, perPage: 10, sort: undefined, q: undefined };
+
+    const { page, perPage, sort: sortParam, q } = searchParams;
+    const skip = (page - 1) * perPage;
+
+    const baseWhere: Prisma.StockMovementWhereInput = {
       organizationId: ctx.organizationId,
+      ...(filters?.productId && { productId: filters.productId }),
+      ...(filters?.warehouseId && { warehouseId: filters.warehouseId }),
+      ...(filters?.type && { type: filters.type }),
+      ...(filters?.documentId && { documentId: filters.documentId }),
+      ...((filters?.dateFrom || filters?.dateTo) && {
+        createdAt: {
+          ...(filters.dateFrom && { gte: filters.dateFrom }),
+          ...(filters.dateTo && { lte: filters.dateTo }),
+        },
+      }),
     };
 
-    if (filters?.productId) {
-      where.productId = filters.productId;
-    }
+    const where: Prisma.StockMovementWhereInput =
+      q && q.length > 0
+        ? {
+            ...baseWhere,
+            OR: [
+              { product: { code: { contains: q, mode: 'insensitive' } } },
+              { product: { name: { contains: q, mode: 'insensitive' } } },
+              { document: { number: { contains: q, mode: 'insensitive' } } },
+              { notes: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : baseWhere;
 
-    if (filters?.warehouseId) {
-      where.warehouseId = filters.warehouseId;
-    }
-
-    if (filters?.type) {
-      where.type = filters.type;
-    }
-
-    if (filters?.documentId) {
-      where.documentId = filters.documentId;
-    }
-
-    if (filters?.dateFrom || filters?.dateTo) {
-      where.createdAt = {};
-      if (filters.dateFrom) {
-        where.createdAt.gte = filters.dateFrom;
+    const parsedSort = parseSortParam(sortParam);
+    let orderBy: Prisma.StockMovementOrderByWithRelationInput[] = [{ createdAt: 'desc' }];
+    if (parsedSort && MOVEMENT_SORT_FIELDS.includes(parsedSort.field as (typeof MOVEMENT_SORT_FIELDS)[number])) {
+      if (parsedSort.field === 'productCode') {
+        orderBy = [{ product: { code: parsedSort.order } }];
+      } else if (parsedSort.field === 'warehouseCode') {
+        orderBy = [{ warehouse: { code: parsedSort.order } }];
+      } else if (parsedSort.field === 'documentNumber') {
+        orderBy = [{ document: { number: parsedSort.order } }];
+      } else {
+        orderBy = [{ [parsedSort.field]: parsedSort.order }];
       }
-      if (filters.dateTo) {
-        where.createdAt.lte = filters.dateTo;
-      }
     }
 
-    // 3. Recupera movimenti con relazioni
-    const movements = await prisma.stockMovement.findMany({
-      where,
-      orderBy: [
-        { createdAt: 'desc' }, // Più recenti prima
-      ],
-      include: {
-        product: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
+    const [movements, count] = await Promise.all([
+      prisma.stockMovement.findMany({
+        where,
+        orderBy,
+        skip,
+        take: perPage,
+        include: {
+          product: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          warehouse: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+          documentType: {
+            select: {
+              id: true,
+              code: true,
+              description: true,
+            },
           },
         },
-        warehouse: {
-          select: {
-            id: true,
-            code: true,
-            name: true,
-          },
-        },
-        documentType: {
-          select: {
-            id: true,
-            code: true,
-            description: true,
-          },
-        },
-      },
-    });
+      }),
+      prisma.stockMovement.count({ where }),
+    ]);
 
-    // 4. Recupera documenti collegati (se documentId presente)
     const documentIds = movements
       .map((m) => m.documentId)
       .filter((id): id is string => id !== null);
-    
-    const documents = documentIds.length > 0
-      ? await prisma.document.findMany({
-          where: {
-            id: { in: documentIds },
-            organizationId: ctx.organizationId,
-          },
-          select: {
-            id: true,
-            number: true,
-            date: true,
-            category: true,
-          },
-        })
-      : [];
 
-    // 5. Crea mappa documentId -> document per lookup veloce
+    const documents =
+      documentIds.length > 0
+        ? await prisma.document.findMany({
+            where: {
+              id: { in: documentIds },
+              organizationId: ctx.organizationId,
+            },
+            select: {
+              id: true,
+              number: true,
+              date: true,
+              category: true,
+            },
+          })
+        : [];
+
     const documentMap = new Map(documents.map((doc) => [doc.id, doc]));
 
-    // 6. Converti Decimal a stringa e aggiungi documento (se presente)
-    const movementsWithStringQuantity = movements.map((movement) => ({
+    const data: StockMovementWithRelations[] = movements.map((movement) => ({
       ...movement,
       quantity: movement.quantity.toString(),
       document: movement.documentId ? documentMap.get(movement.documentId) || null : null,
@@ -198,7 +213,7 @@ export async function getStockMovementsAction(
 
     return {
       success: true,
-      data: movementsWithStringQuantity,
+      data: { data, count },
     };
   } catch (error) {
     console.error('Errore recupero movimenti magazzino:', error);

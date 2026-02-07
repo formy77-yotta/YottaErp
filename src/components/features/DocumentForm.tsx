@@ -299,7 +299,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         const [typesResult, entitiesResult, productsResult, warehousesResult, paymentConditionsResult, documentResult] = await Promise.all([
           getDocumentTypesAction(),
           getEntitiesAction(undefined, { perPage: '500' }),
-          getProductsAction({ active: true }),
+          getProductsAction({ active: true }, { perPage: '500' }),
           getWarehousesAction(),
           getPaymentConditionsAction(true), // Solo condizioni attive
           isEditing && documentId ? getDocumentAction(documentId) : Promise.resolve(null),
@@ -312,7 +312,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           setEntities(entitiesResult.data.data.filter((e: EntityRow) => e.active));
         }
         if (productsResult.success) {
-          setProducts(productsResult.data);
+          setProducts(productsResult.data.data);
         }
         if (warehousesResult.success) {
           setWarehouses(warehousesResult.data);

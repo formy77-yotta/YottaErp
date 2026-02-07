@@ -127,6 +127,14 @@ export function formatCurrency(value: Decimal, currency: string = '€'): string
 }
 
 /**
+ * Formatta un Decimal in formato italiano (virgola decimale, 2 decimali)
+ * Per PDF e stampa conforme alle convenzioni italiane.
+ */
+export function formatDecimalItalian(value: Decimal): string {
+  return value.toFixed(2).replace('.', ',');
+}
+
+/**
  * Calcola i totali di una riga fattura
  * 
  * @param quantity - Quantità
