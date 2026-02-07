@@ -7,6 +7,9 @@
  * 
  * @param documentTypeCode - Codice del DocumentTypeConfig
  * @returns DocumentCategory corrispondente
+ * 
+ * NOTA: DocumentCategory è definito come tipo union locale, NON importato da @prisma/client
+ * perché Prisma potrebbe non esportare correttamente gli enum in alcune versioni.
  */
 
 /**
@@ -14,6 +17,8 @@
  * 
  * Mantenuto come enum per compatibilità con logiche di sistema che richiedono
  * un enum fisso. La configurazione completa è in DocumentTypeConfig.
+ * 
+ * IMPORTANTE: Questo tipo è definito localmente, NON importato da @prisma/client
  */
 export type DocumentCategory = 
   | 'QUOTE'
