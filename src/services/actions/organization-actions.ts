@@ -865,6 +865,7 @@ export async function getCurrentOrganizationAction() {
         reaNumero: true,
         reaCapitaleSociale: true,
         regimeFiscale: true,
+        fiscalYear: true,
         plan: true,
         maxUsers: true,
         maxInvoicesPerYear: true,
@@ -933,6 +934,7 @@ export async function updateCurrentOrganizationAction(
     reaNumero?: string | null;
     reaCapitaleSociale?: string | null;
     regimeFiscale?: string;
+    fiscalYear?: number | null;
   }
 ) {
   try {
@@ -960,6 +962,7 @@ export async function updateCurrentOrganizationAction(
       reaNumero?: string | null;
       reaCapitaleSociale?: any;
       regimeFiscale?: string;
+      fiscalYear?: number | null;
     } = {};
 
     if (input.businessName !== undefined) updateData.businessName = input.businessName;
@@ -983,6 +986,7 @@ export async function updateCurrentOrganizationAction(
         : null;
     }
     if (input.regimeFiscale !== undefined) updateData.regimeFiscale = input.regimeFiscale;
+    if (input.fiscalYear !== undefined) updateData.fiscalYear = input.fiscalYear ?? null;
 
     const updated = await prisma.organization.update({
       where: { id: ctx.organizationId },
@@ -1006,6 +1010,7 @@ export async function updateCurrentOrganizationAction(
         reaNumero: true,
         reaCapitaleSociale: true,
         regimeFiscale: true,
+        fiscalYear: true,
         updatedAt: true,
       },
     });

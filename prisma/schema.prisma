@@ -66,6 +66,9 @@ model Organization {
   // ✅ Regime Fiscale (obbligatorio per fatturazione elettronica)
   regimeFiscale       String?              @default("RF01") // RF01=Ordinario, RF02=Minimi, etc.
   
+  // ✅ Parametri organizzazione
+  fiscalYear          Int?                 // Anno contabile (es. 2025)
+  
   plan                String               @default("FREE")
   maxUsers            Int                  @default(5)
   maxInvoicesPerYear  Int                  @default(500)

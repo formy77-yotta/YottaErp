@@ -1,24 +1,39 @@
 /**
  * Home Page YottaErp
- * 
- * Landing page principale con link alle sezioni chiave
+ *
+ * Se l'utente è autenticato → redirect alla Dashboard (pagina iniziale dell'ERP).
+ * Altrimenti → landing page pubblica con login e info.
  */
 
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Building2, 
-  Users, 
-  FileText, 
-  Package, 
+import {
+  Building2,
+  Users,
+  FileText,
+  Package,
   Shield,
   LogIn,
   ArrowRight,
-  AlertCircle
+  AlertCircle,
 } from 'lucide-react';
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ noOrg?: string }>;
+}) {
+  const cookieStore = await cookies();
+  const userId = cookieStore.get('userId')?.value;
+  const { noOrg } = await searchParams;
+
+  // Se autenticato e non arrivato da "nessuna organizzazione" → Dashboard come pagina iniziale
+  if (userId && !noOrg) {
+    redirect('/dashboard');
+  }
   const features = [
     {
       icon: Building2,

@@ -10,6 +10,7 @@ import { Suspense } from 'react';
 import { getCurrentOrganizationAction } from '@/services/actions/organization-actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrganizationProfileForm } from '@/components/features/OrganizationProfileForm';
+import { OrganizationParametersForm } from '@/components/features/OrganizationParametersForm';
 
 // Forza rendering dinamico perché usa cookies per autenticazione
 export const dynamic = 'force-dynamic';
@@ -62,7 +63,17 @@ async function OrganizationFormContent() {
     );
   }
 
-  return <OrganizationProfileForm organization={result.organization} />;
+  return (
+    <div className="space-y-6">
+      <OrganizationProfileForm organization={result.organization} />
+      <OrganizationParametersForm
+        organization={{
+          id: result.organization.id,
+          fiscalYear: result.organization.fiscalYear ?? undefined,
+        }}
+      />
+    </div>
+  );
 }
 
 /**

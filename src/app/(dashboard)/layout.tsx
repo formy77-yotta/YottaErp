@@ -64,8 +64,8 @@ export default async function DashboardLayout({
         maxAge: 60 * 60 * 24 * 7,
       });
     } else {
-      // Utente senza organizzazioni, reindirizza alla home
-      redirect('/');
+      // Utente senza organizzazioni → home con flag per non rientrare in loop
+      redirect('/?noOrg=1');
     }
   }
 

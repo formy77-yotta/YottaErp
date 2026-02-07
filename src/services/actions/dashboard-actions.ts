@@ -14,6 +14,14 @@ import { getAuthContext } from '@/lib/auth';
  * Tipo di ritorno per statistiche dashboard
  */
 export interface DashboardStats {
+  /** Anno contabile usato per fatturato (da Organization.fiscalYear o anno corrente) */
+  fiscalYear: number;
+  /** Fatturato anno contabile: somma grossTotal documenti di vendita nell'anno */
+  revenueFiscalYear: number;
+  /** Crediti da documenti di vendita: residuo da incassare (scadenze non saldate) */
+  creditsFromSales: number;
+  /** Debiti da documenti di acquisto: residuo da pagare (scadenze non saldate) */
+  debitsFromPurchases: number;
   entities: {
     total: number;
     customers: number;
@@ -53,8 +61,20 @@ export async function getDashboardStats(): Promise<{
     // 1. ✅ Ottieni contesto autenticazione (include organizationId)
     const ctx = await getAuthContext();
 
-    // 2. Recupera statistiche in parallelo per performance
+    // 2. Anno contabile (da organizzazione o anno corrente)
+    const org = await prisma.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: { fiscalYear: true },
+    });
+    const fiscalYear = org?.fiscalYear ?? new Date().getFullYear();
+    const startFiscalYear = new Date(fiscalYear, 0, 1);
+    const endFiscalYear = new Date(fiscalYear, 11, 31, 23, 59, 59, 999);
+
+    // 3. Recupera statistiche in parallelo per performance
     const [
+      revenueAggregate,
+      salesDeadlines,
+      purchaseDeadlines,
       entitiesCount,
       customersCount,
       suppliersCount,
@@ -66,6 +86,37 @@ export async function getDashboardStats(): Promise<{
       activeProductsCount,
       warehousesCount,
     ] = await Promise.all([
+      // Fatturato anno contabile: somma grossTotal documenti di vendita nell'anno
+      prisma.document.aggregate({
+        where: {
+          organizationId: ctx.organizationId,
+          date: { gte: startFiscalYear, lte: endFiscalYear },
+          documentType: { documentDirection: 'SALE' },
+        },
+        _sum: { grossTotal: true },
+      }),
+      // Scadenze non saldate da documenti di vendita (crediti)
+      prisma.paymentDeadline.findMany({
+        where: {
+          document: {
+            organizationId: ctx.organizationId,
+            documentType: { documentDirection: 'SALE' },
+          },
+          status: { in: ['PENDING', 'PARTIAL'] },
+        },
+        select: { amount: true, paidAmount: true },
+      }),
+      // Scadenze non saldate da documenti di acquisto (debiti)
+      prisma.paymentDeadline.findMany({
+        where: {
+          document: {
+            organizationId: ctx.organizationId,
+            documentType: { documentDirection: 'PURCHASE' },
+          },
+          status: { in: ['PENDING', 'PARTIAL'] },
+        },
+        select: { amount: true, paidAmount: true },
+      }),
       // Totale entità
       prisma.entity.count({
         where: { organizationId: ctx.organizationId },
@@ -132,13 +183,28 @@ export async function getDashboardStats(): Promise<{
       }),
     ]);
 
-    // 3. Calcola lead (approssimazione: entità CLIENT che non sono ancora clienti completi)
-    // Per ora, consideriamo i lead come clienti (potrebbe essere migliorato in futuro)
+    // 4. Calcola crediti e debiti (residuo = amount - paidAmount)
+    const toNum = (v: unknown) => (v != null ? Number(v) : 0);
+    const creditsFromSales = salesDeadlines.reduce(
+      (sum, d) => sum + toNum(d.amount) - toNum(d.paidAmount),
+      0
+    );
+    const debitsFromPurchases = purchaseDeadlines.reduce(
+      (sum, d) => sum + toNum(d.amount) - toNum(d.paidAmount),
+      0
+    );
+    const revenueFiscalYear = toNum(revenueAggregate._sum.grossTotal);
+
+    // 5. Lead (approssimazione: entità CLIENT che non sono ancora clienti completi)
     const leadsCount = 0; // TODO: Aggiungere campo isLead o tipo LEAD in Entity
 
     return {
       success: true,
       data: {
+        fiscalYear,
+        revenueFiscalYear,
+        creditsFromSales,
+        debitsFromPurchases,
         entities: {
           total: entitiesCount,
           customers: customersCount,

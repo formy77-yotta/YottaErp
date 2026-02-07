@@ -14,9 +14,15 @@ import {
   Package,
   Warehouse,
   Loader2,
+  TrendingUp,
+  ArrowDownCircle,
+  ArrowUpCircle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+
+const formatEuro = (value: number) =>
+  new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value);
 
 /**
  * Componente principale Dashboard
@@ -57,9 +63,56 @@ async function DashboardStats() {
   const stats = result.data;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {/* Anagrafiche */}
-      <Card>
+    <div className="space-y-6">
+      {/* KPI contabili */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Riepilogo contabile</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Fatturato anno contabile</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatEuro(stats.revenueFiscalYear)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Anno {stats.fiscalYear} • Documenti di vendita
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Crediti da documenti di vendita</CardTitle>
+              <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatEuro(stats.creditsFromSales)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Da incassare (scadenze non saldate)
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Debiti da documenti di acquisto</CardTitle>
+              <ArrowUpCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatEuro(stats.debitsFromPurchases)}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Da pagare (scadenze non saldate)
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* KPI anagrafiche e documenti */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Panoramica</h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* Anagrafiche */}
+          <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">Anagrafiche</CardTitle>
           <Users className="h-4 w-4 text-muted-foreground" />
@@ -133,6 +186,8 @@ async function DashboardStats() {
           </Link>
         </CardContent>
       </Card>
+        </div>
+      </div>
     </div>
   );
 }

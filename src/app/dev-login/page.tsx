@@ -40,9 +40,9 @@ export default function DevLoginPage() {
         message: `✅ Login effettuato come: ${userIdToSet}`
       });
 
-      // Redirect dopo 1 secondo
+      // Redirect dopo 1 secondo → Dashboard (pagina iniziale)
       setTimeout(() => {
-        router.push('/organizations');
+        router.push('/dashboard');
       }, 1000);
     } catch (error) {
       setStatus({

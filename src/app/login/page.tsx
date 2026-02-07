@@ -33,11 +33,11 @@ export default function LoginPage() {
 
       if (result.success) {
         // Logica di redirect:
-        // PRIORITÀ 1: Se l'utente ha organizzazioni → va all'ERP normale (anche se è Super Admin)
+        // PRIORITÀ 1: Se l'utente ha organizzazioni → Dashboard (pagina iniziale ERP)
         // PRIORITÀ 2: Se è Super Admin ma NON ha organizzazioni → va a /admin
         // PRIORITÀ 3: Altrimenti va alla home
         if (result.user?.hasOrganizations) {
-          router.push('/entities');
+          router.push('/dashboard');
         } else if (result.user?.isSuperAdmin) {
           router.push('/admin');
         } else {

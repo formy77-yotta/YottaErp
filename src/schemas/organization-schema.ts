@@ -242,6 +242,8 @@ export const updateOrganizationSchema = z.object({
   reaNumero: z.string().min(1).max(20).optional().or(z.literal('')),
   reaCapitaleSociale: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   regimeFiscale: z.enum(['RF01', 'RF02', 'RF04', 'RF05', 'RF06', 'RF07', 'RF08', 'RF09', 'RF10', 'RF11', 'RF12', 'RF13', 'RF14', 'RF15', 'RF16', 'RF17', 'RF18', 'RF19']).optional(),
+  /** Anno contabile (es. 2025) */
+  fiscalYear: z.number().int().min(2000).max(2100).optional(),
   plan: organizationPlanSchema.optional(),
   maxUsers: z.number().int().min(1).max(1000).optional(),
   maxInvoicesPerYear: z.number().int().min(1).max(1000000).optional(),

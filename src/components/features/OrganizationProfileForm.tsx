@@ -59,6 +59,7 @@ interface OrganizationProfileFormProps {
     reaNumero?: string | null;
     reaCapitaleSociale?: string | null;
     regimeFiscale?: string | null;
+    fiscalYear?: number | null;
     plan?: string;
     maxUsers?: number;
     maxInvoicesPerYear?: number;
