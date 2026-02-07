@@ -19,7 +19,6 @@ import {
 } from '@/components/ui/table';
 import { CreateVatRateDialog } from '@/components/features/CreateVatRateDialog';
 import { EditVatRateDialog } from '@/components/features/EditVatRateDialog';
-import { Loader2 } from 'lucide-react';
 import { SeedDefaultVatRatesButton } from '@/components/features/SeedDefaultVatRatesButton';
 
 /**

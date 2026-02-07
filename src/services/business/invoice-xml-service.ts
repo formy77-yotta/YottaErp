@@ -1,5 +1,10 @@
 /**
- * Servizio per generazione XML FatturaPA (Fatturazione Elettronica Italiana)
+ * Servizio per generazione XML Fattura Elettronica (formato FatturaPA)
+ * 
+ * DISTINZIONE TERMINOLOGICA:
+ * - "Fattura Elettronica" = documento fiscale in formato XML (B2B, B2C, B2PA)
+ * - "FatturaPA" = formato XML standard (stesso tracciato per tutti i destinatari)
+ * - Il documento diventa "FatturaPA" solo se il destinatario è una PA
  * 
  * REGOLE FONDAMENTALI:
  * 1. ✅ Usa SOLO dati snapshot dal Document (mai JOIN per dati storici)
@@ -8,7 +13,8 @@
  * 4. ✅ Validazione P.IVA e Codice Fiscale prima di generare
  * 5. ✅ Multi-tenancy: verifica che documento appartenga all'organizationId
  * 
- * TRACCIATO: FatturaPA versione 1.2.1 o successive
+ * TRACCIATO: Formato FatturaPA versione 1.2.1 o successive
+ * (stesso formato per fatture B2B, B2C e verso PA)
  * 
  * @see https://www.fatturapa.gov.it/export/fatturazione/sdi/fatturapa/v1.2.1/FatturaPA_v1.2.1.pdf
  */
@@ -46,7 +52,10 @@ type DocumentForXML = Prisma.DocumentGetPayload<{
 }>;
 
 /**
- * Genera l'XML FatturaPA per un documento
+ * Genera l'XML Fattura Elettronica (formato FatturaPA) per un documento
+ * 
+ * Il formato XML è lo stesso per tutte le fatture elettroniche (B2B, B2C, B2PA).
+ * Il documento diventa "FatturaPA" solo se il destinatario è una Pubblica Amministrazione.
  * 
  * @param documentId - ID del documento da convertire in XML
  * @param organizationId - ID organizzazione (per sicurezza multi-tenant)
@@ -89,7 +98,7 @@ export async function generateInvoiceXML(
   // 3. ✅ Verifica che sia una fattura (INVOICE o CREDIT_NOTE)
   if (document.category !== 'INVOICE' && document.category !== 'CREDIT_NOTE') {
     throw new InvoiceXMLError(
-      'Il documento deve essere una Fattura o Nota di Credito per generare XML FatturaPA',
+      'Il documento deve essere una Fattura o Nota di Credito per generare XML Fattura Elettronica',
       'INVALID_DOCUMENT_TYPE'
     );
   }
@@ -168,7 +177,10 @@ export async function generateInvoiceXML(
 }
 
 /**
- * Costruisce l'XML FatturaPA completo
+ * Costruisce l'XML Fattura Elettronica completo (formato FatturaPA)
+ * 
+ * Il formato XML è standard per tutte le fatture elettroniche italiane,
+ * indipendentemente dal tipo di destinatario (azienda privata o PA).
  */
 function buildFatturaPAXML(
   document: DocumentForXML,
@@ -220,8 +232,17 @@ function buildFatturaPAXML(
   // Progressivo invio (numero documento)
   datiTrasmissione.ele('ProgressivoInvio').txt(document.number);
 
-  // ✅ Ordine corretto secondo schema XSD: CodiceDestinatario/PEC prima di FormatoTrasmissione
-  // Codice Destinatario o PEC
+  // ✅ Ordine corretto secondo schema XSD FatturaPA:
+  // 1. IdTrasmittente
+  // 2. ProgressivoInvio
+  // 3. FormatoTrasmissione (DEVE venire PRIMA di CodiceDestinatario)
+  // 4. CodiceDestinatario / PECDestinatario
+  // 5. ContattiTrasmittente (opzionale)
+
+  // Formato trasmissione: FPA12 = FatturaPA 1.2
+  datiTrasmissione.ele('FormatoTrasmissione').txt('FPA12');
+
+  // Codice Destinatario o PEC (DOPO FormatoTrasmissione)
   if (codiceDestinatario) {
     // ✅ Per FPA12, CodiceDestinatario deve essere di 6 cifre (non 7)
     const codiceDest = codiceDestinatario.length > 6 
@@ -233,9 +254,6 @@ function buildFatturaPAXML(
     datiTrasmissione.ele('CodiceDestinatario').txt('0000000');
     datiTrasmissione.ele('PECDestinatario').txt(document.organization.pec);
   }
-
-  // Formato trasmissione: FPA12 = FatturaPA 1.2
-  datiTrasmissione.ele('FormatoTrasmissione').txt('FPA12');
 
   // ✅ Contatti Trasmittente (opzionale ma suggerito dalle Technical Rules)
   // ✅ DEVE essere DOPO FormatoTrasmissione secondo schema XSD
@@ -288,6 +306,15 @@ function buildFatturaPAXML(
     }
     sedeCedente.ele('Nazione').txt(document.organization.country || 'IT');
   }
+
+  // ✅ IscrizioneREA (opzionale ma obbligatorio per società iscritte al Registro Imprese - art. 2250 CC)
+  // TODO: Aggiungere campi reaUfficio, reaNumero, reaCapitaleSociale al modello Organization
+  // Per ora non inseriamo il nodo se i dati non sono disponibili
+  // Esempio struttura quando disponibile:
+  // const iscrizioneREA = cedente.ele('IscrizioneREA');
+  // iscrizioneREA.ele('Ufficio').txt(reaUfficio); // Es. "RM"
+  // iscrizioneREA.ele('NumeroREA').txt(reaNumero); // Es. "123456"
+  // iscrizioneREA.ele('CapitaleSociale').txt(formatDecimal(reaCapitaleSociale, 2)); // Es. "10000.00"
 
   // ✅ Contatti Cedente (opzionale ma suggerito dalle Technical Rules)
   // ✅ Ordine corretto secondo schema XSD: Telefono PRIMA di Email
@@ -378,6 +405,18 @@ function buildFatturaPAXML(
   if (document.notes) {
     datiGeneraliDocumento.ele('Causale').txt(document.notes);
   }
+
+  // ✅ DatiOrdineAcquisto (opzionale ma obbligatorio per fatture verso PA)
+  // Per fatture verso PA, è necessario CodiceCIG o CodiceCUP
+  // TODO: Aggiungere campi codiceCIG e codiceCUP al modello Document
+  // Per ora non inseriamo il nodo se i dati non sono disponibili
+  // Esempio struttura quando disponibile:
+  // const datiOrdineAcquisto = datiGenerali.ele('DatiOrdineAcquisto');
+  // if (codiceCIG) {
+  //   datiOrdineAcquisto.ele('CodiceCIG').txt(codiceCIG);
+  // } else if (codiceCUP) {
+  //   datiOrdineAcquisto.ele('CodiceCUP').txt(codiceCUP);
+  // }
 
   // DatiBeniServizi
   const datiBeniServizi = body.ele('DatiBeniServizi');

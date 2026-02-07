@@ -1279,7 +1279,12 @@ export async function deleteDocumentAction(
 }
 
 /**
- * Genera e scarica l'XML FatturaPA per un documento
+ * Genera e scarica l'XML Fattura Elettronica (formato FatturaPA) per un documento
+ * 
+ * DISTINZIONE:
+ * - "Fattura Elettronica" = documento fiscale in formato XML (B2B, B2C, B2PA)
+ * - "FatturaPA" = formato XML standard (stesso tracciato per tutti)
+ * - Il documento diventa "FatturaPA" solo se destinatario è una PA
  * 
  * FUNZIONALITÀ:
  * - Genera XML conforme al tracciato FatturaPA versione 1.2.1
@@ -1301,11 +1306,11 @@ export async function deleteDocumentAction(
  * const result = await downloadInvoiceXMLAction('doc_123');
  * if (result.success) {
  *   // Crea blob e scarica
- *   const blob = new Blob([result.data], { type: 'application/xml' });
+ *   const blob = new Blob([result.data.xml], { type: 'application/xml' });
  *   const url = URL.createObjectURL(blob);
  *   const a = document.createElement('a');
  *   a.href = url;
- *   a.download = `fattura_${documentNumber}.xml`;
+ *   a.download = result.data.filename;
  *   a.click();
  * }
  * ```

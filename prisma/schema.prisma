@@ -57,6 +57,15 @@ model Organization {
   phone               String?
   sdiCode             String?
   logoUrl             String?
+  
+  // ✅ Iscrizione REA (Registro Imprese) - Obbligatorio per società iscritte (art. 2250 CC)
+  reaUfficio          String?              // Ufficio REA (es. "RM", "MI")
+  reaNumero           String?              // Numero REA
+  reaCapitaleSociale  Decimal?             @db.Decimal(15, 2) // Capitale sociale in euro
+  
+  // ✅ Regime Fiscale (obbligatorio per fatturazione elettronica)
+  regimeFiscale       String?              @default("RF01") // RF01=Ordinario, RF02=Minimi, etc.
+  
   plan                String               @default("FREE")
   maxUsers            Int                  @default(5)
   maxInvoicesPerYear  Int                  @default(500)
@@ -390,6 +399,11 @@ model Document {
   grossTotal                 Decimal            @db.Decimal(12, 2)
   notes                      String?
   paymentTerms               String?
+  
+  // ✅ Codici per fatture verso PA (obbligatori per FatturaPA)
+  codiceCIG                  String?            // Codice Identificativo Gara
+  codiceCUP                  String?            // Codice Unico Progetto
+  
   createdAt                  DateTime           @default(now())
   updatedAt                  DateTime           @updatedAt
   category                   DocumentCategory
