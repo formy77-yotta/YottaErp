@@ -7,6 +7,9 @@
  * 
  * IMPORTANTE: Questo componente deve essere completamente statico e non usare
  * hooks che potrebbero dipendere da context durante il prerendering.
+ * 
+ * NOTA: In Next.js 14, il global-error viene renderizzato durante il build
+ * per testare che funzioni. Assicurarsi che non dipenda da nulla.
  */
 
 'use client';
@@ -18,8 +21,24 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  // Non usare useEffect o altri hooks che potrebbero dipendere da context
-  // Il componente deve essere completamente statico per funzionare durante il prerendering
+  // Funzione di reset sicura che non dipende da context
+  const handleReset = () => {
+    try {
+      if (typeof reset === 'function') {
+        reset();
+      } else {
+        // Fallback: ricarica la pagina
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        }
+      }
+    } catch (err) {
+      // Se reset fallisce, ricarica la pagina
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
+    }
+  };
 
   return (
     <html lang="it">
@@ -28,7 +47,7 @@ export default function GlobalError({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Errore - YottaErp</title>
       </head>
-      <body>
+      <body style={{ margin: 0, padding: 0 }}>
         <div style={{
           display: 'flex',
           flexDirection: 'column',
@@ -38,7 +57,7 @@ export default function GlobalError({
           padding: '2rem',
           fontFamily: 'system-ui, -apple-system, sans-serif',
         }}>
-          <h1 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#dc2626' }}>
+          <h1 style={{ fontSize: '2rem', marginBottom: '1rem', color: '#dc2626', margin: 0 }}>
             Qualcosa è andato storto
           </h1>
           <p style={{ marginBottom: '2rem', color: '#6b7280', textAlign: 'center', maxWidth: '500px' }}>
@@ -50,11 +69,7 @@ export default function GlobalError({
             </p>
           )}
           <button
-            onClick={() => {
-              if (typeof reset === 'function') {
-                reset();
-              }
-            }}
+            onClick={handleReset}
             style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#2563eb',
@@ -63,12 +78,6 @@ export default function GlobalError({
               borderRadius: '0.5rem',
               cursor: 'pointer',
               fontSize: '1rem',
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = '#1d4ed8';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = '#2563eb';
             }}
           >
             Riprova

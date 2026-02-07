@@ -6,11 +6,8 @@ const nextConfig = {
     // Durante il build, fallisce se ci sono errori TypeScript
     ignoreBuildErrors: false,
   },
-  // Forza ESLint checking rigoroso come Vercel
-  eslint: {
-    // Durante il build, fallisce se ci sono errori ESLint
-    ignoreDuringBuilds: false,
-  },
+  // ESLint è ora gestito tramite next lint, non più tramite next.config.js
+  // Rimossa configurazione eslint obsoleta
 }
 
 module.exports = nextConfig
