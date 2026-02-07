@@ -1,8 +1,9 @@
 /**
- * Tabella condizioni di pagamento (Server Component)
+ * Tabella condizioni di pagamento (Client Component)
  */
 
-import { getPaymentConditionsAction } from '@/services/actions/payment-actions';
+'use client';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,21 +16,30 @@ import {
 } from '@/components/ui/table';
 import { EditPaymentConditionDialog } from '@/components/features/EditPaymentConditionDialog';
 
+interface PaymentConditionsTableProps {
+  paymentConditions: Array<{
+    id: string;
+    name: string;
+    paymentType: {
+      id: string;
+      name: string;
+      sdiCode: string;
+    };
+    daysToFirstDue: number;
+    gapBetweenDues: number;
+    numberOfDues: number;
+    isEndOfMonth: boolean;
+    active: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+}
+
 /**
- * Tabella condizioni di pagamento con dati dal server
+ * Tabella condizioni di pagamento
  */
-export async function PaymentConditionsTable() {
-  const result = await getPaymentConditionsAction(false); // Mostra anche quelle disattive
-
-  if (!result.success) {
-    return (
-      <div className="rounded-lg border p-8 text-center">
-        <p className="text-destructive">Errore: {result.error}</p>
-      </div>
-    );
-  }
-
-  const conditions = result.data;
+export function PaymentConditionsTable({ paymentConditions }: PaymentConditionsTableProps) {
+  const conditions = paymentConditions;
 
   if (conditions.length === 0) {
     return (

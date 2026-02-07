@@ -1,8 +1,9 @@
 /**
- * Tabella tipi di pagamento (Server Component)
+ * Tabella tipi di pagamento (Client Component)
  */
 
-import { getPaymentTypes } from '@/services/queries/payment-queries';
+'use client';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,23 +16,22 @@ import {
 } from '@/components/ui/table';
 import { EditPaymentTypeDialog } from '@/components/features/EditPaymentTypeDialog';
 
+interface PaymentTypesTableProps {
+  paymentTypes: Array<{
+    id: string;
+    name: string;
+    sdiCode: string;
+    sepaCode: string | null;
+    active: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+}
+
 /**
- * Tabella tipi di pagamento con dati dal server
+ * Tabella tipi di pagamento
  */
-export async function PaymentTypesTable() {
-  let paymentTypes;
-  
-  try {
-    paymentTypes = await getPaymentTypes(false); // Mostra anche quelli disattivi
-  } catch (error) {
-    return (
-      <div className="rounded-lg border p-8 text-center">
-        <p className="text-destructive">
-          Errore durante il recupero dei tipi di pagamento
-        </p>
-      </div>
-    );
-  }
+export function PaymentTypesTable({ paymentTypes }: PaymentTypesTableProps) {
 
   if (paymentTypes.length === 0) {
     return (

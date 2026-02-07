@@ -12,11 +12,36 @@ import { CreatePaymentTypeDialog } from '@/components/features/CreatePaymentType
 import { CreatePaymentConditionDialog } from '@/components/features/CreatePaymentConditionDialog';
 import { PaymentTypesTable } from './PaymentTypesTable';
 import { PaymentConditionsTable } from './PaymentConditionsTable';
-import { PaymentTypesTableSkeleton } from './PaymentTypesTableSkeleton';
-import { PaymentConditionsTableSkeleton } from './PaymentConditionsTableSkeleton';
-import { Suspense } from 'react';
 
-export function PaymentsTabs() {
+interface PaymentsTabsProps {
+  paymentTypes: Array<{
+    id: string;
+    name: string;
+    sdiCode: string;
+    sepaCode: string | null;
+    active: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  paymentConditions: Array<{
+    id: string;
+    name: string;
+    paymentType: {
+      id: string;
+      name: string;
+      sdiCode: string;
+    };
+    daysToFirstDue: number;
+    gapBetweenDues: number;
+    numberOfDues: number;
+    isEndOfMonth: boolean;
+    active: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+}
+
+export function PaymentsTabs({ paymentTypes, paymentConditions }: PaymentsTabsProps) {
   const [activeTab, setActiveTab] = useState('types');
 
   return (
@@ -38,9 +63,7 @@ export function PaymentsTabs() {
           <CreatePaymentTypeDialog />
         </div>
 
-        <Suspense fallback={<PaymentTypesTableSkeleton />}>
-          <PaymentTypesTable />
-        </Suspense>
+        <PaymentTypesTable paymentTypes={paymentTypes} />
       </TabsContent>
 
       {/* Tab Condizioni di Pagamento */}
@@ -55,9 +78,7 @@ export function PaymentsTabs() {
           <CreatePaymentConditionDialog />
         </div>
 
-        <Suspense fallback={<PaymentConditionsTableSkeleton />}>
-          <PaymentConditionsTable />
-        </Suspense>
+        <PaymentConditionsTable paymentConditions={paymentConditions} />
       </TabsContent>
     </Tabs>
   );
