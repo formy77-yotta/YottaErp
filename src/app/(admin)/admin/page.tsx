@@ -18,7 +18,6 @@ import {
   Users,
   FileText,
   Package,
-  Ruler,
   ChevronRight,
   Shield,
   Download,
