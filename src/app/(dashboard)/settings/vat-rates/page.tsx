@@ -6,7 +6,7 @@
  */
 
 import { Suspense } from 'react';
-import { getVatRatesAction, seedDefaultVatRatesAction } from '@/services/actions/vat-actions';
+import { getVatRatesAction } from '@/services/actions/vat-actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
