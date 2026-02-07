@@ -91,14 +91,18 @@ export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
  * NOTA: Alcuni campi potrebbero non essere modificabili dopo la creazione
  * (es. numero documento, tipo documento) per garantire l'integrità dei dati.
  * 
- * Per ora permette la modifica di:
+ * Permette la modifica di:
  * - Data documento
+ * - Cliente/Fornitore (entityId) - aggiorna anche lo snapshot
  * - Righe documento (aggiungere, rimuovere, modificare)
  * - Note e termini pagamento
  * - Magazzino principale
  */
 export const updateDocumentSchema = z.object({
   id: z.string().cuid('ID documento non valido'),
+  
+  // Entità (cliente/fornitore) - modificabile
+  entityId: z.string().cuid().optional(),
   
   // Data documento (modificabile)
   date: z.date().or(z.string().pipe(z.coerce.date())).optional(),

@@ -48,7 +48,6 @@ import {
   Users, 
   FileText, 
   Package, 
-  UserCircle,
   Plus,
   Pencil,
   Loader2,

@@ -27,7 +27,6 @@ import {
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { DownloadXMLButton } from '@/components/features/DownloadXMLButton';
-import { DocumentForm } from '@/components/features/DocumentForm';
 
 interface DocumentDetailPageProps {
   params: Promise<{ id: string }>;

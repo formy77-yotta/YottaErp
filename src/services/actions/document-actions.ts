@@ -345,6 +345,74 @@ export async function updateDocumentAction(
       // 3.2. ✅ Verifica che appartenga all'organizzazione corrente
       verifyOrganizationAccess(ctx, existingDocument);
 
+      // 3.2.1. Gestione aggiornamento entità (se modificata)
+      let entitySnapshot: {
+        customerNameSnapshot: string;
+        customerVatSnapshot: string | null;
+        customerFiscalCodeSnapshot: string | null;
+        customerAddressSnapshot: string;
+        customerSdiSnapshot: string | null;
+        customerCity: string;
+        customerProvince: string;
+        customerZip: string;
+        customerCountry: string;
+      } | null = null;
+
+      if (validatedData.entityId !== undefined) {
+        if (validatedData.entityId) {
+          // Recupera nuova entità e verifica appartenenza
+          const entity = await tx.entity.findUnique({
+            where: { id: validatedData.entityId },
+            select: {
+              id: true,
+              organizationId: true,
+              businessName: true,
+              vatNumber: true,
+              fiscalCode: true,
+              address: true,
+              city: true,
+              province: true,
+              zipCode: true,
+              country: true,
+              sdiCode: true,
+            },
+          });
+
+          if (!entity) {
+            throw new Error('Entità non trovata');
+          }
+
+          // ✅ Verifica che l'entità appartenga all'organizzazione corrente
+          verifyOrganizationAccess(ctx, entity);
+
+          // Crea snapshot nuova entità
+          entitySnapshot = {
+            customerNameSnapshot: entity.businessName,
+            customerVatSnapshot: entity.vatNumber,
+            customerFiscalCodeSnapshot: entity.fiscalCode,
+            customerAddressSnapshot: entity.address || '',
+            customerSdiSnapshot: entity.sdiCode,
+            customerCity: entity.city || '',
+            customerProvince: entity.province || '',
+            customerZip: entity.zipCode || '',
+            customerCountry: entity.country || 'IT',
+          };
+        } else {
+          // Entità rimossa (documento interno)
+          entitySnapshot = {
+            customerNameSnapshot: '',
+            customerVatSnapshot: null,
+            customerFiscalCodeSnapshot: null,
+            customerAddressSnapshot: '',
+            customerSdiSnapshot: null,
+            customerCity: '',
+            customerProvince: '',
+            customerZip: '',
+            customerCountry: 'IT',
+          };
+        }
+      }
+
       // 3.3. Se ci sono righe da aggiornare, gestisci l'aggiornamento
       if (validatedData.lines && validatedData.lines.length > 0) {
         // 3.3.1. Elimina vecchi movimenti di magazzino associati alle righe
@@ -444,10 +512,14 @@ export async function updateDocumentAction(
           }
         }
 
-        // 3.3.5. Aggiorna documento con nuovi totali
+        // 3.3.5. Aggiorna documento con nuovi totali e snapshot entità (se modificata)
         const updated = await tx.document.update({
           where: { id: validatedData.id },
           data: {
+            ...(validatedData.entityId !== undefined && {
+              entityId: validatedData.entityId || null,
+            }),
+            ...(entitySnapshot && entitySnapshot),
             ...(validatedData.date && { date: validatedData.date }),
             ...(validatedData.mainWarehouseId !== undefined && {
               mainWarehouseId: validatedData.mainWarehouseId || null,
@@ -466,10 +538,14 @@ export async function updateDocumentAction(
 
         return updated;
       } else {
-        // 3.4. Nessuna riga da aggiornare: aggiorna solo campi documento
+        // 3.4. Nessuna riga da aggiornare: aggiorna solo campi documento e snapshot entità (se modificata)
         const updated = await tx.document.update({
           where: { id: validatedData.id },
           data: {
+            ...(validatedData.entityId !== undefined && {
+              entityId: validatedData.entityId || null,
+            }),
+            ...(entitySnapshot && entitySnapshot),
             ...(validatedData.date && { date: validatedData.date }),
             ...(validatedData.mainWarehouseId !== undefined && {
               mainWarehouseId: validatedData.mainWarehouseId || null,

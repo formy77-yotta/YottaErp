@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { getDocumentAction } from '@/services/actions/document-actions';
 import { Button } from '@/components/ui/button';
-import { DocumentForm } from '@/components/features/DocumentForm';
+import { DocumentFormWrapper } from '@/components/features/DocumentFormWrapper';
 
 interface DocumentEditPageProps {
   params: Promise<{ id: string }>;
@@ -52,14 +52,9 @@ export default async function DocumentEditPage({ params }: DocumentEditPageProps
       </div>
 
       {/* Form modifica documento */}
-      <DocumentForm
+      <DocumentFormWrapper
         documentId={id}
-        onSuccess={() => {
-          redirect(`/documents/${id}`);
-        }}
-        onError={(error) => {
-          console.error('Errore modifica documento:', error);
-        }}
+        redirectUrl={`/documents/${id}`}
       />
     </div>
   );

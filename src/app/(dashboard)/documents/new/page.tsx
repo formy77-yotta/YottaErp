@@ -5,7 +5,7 @@
  * utilizzando il form universale DocumentForm.
  */
 
-import { DocumentForm } from '@/components/features/DocumentForm';
+import { DocumentFormWrapper } from '@/components/features/DocumentFormWrapper';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText } from 'lucide-react';
 
@@ -32,7 +32,7 @@ export default function NewDocumentPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DocumentForm />
+          <DocumentFormWrapper redirectUrl="/documents" />
         </CardContent>
       </Card>
     </div>

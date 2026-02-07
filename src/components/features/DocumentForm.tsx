@@ -192,6 +192,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         if (isEditing && documentResult && documentResult.success) {
           const doc = documentResult.data;
           form.reset({
+            entityId: doc.entity?.id || '',
             date: new Date(doc.date).toISOString().split('T')[0],
             mainWarehouseId: '', // Non disponibile nel documento, lasciare vuoto
             lines: doc.lines.map(line => ({
@@ -201,7 +202,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               unitPrice: line.unitPrice,
               quantity: line.quantity,
               vatRate: line.vatRate,
-              warehouseId: line.warehouseId || '', // Recupera warehouseId se presente
+              warehouseId: '', // Non disponibile nelle righe, lasciare vuoto
             })),
             notes: doc.notes || '',
             paymentTerms: doc.paymentTerms || '',
@@ -310,6 +311,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // Aggiornamento documento esistente
         const updateData: UpdateDocumentInput = {
           id: documentId,
+          ...(data.entityId !== undefined && { entityId: data.entityId || '' }),
           ...(data.date && { date: new Date(data.date as string) }),
           ...(data.mainWarehouseId && { mainWarehouseId: data.mainWarehouseId }),
           ...(data.lines && { lines: data.lines }),
@@ -434,39 +436,40 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             />
           )}
 
-          {/* Entità (Cliente/Fornitore) - solo in creazione */}
-          {!isEditing && (
-            <FormField
-              control={form.control}
-              name="entityId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cliente/Fornitore</FormLabel>
-                  <Select
-                    onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}
-                    value={field.value || 'none'}
-                    disabled={isLoading}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleziona cliente/fornitore" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Nessuno (documento interno)</SelectItem>
-                      {entities.map((entity) => (
-                        <SelectItem key={entity.id} value={entity.id}>
-                          {entity.businessName}
-                          {entity.vatNumber && ` (P.IVA: ${entity.vatNumber})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
+          {/* Entità (Cliente/Fornitore) */}
+          <FormField
+            control={form.control}
+            name="entityId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Cliente/Fornitore</FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}
+                  value={field.value || 'none'}
+                  disabled={isLoading}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona cliente/fornitore" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">Nessuno (documento interno)</SelectItem>
+                    {entities.map((entity) => (
+                      <SelectItem key={entity.id} value={entity.id}>
+                        {entity.businessName}
+                        {entity.vatNumber && ` (P.IVA: ${entity.vatNumber})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  {isEditing ? 'Modificando il cliente/fornitore verrà aggiornato anche lo snapshot nel documento.' : 'Seleziona il cliente o fornitore per questo documento.'}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {/* Data Documento */}
           <FormField
