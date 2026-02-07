@@ -27,10 +27,10 @@ interface Entity {
   businessName: string;
   vatNumber: string | null;
   fiscalCode: string | null;
-  address: string;
-  city: string;
-  province: string;
-  zipCode: string;
+  address: string | null;
+  city: string | null;
+  province: string | null;
+  zipCode: string | null;
   email: string | null;
   active: boolean;
   createdAt: Date;

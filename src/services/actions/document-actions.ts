@@ -341,7 +341,9 @@ export async function updateDocumentAction(
     const ctx = await getAuthContext();
 
     // 2. Validazione con Zod
+    console.log('Validating update input:', input); // Debug
     const validatedData = updateDocumentSchema.parse(input);
+    console.log('Validated data:', validatedData); // Debug
 
     // 3. Esegui aggiornamento in transazione
     const updatedDocument = await prisma.$transaction(async (tx) => {

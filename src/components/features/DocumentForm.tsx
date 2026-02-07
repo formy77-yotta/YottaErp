@@ -308,6 +308,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
    * Handler submit form
    */
   async function onSubmit(data: CreateDocumentInput | UpdateDocumentInput) {
+    console.log('onSubmit called with data:', data); // Debug
     setIsLoading(true);
     setError(null);
 
@@ -317,6 +318,13 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // Converti stringhe vuote in undefined per lo schema Zod
         const entityIdValue = data.entityId as string | undefined;
         const mainWarehouseIdValue = data.mainWarehouseId as string | undefined;
+        const linesData = data.lines as any[];
+        
+        // Verifica che ci siano righe
+        if (!linesData || linesData.length === 0) {
+          setError('Il documento deve contenere almeno una riga');
+          return;
+        }
         
         const updateData: UpdateDocumentInput = {
           id: documentId,
@@ -328,7 +336,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             mainWarehouseId: mainWarehouseIdValue?.trim() || undefined
           }),
           // Le righe sono sempre obbligatorie in update
-          lines: (data.lines as any[]).map(line => ({
+          lines: linesData.map(line => ({
             productId: line.productId?.trim() || undefined,
             productCode: line.productCode.trim(),
             description: line.description.trim(),
@@ -409,7 +417,16 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form 
+        onSubmit={form.handleSubmit(
+          onSubmit,
+          (errors) => {
+            console.error('Form validation errors:', errors); // Debug
+            setError('Errore di validazione. Controlla i campi del form.');
+          }
+        )} 
+        className="space-y-6"
+      >
         {/* Messaggio Errore */}
         {error && (
           <div className="rounded-lg border border-destructive bg-destructive/10 p-4">

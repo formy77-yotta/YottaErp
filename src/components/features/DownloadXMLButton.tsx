@@ -48,7 +48,7 @@ export function DownloadXMLButton({ documentId }: DownloadXMLButtonProps) {
       disabled={isDownloading}
     >
       <Download className="h-4 w-4 mr-2" />
-      {isDownloading ? 'Download...' : 'Scarica XML FatturaPA'}
+      {isDownloading ? 'Download...' : 'Scarica XML'}
     </Button>
   );
 }
