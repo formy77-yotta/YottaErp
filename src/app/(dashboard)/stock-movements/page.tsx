@@ -20,7 +20,20 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Activity, ArrowUp, ArrowDown } from 'lucide-react';
 import { Decimal } from 'decimal.js';
-import type { MovementType } from '@prisma/client';
+
+/**
+ * Tipo per i movimenti di magazzino
+ */
+type MovementType =
+  | 'CARICO_INIZIALE'
+  | 'CARICO_FORNITORE'
+  | 'SCARICO_VENDITA'
+  | 'SCARICO_DDT'
+  | 'RETTIFICA_INVENTARIO'
+  | 'RESO_CLIENTE'
+  | 'RESO_FORNITORE'
+  | 'TRASFERIMENTO_USCITA'
+  | 'TRASFERIMENTO_ENTRATA';
 
 /**
  * Mappa MovementType a label italiano e colore
