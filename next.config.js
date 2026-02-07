@@ -7,7 +7,7 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   // ESLint è ora gestito tramite next lint, non più tramite next.config.js
-  // Rimossa configurazione eslint obsoleta
+  // Rimossa configurazione eslint obsoleta (Next.js 16+)
 }
 
 module.exports = nextConfig

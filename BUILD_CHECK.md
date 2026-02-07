@@ -76,13 +76,27 @@ npm run type-check:watch
 - Next.js può essere più permissivo con alcuni errori
 - La cache può nascondere alcuni problemi
 - TypeScript potrebbe non rilevare tutti gli errori
+- Il pre-rendering può essere saltato o meno rigoroso
 
 ### Vercel (produzione)
 - Build completamente pulito (nessuna cache)
 - TypeScript checking rigoroso
+- **Pre-rendering obbligatorio** di tutte le pagine (incluso `global-error.tsx`)
 - Tutti gli errori bloccano il build
+- Errori di pre-rendering bloccano il build anche se la pagina funziona in runtime
 
 ## 🛠️ Troubleshooting
+
+### Errore: "Cannot read properties of null (reading 'useContext')" durante il build
+
+**Problema**: Questo errore si verifica quando Next.js cerca di pre-renderizzare `global-error.tsx` durante il build.
+
+**Soluzione**:
+1. Rimuovi `src/app/global-error.tsx` se non è strettamente necessario (è opzionale in Next.js)
+2. Se devi tenerlo, assicurati che non usi hooks che dipendono da context durante il pre-rendering
+3. Usa `export const dynamic = 'force-dynamic'` nel layout principale (ma questo non risolve completamente il problema durante il build)
+
+**Nota**: `global-error.tsx` viene sempre pre-renderizzato durante il build da Vercel, anche se è un client component.
 
 ### Build funziona in locale ma fallisce su Vercel
 
@@ -102,6 +116,8 @@ npm run type-check:watch
    - Type mismatch (es. `string` vs `Decimal`)
    - Variabili non utilizzate
    - Problemi con `server-only` imports
+   - `global-error.tsx` che causa errori durante il pre-rendering (rimuoverlo se non necessario)
+   - Client components che usano `useContext` durante il pre-rendering
 
 ### Errori TypeScript non rilevati in locale
 
