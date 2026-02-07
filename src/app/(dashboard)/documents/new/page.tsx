@@ -9,6 +9,9 @@ import { DocumentFormWrapper } from '@/components/features/DocumentFormWrapper';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText } from 'lucide-react';
 
+// Forza rendering dinamico perché usa client components che richiedono React context
+export const dynamic = 'force-dynamic';
+
 export default function NewDocumentPage() {
   return (
     <div className="space-y-6">

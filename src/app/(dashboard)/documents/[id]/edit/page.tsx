@@ -12,6 +12,9 @@ import { getDocumentAction } from '@/services/actions/document-actions';
 import { Button } from '@/components/ui/button';
 import { DocumentFormWrapper } from '@/components/features/DocumentFormWrapper';
 
+// Forza rendering dinamico perché usa client components che richiedono React context
+export const dynamic = 'force-dynamic';
+
 interface DocumentEditPageProps {
   params: Promise<{ id: string }>;
 }
