@@ -379,51 +379,91 @@ export async function seedDefaultVatRatesAction(): Promise<ActionResult<{ count:
       };
     }
 
-    // 4. Aliquote standard italiane
-    const defaultRates = [
-      {
-        name: 'Standard 22%',
-        value: new Decimal('0.2200'), // 22%
-        nature: null,
-        description: 'Aliquota IVA standard italiana',
-        isDefault: true,
+    // 4. ✅ Recupera configurazione standard dal database (Super Admin)
+    const standardConfig = await prisma.standardConfig.findFirst({
+      where: {
+        type: 'VAT_RATES',
         active: true,
       },
-      {
-        name: 'Ridotta 10%',
-        value: new Decimal('0.1000'), // 10%
-        nature: null,
-        description: 'Aliquota IVA ridotta',
-        isDefault: false,
-        active: true,
+      orderBy: {
+        version: 'desc',
       },
-      {
-        name: 'Ridotta 5%',
-        value: new Decimal('0.0500'), // 5%
-        nature: null,
-        description: 'Aliquota IVA ridotta',
-        isDefault: false,
-        active: true,
-      },
-      {
-        name: 'Super Ridotta 4%',
-        value: new Decimal('0.0400'), // 4%
-        nature: null,
-        description: 'Aliquota IVA super ridotta',
-        isDefault: false,
-        active: true,
-      },
-      {
-        name: 'Esente',
-        value: new Decimal('0.0000'), // 0%
-        nature: 'N4',
-        description: 'Operazione esente IVA',
-        isDefault: false,
-        active: true,
-      },
-    ];
+    });
 
-    // 5. Crea tutte le aliquote in transazione
+    // 5. Se non esiste configurazione standard, usa fallback hardcoded
+    let defaultRates: Array<{
+      name: string;
+      value: Decimal;
+      nature: string | null;
+      description: string | null;
+      isDefault: boolean;
+      active: boolean;
+    }>;
+
+    if (standardConfig && Array.isArray(standardConfig.data)) {
+      // ✅ Usa configurazione dal database
+      defaultRates = (standardConfig.data as Array<{
+        name: string;
+        value: string;
+        nature: string | null;
+        description: string | null;
+        isDefault: boolean;
+        active: boolean;
+      }>).map((rate) => ({
+        name: rate.name,
+        value: new Decimal(rate.value),
+        nature: rate.nature,
+        description: rate.description,
+        isDefault: rate.isDefault,
+        active: rate.active,
+      }));
+    } else {
+      // Fallback: Aliquote standard italiane hardcoded
+      defaultRates = [
+        {
+          name: 'Standard 22%',
+          value: new Decimal('0.2200'), // 22%
+          nature: null,
+          description: 'Aliquota IVA standard italiana',
+          isDefault: true,
+          active: true,
+        },
+        {
+          name: 'Ridotta 10%',
+          value: new Decimal('0.1000'), // 10%
+          nature: null,
+          description: 'Aliquota IVA ridotta',
+          isDefault: false,
+          active: true,
+        },
+        {
+          name: 'Ridotta 5%',
+          value: new Decimal('0.0500'), // 5%
+          nature: null,
+          description: 'Aliquota IVA ridotta',
+          isDefault: false,
+          active: true,
+        },
+        {
+          name: 'Super Ridotta 4%',
+          value: new Decimal('0.0400'), // 4%
+          nature: null,
+          description: 'Aliquota IVA super ridotta',
+          isDefault: false,
+          active: true,
+        },
+        {
+          name: 'Esente',
+          value: new Decimal('0.0000'), // 0%
+          nature: 'N4',
+          description: 'Operazione esente IVA',
+          isDefault: false,
+          active: true,
+        },
+      ];
+    }
+
+    // 6. Crea tutte le aliquote in transazione
     await prisma.vatRate.createMany({
       data: defaultRates.map((rate) => ({
         organizationId: ctx.organizationId,
@@ -431,7 +471,7 @@ export async function seedDefaultVatRatesAction(): Promise<ActionResult<{ count:
       })),
     });
 
-    // 6. Revalidazione cache
+    // 7. Revalidazione cache
     revalidatePath('/settings/vat-rates');
 
     return {

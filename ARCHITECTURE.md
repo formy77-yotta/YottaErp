@@ -1642,6 +1642,333 @@ model StockMovement {
    - Disattiva (`active = false`) invece di eliminare se ci sono documenti
    - Verifica sempre documenti associati prima di eliminare
 
+## 📦 Servizio di Gestione Magazzino (Stock Service)
+
+### 🎯 Calculated Stock Rule
+
+Il sistema YottaErp implementa rigorosamente la **Calculated Stock Rule**: la giacenza NON è un campo statico nel `Product`, ma viene calcolata dinamicamente come somma algebrica di tutti i movimenti in `StockMovement`.
+
+**Principio Fondamentale**:
+- ✅ **MAI** aggiornare direttamente un campo `stock` nel Product
+- ✅ **SEMPRE** creare nuovi record in `StockMovement`
+- ✅ La giacenza si aggiorna automaticamente quando si aggiungono movimenti
+- ✅ Usa sempre `Decimal.js` per calcoli (MAI `number`)
+
+### 📁 Struttura File
+
+```
+src/services/business/
+└── stock-service.ts          # ✅ Servizio gestione magazzino
+```
+
+### 🔧 Funzioni Principali
+
+#### 1. `processDocumentLineStock()`
+
+**Scopo**: Processa una riga documento e crea il movimento di magazzino se necessario.
+
+**Flusso**:
+1. Verifica `config.inventoryMovement` → Se `false`, esce senza fare nulla
+2. Verifica `product.type.manageStock` → Se `false`, esce (prodotto non gestito a magazzino)
+3. Calcola quantità algebrica: `line.quantity * config.operationSignStock`
+4. Mappa tipo documento al `MovementType` corretto
+5. Crea record `StockMovement` con tracciabilità completa
+
+**Parametri**:
+```typescript
+processDocumentLineStock(
+  tx: PrismaClient,              // Transazione Prisma (obbligatoria)
+  line: DocumentLine,            // Riga documento da processare
+  config: DocumentTypeConfig,    // Configurazione tipo documento
+  warehouseId: string,            // ID magazzino
+  documentId: string,            // ID documento origine
+  documentNumber: string,        // Numero documento
+  organizationId: string        // ID organizzazione (MULTITENANT)
+): Promise<{ id: string; quantity: Decimal } | null>
+```
+
+**Esempio Utilizzo**:
+```typescript
+await prisma.$transaction(async (tx) => {
+  const document = await tx.document.create({ data: ... });
+  
+  // Per ogni riga documento
+  for (const line of document.lines) {
+    await processDocumentLineStock(
+      tx,
+      line,
+      documentTypeConfig,
+      warehouseId,
+      document.id,
+      document.number,
+      organizationId
+    );
+  }
+});
+```
+
+#### 2. `getStock()`
+
+**Scopo**: Calcola la giacenza attuale di un prodotto.
+
+**Formula**: `Giacenza = SUM(quantity) WHERE productId = ? [AND warehouseId = ?]`
+
+**Caratteristiche**:
+- Usa `Decimal.js` per precisione fiscale
+- Supporta filtro opzionale per magazzino
+- Se non ci sono movimenti, restituisce `0`
+
+**Parametri**:
+```typescript
+getStock(
+  productId: string,             // ID prodotto
+  organizationId: string,        // ID organizzazione (MULTITENANT)
+  warehouseId?: string,          // ID magazzino (opzionale)
+  prismaClient?: PrismaClient    // Prisma Client (opzionale, usa singleton se non specificato)
+): Promise<Decimal>
+```
+
+**Esempio Utilizzo**:
+```typescript
+// Giacenza totale (tutti i magazzini)
+const totalStock = await getStock(productId, organizationId);
+
+// Giacenza per magazzino specifico
+const warehouseStock = await getStock(productId, organizationId, warehouseId);
+```
+
+#### 3. `getStocks()`
+
+**Scopo**: Calcola la giacenza per più prodotti contemporaneamente (ottimizzazione query).
+
+**Caratteristiche**:
+- Query aggregata per performance
+- Restituisce mappa `productId -> giacenza (Decimal)`
+
+**Parametri**:
+```typescript
+getStocks(
+  productIds: string[],          // Array di ID prodotti
+  organizationId: string,        // ID organizzazione (MULTITENANT)
+  warehouseId?: string,          // ID magazzino (opzionale)
+  prismaClient?: PrismaClient    // Prisma Client (opzionale)
+): Promise<Record<string, Decimal>>
+```
+
+**Esempio Utilizzo**:
+```typescript
+const stocks = await getStocks(['prod1', 'prod2'], organizationId);
+console.log(stocks['prod1']); // Decimal con giacenza prodotto 1
+```
+
+### 🔄 Flusso Completo Processamento Documento
+
+```
+User crea documento (es. DDT)
+    ↓
+createDocumentAction(data)
+    ↓
+prisma.$transaction(async (tx) => {
+    ↓
+1. Crea Document con documentTypeId
+    ↓
+2. Per ogni riga documento:
+    ↓
+   processDocumentLineStock(tx, line, config, ...)
+    ↓
+   ├─ Verifica config.inventoryMovement
+   │  Se false → return null (nessun movimento)
+   │  Se true → continua
+   │
+   ├─ Verifica product.type.manageStock
+   │  Se false → return null (prodotto non gestito)
+   │  Se true → continua
+   │
+   ├─ Calcola quantità: line.quantity * config.operationSignStock
+   │  - operationSignStock = +1 → quantità positiva (carico)
+   │  - operationSignStock = -1 → quantità negativa (scarico)
+   │
+   ├─ Mappa MovementType:
+   │  - DDT → SCARICO_DDT
+   │  - FAI/FAD/FAC → SCARICO_VENDITA
+   │  - OF → CARICO_FORNITORE
+   │  - NC → RESO_CLIENTE
+   │
+   └─ Crea StockMovement:
+      - organizationId
+      - productId
+      - warehouseId
+      - quantity (algebrica)
+      - type (MovementType)
+      - documentTypeId
+      - documentId
+      - documentNumber
+    ↓
+3. Commit transazione
+    ↓
+4. Giacenza aggiornata automaticamente (calcolata da StockMovement)
+```
+
+### 🗺️ Mappatura DocumentType → MovementType
+
+La funzione helper `mapDocumentTypeToMovementType()` mappa il codice documento e il segno operazione al `MovementType` corretto:
+
+| DocumentType Code | operationSignStock | MovementType |
+|-------------------|-------------------|--------------|
+| `DDT`, `CAF` | `-1` | `SCARICO_DDT` |
+| `FAI`, `FAD`, `FAC` | `-1` | `SCARICO_VENDITA` |
+| `OF`, `ORD_FORNITORE` | `+1` | `CARICO_FORNITORE` |
+| `NC`, `NDC`, `NCF` | `+1` | `RESO_CLIENTE` |
+| `RESO_FORNITORE` | `-1` | `RESO_FORNITORE` |
+
+### 📊 Calcolo Giacenza
+
+**Formula**:
+```typescript
+// Giacenza = Somma algebrica di tutti i movimenti
+const stock = movements.reduce(
+  (acc, movement) => acc.plus(toDecimal(movement.quantity.toString())),
+  new Decimal(0)
+);
+```
+
+**Esempio**:
+```
+Movimenti:
+- CARICO_INIZIALE: +100
+- CARICO_FORNITORE: +50
+- SCARICO_DDT: -30
+- SCARICO_VENDITA: -20
+
+Giacenza = 100 + 50 - 30 - 20 = 100
+```
+
+### 🔐 Regole di Business
+
+1. **Movimento Magazzino Creato Solo Se**:
+   - `documentType.inventoryMovement = true` **E**
+   - `product.type.manageStock = true`
+
+2. **Quantità Algebrica**:
+   - Positiva per carichi (es. `+10` pezzi)
+   - Negativa per scarichi (es. `-10` pezzi)
+   - Il segno viene determinato da `operationSignStock`
+
+3. **Tracciabilità**:
+   - Ogni movimento è collegato al documento origine
+   - Campi: `documentTypeId`, `documentId`, `documentNumber`
+   - Permette audit completo e rettifiche
+
+4. **Immutabilità**:
+   - I movimenti NON si modificano, solo si creano
+   - Per rettifiche, creare nuovo movimento con segno opposto
+
+5. **MULTITENANT**:
+   - Ogni movimento appartiene a un'organizzazione
+   - Le query filtrano automaticamente per `organizationId`
+
+### 🎨 Integrazione con Creazione Documenti
+
+**Pattern Consistente**:
+```typescript
+// In document-actions.ts o simile
+export async function createDocumentAction(data: CreateDocumentInput) {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Crea documento
+    const document = await tx.document.create({ data: documentData });
+    
+    // 2. Crea righe documento
+    for (const lineData of data.lines) {
+      await tx.documentLine.create({ data: lineData });
+    }
+    
+    // 3. Processa movimenti magazzino
+    const documentType = await tx.documentTypeConfig.findUnique({
+      where: { id: document.documentTypeId }
+    });
+    
+    if (documentType) {
+      for (const line of document.lines) {
+        await processDocumentLineStock(
+          tx,
+          line,
+          documentType,
+          data.warehouseId,
+          document.id,
+          document.number,
+          data.organizationId
+        );
+      }
+    }
+    
+    return document;
+  });
+}
+```
+
+### 📐 Modello Dati Relazionale
+
+```
+┌──────────────────┐
+│ Organization     │
+│                  │
+│ • id             │───┐
+└──────────────────┘   │
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+        ▼              ▼              ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│Product       │ │Document      │ │Warehouse     │
+│              │ │              │ │              │
+│• id          │ │• id           │ │• id          │
+│• typeId (FK) │ │• documentType │ │              │
+│              │ │  Id (FK)      │ │              │
+│              │ │• number       │ │              │
+└──────────────┘ └──────────────┘ └──────────────┘
+       │                  │                  │
+       │                  │                  │
+       └──────────────────┼──────────────────┘
+                        │
+                        ▼
+              ┌──────────────────┐
+              │StockMovement     │
+              │                  │
+              │• productId (FK)  │
+              │• warehouseId (FK)│
+              │• quantity        │
+              │• type            │
+              │• documentTypeId  │
+              │  (FK)            │
+              │• documentId      │
+              │• documentNumber  │
+              │• organizationId  │
+              │  (FK)            │
+              └──────────────────┘
+```
+
+### 🎯 Best Practices
+
+1. **Sempre in Transazione**:
+   - `processDocumentLineStock()` deve essere chiamato dentro `prisma.$transaction()`
+   - Garantisce atomicità: documento e movimenti creati insieme o nessuno
+
+2. **Calcolo Giacenza**:
+   - Usa `getStock()` per calcolare giacenza, non query manuali
+   - Per più prodotti, usa `getStocks()` per performance
+
+3. **Validazione**:
+   - Verifica sempre `inventoryMovement` e `manageStock` prima di chiamare il servizio
+   - Il servizio fa doppio check, ma è meglio validare prima
+
+4. **Error Handling**:
+   - Il servizio lancia errori se prodotto non trovato o configurazione invalida
+   - Gestisci errori nella transazione per rollback automatico
+
+5. **Performance**:
+   - Per liste prodotti, usa `getStocks()` invece di chiamare `getStock()` N volte
+   - Considera cache per giacenze se necessario (con invalidazione su movimenti)
+
 ## 📈 Performance Considerations
 
 ### Ottimizzazioni Implementate:

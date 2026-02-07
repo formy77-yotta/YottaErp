@@ -422,133 +422,170 @@ export async function seedDefaultUnitsOfMeasureAction(): Promise<ActionResult<{ 
       };
     }
 
-    // 4. Unità di misura standard italiane con fattori di conversione
-    // Nota: baseFactor è relativo all'unità base della classe
-    const defaultUnits = [
-      // PESO (WEIGHT) - Base: Grammi (G)
-      {
-        code: 'G',
-        name: 'Grammi',
-        measureClass: 'WEIGHT',
-        baseFactor: new Decimal('1.000000'), // Unità base
+    // 4. ✅ Recupera configurazione standard dal database (Super Admin)
+    const standardConfig = await prisma.standardConfig.findFirst({
+      where: {
+        type: 'UNITS_OF_MEASURE',
         active: true,
       },
-      {
-        code: 'KG',
-        name: 'Chilogrammi',
-        measureClass: 'WEIGHT',
-        baseFactor: new Decimal('1000.000000'), // 1 KG = 1000 G
-        active: true,
+      orderBy: {
+        version: 'desc',
       },
-      {
-        code: 'T',
-        name: 'Tonnellate',
-        measureClass: 'WEIGHT',
-        baseFactor: new Decimal('1000000.000000'), // 1 T = 1.000.000 G
-        active: true,
-      },
-      {
-        code: 'MG',
-        name: 'Milligrammi',
-        measureClass: 'WEIGHT',
-        baseFactor: new Decimal('0.001000'), // 1 MG = 0.001 G
-        active: true,
-      },
-      
-      // LUNGHEZZA (LENGTH) - Base: Millimetri (MM)
-      {
-        code: 'MM',
-        name: 'Millimetri',
-        measureClass: 'LENGTH',
-        baseFactor: new Decimal('1.000000'), // Unità base
-        active: true,
-      },
-      {
-        code: 'CM',
-        name: 'Centimetri',
-        measureClass: 'LENGTH',
-        baseFactor: new Decimal('10.000000'), // 1 CM = 10 MM
-        active: true,
-      },
-      {
-        code: 'M',
-        name: 'Metri',
-        measureClass: 'LENGTH',
-        baseFactor: new Decimal('1000.000000'), // 1 M = 1000 MM
-        active: true,
-      },
-      {
-        code: 'KM',
-        name: 'Chilometri',
-        measureClass: 'LENGTH',
-        baseFactor: new Decimal('1000000.000000'), // 1 KM = 1.000.000 MM
-        active: true,
-      },
-      
-      // VOLUME (VOLUME) - Base: Millilitri (ML)
-      {
-        code: 'ML',
-        name: 'Millilitri',
-        measureClass: 'VOLUME',
-        baseFactor: new Decimal('1.000000'), // Unità base
-        active: true,
-      },
-      {
-        code: 'L',
-        name: 'Litri',
-        measureClass: 'VOLUME',
-        baseFactor: new Decimal('1000.000000'), // 1 L = 1000 ML
-        active: true,
-      },
-      {
-        code: 'M3',
-        name: 'Metri cubi',
-        measureClass: 'VOLUME',
-        baseFactor: new Decimal('1000000.000000'), // 1 M3 = 1.000.000 ML
-        active: true,
-      },
-      
-      // PEZZI (PIECE) - Base: Pezzi (PZ)
-      {
-        code: 'PZ',
-        name: 'Pezzi',
-        measureClass: 'PIECE',
-        baseFactor: new Decimal('1.000000'), // Unità base
-        active: true,
-      },
-      {
-        code: 'CT',
-        name: 'Cartoni',
-        measureClass: 'PIECE',
-        baseFactor: new Decimal('1.000000'), // 1 CT = 1 PZ (stessa unità)
-        active: true,
-      },
-      {
-        code: 'SC',
-        name: 'Scatole',
-        measureClass: 'PIECE',
-        baseFactor: new Decimal('1.000000'), // 1 SC = 1 PZ (stessa unità)
-        active: true,
-      },
-      
-      // SUPERFICIE (AREA) - Base: Metri quadri (M2)
-      {
-        code: 'M2',
-        name: 'Metri quadri',
-        measureClass: 'AREA',
-        baseFactor: new Decimal('1.000000'), // Unità base
-        active: true,
-      },
-      {
-        code: 'HA',
-        name: 'Ettari',
-        measureClass: 'AREA',
-        baseFactor: new Decimal('10000.000000'), // 1 HA = 10.000 M2
-        active: true,
-      },
-    ];
+    });
 
-    // 5. Crea tutte le unità di misura in transazione
+    // 5. Se non esiste configurazione standard, usa fallback hardcoded
+    let defaultUnits: Array<{
+      code: string;
+      name: string;
+      measureClass: string;
+      baseFactor: Decimal;
+      active: boolean;
+    }>;
+
+    if (standardConfig && Array.isArray(standardConfig.data)) {
+      // ✅ Usa configurazione dal database
+      defaultUnits = (standardConfig.data as Array<{
+        code: string;
+        name: string;
+        measureClass: string;
+        baseFactor: string;
+        active: boolean;
+      }>).map((unit) => ({
+        code: unit.code,
+        name: unit.name,
+        measureClass: unit.measureClass,
+        baseFactor: new Decimal(unit.baseFactor),
+        active: unit.active,
+      }));
+    } else {
+      // Fallback: Unità di misura standard italiane con fattori di conversione
+      // Nota: baseFactor è relativo all'unità base della classe
+      defaultUnits = [
+        // PESO (WEIGHT) - Base: Grammi (G)
+        {
+          code: 'G',
+          name: 'Grammi',
+          measureClass: 'WEIGHT',
+          baseFactor: new Decimal('1.000000'), // Unità base
+          active: true,
+        },
+        {
+          code: 'KG',
+          name: 'Chilogrammi',
+          measureClass: 'WEIGHT',
+          baseFactor: new Decimal('1000.000000'), // 1 KG = 1000 G
+          active: true,
+        },
+        {
+          code: 'T',
+          name: 'Tonnellate',
+          measureClass: 'WEIGHT',
+          baseFactor: new Decimal('1000000.000000'), // 1 T = 1.000.000 G
+          active: true,
+        },
+        {
+          code: 'MG',
+          name: 'Milligrammi',
+          measureClass: 'WEIGHT',
+          baseFactor: new Decimal('0.001000'), // 1 MG = 0.001 G
+          active: true,
+        },
+        
+        // LUNGHEZZA (LENGTH) - Base: Millimetri (MM)
+        {
+          code: 'MM',
+          name: 'Millimetri',
+          measureClass: 'LENGTH',
+          baseFactor: new Decimal('1.000000'), // Unità base
+          active: true,
+        },
+        {
+          code: 'CM',
+          name: 'Centimetri',
+          measureClass: 'LENGTH',
+          baseFactor: new Decimal('10.000000'), // 1 CM = 10 MM
+          active: true,
+        },
+        {
+          code: 'M',
+          name: 'Metri',
+          measureClass: 'LENGTH',
+          baseFactor: new Decimal('1000.000000'), // 1 M = 1000 MM
+          active: true,
+        },
+        {
+          code: 'KM',
+          name: 'Chilometri',
+          measureClass: 'LENGTH',
+          baseFactor: new Decimal('1000000.000000'), // 1 KM = 1.000.000 MM
+          active: true,
+        },
+        
+        // VOLUME (VOLUME) - Base: Millilitri (ML)
+        {
+          code: 'ML',
+          name: 'Millilitri',
+          measureClass: 'VOLUME',
+          baseFactor: new Decimal('1.000000'), // Unità base
+          active: true,
+        },
+        {
+          code: 'L',
+          name: 'Litri',
+          measureClass: 'VOLUME',
+          baseFactor: new Decimal('1000.000000'), // 1 L = 1000 ML
+          active: true,
+        },
+        {
+          code: 'M3',
+          name: 'Metri cubi',
+          measureClass: 'VOLUME',
+          baseFactor: new Decimal('1000000.000000'), // 1 M3 = 1.000.000 ML
+          active: true,
+        },
+        
+        // PEZZI (PIECE) - Base: Pezzi (PZ)
+        {
+          code: 'PZ',
+          name: 'Pezzi',
+          measureClass: 'PIECE',
+          baseFactor: new Decimal('1.000000'), // Unità base
+          active: true,
+        },
+        {
+          code: 'CT',
+          name: 'Cartoni',
+          measureClass: 'PIECE',
+          baseFactor: new Decimal('1.000000'), // 1 CT = 1 PZ (stessa unità)
+          active: true,
+        },
+        {
+          code: 'SC',
+          name: 'Scatole',
+          measureClass: 'PIECE',
+          baseFactor: new Decimal('1.000000'), // 1 SC = 1 PZ (stessa unità)
+          active: true,
+        },
+        
+        // SUPERFICIE (AREA) - Base: Metri quadri (M2)
+        {
+          code: 'M2',
+          name: 'Metri quadri',
+          measureClass: 'AREA',
+          baseFactor: new Decimal('1.000000'), // Unità base
+          active: true,
+        },
+        {
+          code: 'HA',
+          name: 'Ettari',
+          measureClass: 'AREA',
+          baseFactor: new Decimal('10000.000000'), // 1 HA = 10.000 M2
+          active: true,
+        },
+      ];
+    }
+
+    // 6. Crea tutte le unità di misura in transazione
     // Usiamo una transazione per creare i record uno alla volta
     // Questo evita problemi di serializzazione Decimal con createMany
     await prisma.$transaction(
@@ -566,7 +603,7 @@ export async function seedDefaultUnitsOfMeasureAction(): Promise<ActionResult<{ 
       )
     );
 
-    // 6. Revalidazione cache
+    // 7. Revalidazione cache
     revalidatePath('/settings/unit-of-measure');
 
     return {

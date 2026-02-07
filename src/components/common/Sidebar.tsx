@@ -20,6 +20,7 @@ import {
   ChevronRight,
   Settings,
   Ruler,
+  Activity,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -78,6 +79,11 @@ const navItems: NavItem[] = [
         title: 'Magazzini',
         href: '/warehouse',
         icon: Warehouse,
+      },
+      {
+        title: 'Movimenti Magazzino',
+        href: '/stock-movements',
+        icon: Activity,
       },
     ],
   },

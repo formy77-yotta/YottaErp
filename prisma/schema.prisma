@@ -710,3 +710,55 @@ model DocumentLine {
   @@index([productId])
   @@index([vatRateId])
 }
+
+// ============================================================================
+// CONFIGURAZIONI STANDARD (Super Admin)
+// ============================================================================
+
+/**
+ * StandardConfig: Configurazioni standard gestibili dal Super Admin
+ * 
+ * Permette al Super Admin di configurare i dati standard che vengono
+ * caricati quando un'organizzazione usa i pulsanti "Carica Standard":
+ * - Aliquote IVA standard
+ * - Unità di misura standard
+ * - Tipi documento standard
+ * 
+ * NOTA: Queste configurazioni sono GLOBALI (non per organizzazione),
+ * ma quando vengono caricate, vengono associate all'organizzazione corrente.
+ */
+model StandardConfig {
+  id String @id @default(cuid())
+
+  // Tipo di configurazione standard
+  type StandardConfigType
+
+  // Dati della configurazione in formato JSON
+  // Per VAT_RATES: array di { name, value, nature, description, isDefault, active }
+  // Per UNITS_OF_MEASURE: array di { code, name, measureClass, baseFactor, active }
+  // Per DOCUMENT_TYPES: array di { code, description, numeratorCode, inventoryMovement, valuationImpact, operationSignStock, operationSignValuation, active }
+  data Json // ✅ JSON per flessibilità (Prisma supporta JSON nativo)
+
+  // Versione della configurazione (per tracking modifiche)
+  version Int @default(1)
+
+  // Descrizione/note per questa configurazione
+  description String? @db.Text
+
+  // Metadata
+  active Boolean @default(true)
+
+  // Timestamp
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, active]) // Una sola configurazione attiva per tipo
+  @@index([type])
+  @@index([active])
+}
+
+enum StandardConfigType {
+  VAT_RATES          // Aliquote IVA standard
+  UNITS_OF_MEASURE   // Unità di misura standard
+  DOCUMENT_TYPES     // Tipi documento standard
+}

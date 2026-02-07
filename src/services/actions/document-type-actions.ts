@@ -42,13 +42,9 @@ type ActionResult<T> =
   | { success: false; error: string };
 
 /**
- * Ottiene tutte le configurazioni tipi documento dell'organizzazione corrente
- * 
- * MULTITENANT: Filtra automaticamente per organizationId
- * 
- * @returns Array di configurazioni tipi documento
+ * Tipo per configurazione tipo documento (output)
  */
-export async function getDocumentTypesAction(): Promise<ActionResult<Array<{
+type DocumentTypeConfigOutput = {
   id: string;
   code: string;
   description: string;
@@ -60,7 +56,16 @@ export async function getDocumentTypesAction(): Promise<ActionResult<Array<{
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
-}>>> {
+};
+
+/**
+ * Ottiene tutte le configurazioni tipi documento dell'organizzazione corrente
+ * 
+ * MULTITENANT: Filtra automaticamente per organizationId
+ * 
+ * @returns Array di configurazioni tipi documento
+ */
+export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTypeConfigOutput[]>> {
   try {
     // 1. ✅ Ottieni contesto autenticazione (include organizationId)
     const ctx = await getAuthContext();
@@ -446,17 +451,53 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
       };
     }
 
-    // 3. Configurazioni tipi documento standard
-    // 
-    // NOTA: Il campo 'category' (enum DocumentCategory) è presente solo nel Document,
-    // non in DocumentTypeConfig. Quando si crea un Document, mappare il code come segue:
-    // - PRO (preventivo) -> QUOTE
-    // - ORD, OF -> ORDER
-    // - DDT, CAF -> DELIVERY_NOTE
-    // - FAI, FAD, FAC -> INVOICE
-    // - NDC, NCF -> CREDIT_NOTE
-    //
-    const defaultTypes = [
+    // 3. ✅ Recupera configurazione standard dal database (Super Admin)
+    const standardConfig = await prisma.standardConfig.findFirst({
+      where: {
+        type: 'DOCUMENT_TYPES',
+        active: true,
+      },
+      orderBy: {
+        version: 'desc',
+      },
+    });
+
+    // 4. Se non esiste configurazione standard, usa fallback hardcoded
+    let defaultTypes: Array<{
+      code: string;
+      description: string;
+      numeratorCode: string;
+      inventoryMovement: boolean;
+      valuationImpact: boolean;
+      operationSignStock: number | null;
+      operationSignValuation: number | null;
+      active: boolean;
+    }>;
+
+    if (standardConfig && Array.isArray(standardConfig.data)) {
+      // ✅ Usa configurazione dal database
+      defaultTypes = (standardConfig.data as Array<{
+        code: string;
+        description: string;
+        numeratorCode: string;
+        inventoryMovement: boolean;
+        valuationImpact: boolean;
+        operationSignStock: number | null;
+        operationSignValuation: number | null;
+        active: boolean;
+      }>);
+    } else {
+      // Fallback: Configurazioni tipi documento standard
+      // 
+      // NOTA: Il campo 'category' (enum DocumentCategory) è presente solo nel Document,
+      // non in DocumentTypeConfig. Quando si crea un Document, mappare il code come segue:
+      // - PRO (preventivo) -> QUOTE
+      // - ORD, OF -> ORDER
+      // - DDT, CAF -> DELIVERY_NOTE
+      // - FAI, FAD, FAC -> INVOICE
+      // - NDC, NCF -> CREDIT_NOTE
+      //
+      defaultTypes = [
       // ============================================================================
       // CICLO ATTIVO (VENDITA)
       // ============================================================================
@@ -565,8 +606,9 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         active: true,
       },
     ];
+    }
 
-    // 4. Crea tutte le configurazioni usando upsert per evitare duplicati
+    // 5. Crea tutte le configurazioni usando upsert per evitare duplicati
     let createdCount = 0;
     let updatedCount = 0;
     
@@ -613,7 +655,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
       }
     }
 
-    // 5. Revalidazione cache
+    // 6. Revalidazione cache
     revalidatePath('/settings/document-types');
 
     console.log(`\n📊 Riepilogo:`);
