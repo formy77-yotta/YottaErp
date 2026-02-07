@@ -227,7 +227,6 @@ export async function getDocumentAction(
         grossTotal: true,
         notes: true,
         paymentTerms: true,
-        mainWarehouseId: true,
         createdAt: true,
         updatedAt: true,
         organizationId: true, // Per verifica multitenant
@@ -246,7 +245,6 @@ export async function getDocumentAction(
             netAmount: true,
             vatAmount: true,
             grossAmount: true,
-            warehouseId: true,
           },
         },
       },
@@ -488,11 +486,12 @@ export async function updateDocumentAction(
             warehouseId = product.defaultWarehouseId;
           } else if (validatedData.mainWarehouseId) {
             warehouseId = validatedData.mainWarehouseId;
-          } else if (existingDocument.mainWarehouseId) {
-            warehouseId = existingDocument.mainWarehouseId;
           }
+          // NOTA: mainWarehouseId non è salvato nel documento, viene solo usato al momento della creazione/aggiornamento
 
           // Crea riga documento
+          // NOTA: warehouseId non è salvato nella riga documento (non esiste nello schema)
+          // Viene solo usato al momento della creazione/aggiornamento per determinare il magazzino dei movimenti
           const createdLine = await tx.documentLine.create({
             data: {
               documentId: validatedData.id,
@@ -505,7 +504,6 @@ export async function updateDocumentAction(
               netAmount: lineTotals.netAmount,
               vatAmount: lineTotals.vatAmount,
               grossAmount: lineTotals.grossAmount,
-              warehouseId: warehouseId || null,
             },
           });
 
@@ -526,7 +524,7 @@ export async function updateDocumentAction(
               tx,
               documentLineWithWarehouse,
               existingDocument.documentType,
-              validatedData.mainWarehouseId || existingDocument.mainWarehouseId || null,
+              validatedData.mainWarehouseId || null,
               existingDocument.id,
               existingDocument.number,
               ctx.organizationId
@@ -543,9 +541,8 @@ export async function updateDocumentAction(
             }),
             ...(entitySnapshot && entitySnapshot),
             ...(validatedData.date && { date: validatedData.date }),
-            ...(validatedData.mainWarehouseId !== undefined && {
-              mainWarehouseId: validatedData.mainWarehouseId || null,
-            }),
+            // NOTA: mainWarehouseId non è salvato nel documento (non esiste nello schema)
+            // Viene solo usato al momento della creazione/aggiornamento per determinare il warehouseId delle righe
             ...(validatedData.notes !== undefined && {
               notes: validatedData.notes || null,
             }),
@@ -569,9 +566,8 @@ export async function updateDocumentAction(
             }),
             ...(entitySnapshot && entitySnapshot),
             ...(validatedData.date && { date: validatedData.date }),
-            ...(validatedData.mainWarehouseId !== undefined && {
-              mainWarehouseId: validatedData.mainWarehouseId || null,
-            }),
+            // NOTA: mainWarehouseId non è salvato nel documento (non esiste nello schema)
+            // Viene solo usato al momento della creazione/aggiornamento per determinare il warehouseId delle righe
             ...(validatedData.notes !== undefined && {
               notes: validatedData.notes || null,
             }),

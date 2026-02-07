@@ -49,7 +49,6 @@ import {
   Edit,
   Trash2,
   CheckCircle2,
-  XCircle,
   Download,
 } from 'lucide-react';
 import { StandardConfigEditor } from '@/components/features/admin/StandardConfigEditor';

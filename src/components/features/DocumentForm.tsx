@@ -191,10 +191,15 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // Se in modifica, carica dati documento nel form
         if (isEditing && documentResult && documentResult.success) {
           const doc = documentResult.data;
+          console.log('Loading document data:', doc); // Debug
+          
+          // NOTA: mainWarehouseId e warehouseId non sono salvati nel database
+          // Vengono determinati al momento della creazione/aggiornamento con logica a cascata
+          // In modifica, lasciamo i campi vuoti e l'utente può selezionarli manualmente
           form.reset({
             entityId: doc.entity?.id || '',
             date: new Date(doc.date).toISOString().split('T')[0],
-            mainWarehouseId: doc.mainWarehouseId || '',
+            mainWarehouseId: '', // Non salvato nel DB, lasciare vuoto
             lines: doc.lines.map(line => ({
               productId: line.productId || '',
               productCode: line.productCode,
@@ -202,7 +207,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               unitPrice: line.unitPrice,
               quantity: line.quantity,
               vatRate: line.vatRate,
-              warehouseId: line.warehouseId || '',
+              warehouseId: '', // Non salvato nel DB, lasciare vuoto
             })),
             notes: doc.notes || '',
             paymentTerms: doc.paymentTerms || '',
@@ -374,9 +379,21 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       }
     } catch (error) {
       console.error(`Errore ${isEditing ? 'aggiornamento' : 'creazione'} documento:`, error);
-      const errorMessage = `Errore durante ${isEditing ? 'l\'aggiornamento' : 'la creazione'} del documento`;
-      setError(errorMessage);
-      onError?.(errorMessage);
+      
+      // Gestione errori di validazione Zod
+      if (error && typeof error === 'object' && 'issues' in error) {
+        const zodError = error as { issues: Array<{ path: string[]; message: string }> };
+        const firstError = zodError.issues[0];
+        const errorMessage = `${firstError.path.join('.')}: ${firstError.message}`;
+        setError(errorMessage);
+        onError?.(errorMessage);
+      } else {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : `Errore durante ${isEditing ? 'l\'aggiornamento' : 'la creazione'} del documento`;
+        setError(errorMessage);
+        onError?.(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
