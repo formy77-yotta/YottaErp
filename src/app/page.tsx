@@ -14,7 +14,8 @@ import {
   Package, 
   Shield,
   LogIn,
-  ArrowRight
+  ArrowRight,
+  AlertCircle
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -232,6 +233,3 @@ export default function HomePage() {
     </div>
   );
 }
-
-// Importa AlertCircle per la banner
-import { AlertCircle } from 'lucide-react';
