@@ -10,8 +10,6 @@ export const metadata: Metadata = {
 };
 
 // Forza rendering dinamico per evitare problemi di pre-rendering
-// Nota: global-error.tsx è stato rimosso perché causava problemi durante il build su Vercel
-// Gli errori vengono gestiti con error.tsx nelle route specifiche
 export const dynamic = 'force-dynamic';
 
 export default function RootLayout({
