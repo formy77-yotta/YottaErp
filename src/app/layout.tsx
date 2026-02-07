@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   description: "Sistema ERP completo per la gestione aziendale",
 };
 
-// Forza rendering dinamico per evitare problemi con global-error durante il pre-rendering
+// Forza rendering dinamico per evitare problemi di pre-rendering
 export const dynamic = 'force-dynamic';
 
 export default function RootLayout({

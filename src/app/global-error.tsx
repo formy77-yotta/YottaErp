@@ -21,6 +21,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   // Render completamente statico, senza hooks, senza context, senza nulla
+  // Usa solo HTML puro e inline styles per evitare qualsiasi dipendenza
   return (
     <html lang="it">
       <head>
