@@ -23,6 +23,7 @@ import {
   Activity,
   CreditCard,
   CalendarClock,
+  ClipboardList,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -69,14 +70,20 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    title: 'Documenti',
-    href: '/documents',
-    icon: FileText,
-  },
-  {
-    title: 'Scadenze',
-    href: '/scadenze',
-    icon: CalendarClock,
+    title: 'Amministrazione',
+    icon: ClipboardList,
+    children: [
+      {
+        title: 'Documenti',
+        href: '/documents',
+        icon: FileText,
+      },
+      {
+        title: 'Scadenze',
+        href: '/scadenze',
+        icon: CalendarClock,
+      },
+    ],
   },
   {
     title: 'Magazzino',
@@ -177,9 +184,10 @@ function NavItemComponent({ item, isActive, isChild = false }: {
   isActive: boolean;
   isChild?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const hasActiveChild = item.children?.some((c) => isHrefActive(c.href, pathname, searchParams));
+  const [isOpen, setIsOpen] = useState(!!hasActiveChild);
 
   if (item.children && item.children.length > 0) {
     return (
@@ -198,13 +206,13 @@ function NavItemComponent({ item, isActive, isChild = false }: {
             <item.icon className="h-4 w-4" />
             <span>{item.title}</span>
           </div>
-          {isOpen ? (
+          {isOpen || hasActiveChild ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
             <ChevronRight className="h-4 w-4" />
           )}
         </button>
-        {isOpen && (
+        {(isOpen || hasActiveChild) && (
           <div className="ml-4 space-y-1">
             {item.children.map((child) => (
               <NavItemComponent
@@ -253,8 +261,9 @@ function DesktopSidebar() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <nav className="space-y-2">
           {navItems.map((item) => {
-            const isActive = item.href ? isHrefActive(item.href, pathname, searchParams) : false;
-            
+            const isActive = item.href
+              ? isHrefActive(item.href, pathname, searchParams)
+              : (item.children?.some((c) => isHrefActive(c.href, pathname, searchParams)) ?? false);
             return (
               <NavItemComponent
                 key={item.href || item.title}
@@ -311,8 +320,9 @@ export function MobileSidebar() {
           <div className="flex-1 overflow-y-auto px-4 py-6">
             <nav className="space-y-2">
               {navItems.map((item) => {
-                const isActive = item.href ? isHrefActive(item.href, pathname, searchParams) : false;
-                
+                const isActive = item.href
+                  ? isHrefActive(item.href, pathname, searchParams)
+                  : (item.children?.some((c) => isHrefActive(c.href, pathname, searchParams)) ?? false);
                 return (
                   <div key={item.href || item.title} onClick={() => {
                     // Chiudi il menu quando si clicca su un link senza children

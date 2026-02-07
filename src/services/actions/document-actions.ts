@@ -154,6 +154,7 @@ export async function getDocumentAction(
     code: string;
     description: string;
   };
+  entityId: string | null;
   entity: {
     id: string;
     businessName: string;
@@ -173,6 +174,7 @@ export async function getDocumentAction(
   grossTotal: string;
   notes: string | null;
   paymentTerms: string | null;
+  paymentConditionId: string | null;
   paymentCondition: {
     id: string;
     name: string;
@@ -216,6 +218,7 @@ export async function getDocumentAction(
             description: true,
           },
         },
+        entityId: true,
         entity: {
           select: {
             id: true,
@@ -293,6 +296,7 @@ export async function getDocumentAction(
         date: document.date,
         category: document.category,
         documentType: document.documentType,
+        entityId: document.entityId,
         entity: document.entity,
         customerNameSnapshot: document.customerNameSnapshot,
         customerVatSnapshot: document.customerVatSnapshot,
@@ -308,6 +312,7 @@ export async function getDocumentAction(
         grossTotal: document.grossTotal.toString(),
         notes: document.notes,
         paymentTerms: document.paymentTerms,
+        paymentConditionId: document.paymentConditionId,
         paymentCondition: document.paymentCondition,
         createdAt: document.createdAt,
         updatedAt: document.updatedAt,
@@ -1138,6 +1143,13 @@ export async function createDocumentAction(
       vatTotal = vatTotal.plus(lineTotals.vatAmount);
       grossTotal = grossTotal.plus(lineTotals.grossAmount);
 
+      // ✅ Risolvi warehouseId a cascata (riga → prodotto → documento) per movimenti magazzino
+      const resolvedWarehouseId =
+        lineInput.warehouseId ??
+        product?.defaultWarehouseId ??
+        validatedData.mainWarehouseId ??
+        null;
+
       // ✅ Prepara dati riga documento
       documentLinesData.push({
         productId: product?.id || null,
@@ -1150,7 +1162,7 @@ export async function createDocumentAction(
         netAmount: lineTotals.netAmount,
         vatAmount: lineTotals.vatAmount,
         grossAmount: lineTotals.grossAmount,
-        warehouseId: lineInput.warehouseId || null, // Per passare al servizio stock
+        warehouseId: resolvedWarehouseId, // Passato a processDocumentLineStock per generare movimento
       });
     }
 

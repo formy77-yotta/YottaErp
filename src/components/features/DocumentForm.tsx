@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { Decimal } from 'decimal.js';
 import { updateDocumentSchema, type CreateDocumentInput, type UpdateDocumentInput, type DocumentLineInput } from '@/schemas/document-schema';
 import { createDocumentAction, updateDocumentAction, getProposedDocumentNumberAction, getDocumentAction } from '@/services/actions/document-actions';
@@ -120,6 +120,16 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     isEndOfMonth: boolean;
   }>>([]);
 
+  // In modifica: righe caricate dal documento, usate per totali/validazione finché useWatch non si aggiorna dopo reset
+  const [loadedLinesSnapshot, setLoadedLinesSnapshot] = useState<Array<{
+    productId?: string;
+    productCode?: string;
+    description?: string;
+    unitPrice?: string | Decimal;
+    quantity?: string | Decimal;
+    vatRate?: string | Decimal;
+  }>>([]);
+
   // Crea resolver dinamicamente basato su isEditing
   // NOTA: Resolver disabilitato temporaneamente (commentato nella configurazione del form)
   // La validazione viene fatta manualmente in onSubmit
@@ -178,36 +188,62 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
   // Watch documentTypeId per proporre numero automaticamente
   const documentTypeId = form.watch('documentTypeId');
-  
-  // Calcola totali documento (reactive)
+
+  // useWatch fa sì che il componente si ri-renderizzi quando cambiano le righe → totali sempre aggiornati
+  const watchedLines = useWatch({
+    control: form.control,
+    name: 'lines',
+  });
+
+  // In modifica: subito dopo il reset useWatch può restituire ancora la riga vuota di default → usa snapshot
+  // Usa watchedLines solo se sembrano dati “reali” (es. productCode valorizzato)
+  // Preferisci watchedLines quando hanno contenuto (totali interattivi). Snapshot solo se riga ancora vuota.
+  // In modifica unisci form e snapshot: se prezzo/quantità/IVA dal form sono 0 o vuoti, usa i valori caricati (evita totali a zero)
+  const linesForTotals = useMemo(() => {
+    const fromWatch = Array.isArray(watchedLines) ? watchedLines : [];
+    if (isEditing && loadedLinesSnapshot.length > 0) {
+      if (fromWatch.length === 0) return loadedLinesSnapshot;
+      return fromWatch.map((line, i) => {
+        const snap = loadedLinesSnapshot[i];
+        const up = line?.unitPrice ?? snap?.unitPrice;
+        const qty = line?.quantity ?? snap?.quantity;
+        const vat = line?.vatRate ?? snap?.vatRate;
+        return {
+          ...line,
+          unitPrice: up != null && up !== '' && String(up).trim() !== '0' ? up : (snap?.unitPrice ?? '0'),
+          quantity: qty != null && qty !== '' ? qty : (snap?.quantity ?? '1'),
+          vatRate: vat != null && vat !== '' ? vat : (snap?.vatRate ?? '0.22'),
+        };
+      });
+    }
+    return fromWatch;
+  }, [watchedLines, isEditing, loadedLinesSnapshot]);
+
+  // Calcola totali documento in modo interattivo (si aggiornano ad ogni modifica di quantità/prezzo/IVA)
   const totals = useMemo(() => {
-    const lines = form.watch('lines');
-    
-    // Se lines non è ancora inizializzato, restituisci totali a zero
-    if (!lines || !Array.isArray(lines) || lines.length === 0) {
+    if (!linesForTotals.length) {
       return {
         netTotal: new Decimal(0),
         vatTotal: new Decimal(0),
         grossTotal: new Decimal(0),
       };
     }
-    
+
     let netTotal = new Decimal(0);
     let vatTotal = new Decimal(0);
     let grossTotal = new Decimal(0);
 
-    lines.forEach((line) => {
+    linesForTotals.forEach((line) => {
       try {
-        const quantity = toDecimal(line.quantity);
-        const unitPrice = toDecimal(line.unitPrice);
-        const vatRate = toDecimal(line.vatRate);
-        
+        const quantity = toDecimal(line?.quantity ?? 0);
+        const unitPrice = toDecimal(line?.unitPrice ?? 0);
+        const vatRate = toDecimal(line?.vatRate ?? 0);
         const lineTotals = calculateLineTotal(quantity, unitPrice, vatRate);
         netTotal = netTotal.plus(lineTotals.netAmount);
         vatTotal = vatTotal.plus(lineTotals.vatAmount);
         grossTotal = grossTotal.plus(lineTotals.grossAmount);
-      } catch (error) {
-        // Ignora errori di calcolo per righe incomplete
+      } catch {
+        // Ignora righe incomplete
       }
     });
 
@@ -216,7 +252,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       vatTotal: vatTotal.toDecimalPlaces(2),
       grossTotal: grossTotal.toDecimalPlaces(2),
     };
-  }, [form.watch('lines')]);
+  }, [linesForTotals]);
 
   // Watch paymentConditionId e date per calcolare anteprima scadenze
   const paymentConditionId = form.watch('paymentConditionId');
@@ -245,7 +281,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
   }, [documentTypeId, form]);
 
   // Gestione righe dinamiche
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: 'lines',
   });
@@ -284,39 +320,43 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // Se in modifica, carica dati documento nel form
         if (isEditing && documentResult && documentResult.success) {
           const doc = documentResult.data;
-          
-          // NOTA: mainWarehouseId e warehouseId non sono salvati nel database
-          // Vengono determinati al momento della creazione/aggiornamento con logica a cascata
-          // In modifica, lasciamo i campi vuoti e l'utente può selezionarli manualmente
-          // IMPORTANTE: reset con keepDefaultValues: false per rimuovere campi non presenti nello schema
-          // NOTA: Non includiamo 'id' nel reset perché viene aggiunto manualmente in onSubmit
+          // Valori sempre stringa per evitare che il form azzeri (prezzo/quantità/IVA)
+          const linesForForm = doc.lines.map((line) => ({
+            productId: line.productId || '',
+            productCode: line.productCode ?? '',
+            description: line.description ?? '',
+            unitPrice: line.unitPrice != null && line.unitPrice !== '' ? String(line.unitPrice) : '0',
+            quantity: line.quantity != null && line.quantity !== '' ? String(line.quantity) : '1',
+            vatRate: line.vatRate != null && line.vatRate !== '' ? String(line.vatRate) : '0.22',
+            warehouseId: '',
+          }));
+
+          setLoadedLinesSnapshot(linesForForm);
+
           form.reset({
-            entityId: doc.entity?.id || '',
+            entityId: doc.entityId ?? doc.entity?.id ?? '',
             date: new Date(doc.date),
-            mainWarehouseId: '', // Non salvato nel DB, lasciare vuoto
-            lines: doc.lines.map(line => ({
-              productId: line.productId || '',
-              productCode: line.productCode,
-              description: line.description,
-              unitPrice: line.unitPrice,
-              quantity: line.quantity,
-              vatRate: line.vatRate,
-              warehouseId: '', // Non salvato nel DB, lasciare vuoto
-            })),
+            mainWarehouseId: '',
+            lines: linesForForm,
             notes: doc.notes || '',
             paymentTerms: doc.paymentTerms || '',
-            paymentConditionId: doc.paymentCondition?.id || '',
-          }, { 
-            keepDefaultValues: false, // Rimuove campi non presenti nei dati resettati
-            keepValues: false, // Sostituisce completamente i valori
+            paymentConditionId: doc.paymentConditionId ?? doc.paymentCondition?.id ?? '',
+          }, {
+            keepDefaultValues: false,
+            keepValues: false,
           });
-          
-          // Rimuovi esplicitamente campi che non sono nello schema update
-          // Questo previene errori di validazione silenziosi
+
+          // Forza di nuovo le righe dopo il reset (evita che il field array resti con i default)
+          requestAnimationFrame(() => {
+            replace(linesForForm);
+          });
+
           setTimeout(() => {
             form.unregister('documentTypeId');
             form.unregister('number');
           }, 0);
+        } else if (!isEditing) {
+          setLoadedLinesSnapshot([]);
         }
       } catch (error) {
         console.error('Errore caricamento dati:', error);
@@ -438,29 +478,76 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         const entityIdValue = data.entityId as string | undefined;
         const mainWarehouseIdValue = data.mainWarehouseId as string | undefined;
         const linesData = (data.lines || []) as DocumentLineInput[];
-        
-        // Filtra righe vuote e assicura che productCode e description siano sempre presenti
-        const validLines = linesData
-          .filter(line => {
-            // Filtra righe completamente vuote
-            const productCode = line.productCode && typeof line.productCode === 'string' ? line.productCode.trim() : '';
-            const description = line.description && typeof line.description === 'string' ? line.description.trim() : '';
-            return productCode.length > 0 && description.length > 0;
-          })
-          .map(line => ({
-            productId: line.productId?.trim() || undefined,
-            productCode: (line.productCode || '').trim(),
-            description: (line.description || '').trim(),
-            // ✅ Converti Decimal in stringhe per serializzazione Server Action
-            // Zod trasformerà le stringhe in Decimal durante la validazione
+
+        // In modifica integra con snapshot: productId, productCode, description, prezzo, quantità, IVA (evita invio 0 al backend)
+        const linesToNormalize =
+          isEditing && loadedLinesSnapshot.length >= linesData.length
+            ? linesData.map((line, i) => {
+                const snap = loadedLinesSnapshot[i];
+                const up = line?.unitPrice ?? snap?.unitPrice;
+                const qty = line?.quantity ?? snap?.quantity;
+                const vat = line?.vatRate ?? snap?.vatRate;
+                const unitPriceOk = up != null && up !== '' && String(up).trim() !== '0';
+                const qtyOk = qty != null && qty !== '' && String(qty).trim() !== '0';
+                const vatOk = vat != null && vat !== '';
+                return {
+                  ...line,
+                  productId:
+                    (line?.productId && String(line.productId).trim()) ||
+                    (snap?.productId && String(snap.productId).trim()) ||
+                    undefined,
+                  productCode:
+                    String(line?.productCode ?? '').trim() ||
+                    String(snap?.productCode ?? '').trim(),
+                  description:
+                    String(line?.description ?? '').trim() ||
+                    String(snap?.description ?? '').trim(),
+                  warehouseId:
+                    (line?.warehouseId && String(line.warehouseId).trim()) ||
+                    (snap?.warehouseId && String(snap.warehouseId).trim()) ||
+                    undefined,
+                  unitPrice: unitPriceOk ? line?.unitPrice : (snap?.unitPrice ?? '0'),
+                  quantity: qtyOk ? line?.quantity : (snap?.quantity ?? '1'),
+                  vatRate: vatOk ? line?.vatRate : (snap?.vatRate ?? '0.22'),
+                };
+              })
+            : linesData;
+
+        // Normalizza e arricchisce: se ancora mancano, recupera da anagrafica prodotti (productId)
+        const normalizedLines = linesToNormalize.map((line) => {
+          let productCode = String(line?.productCode ?? '').trim();
+          let description = String(line?.description ?? '').trim();
+          if ((!productCode || !description) && line?.productId) {
+            const product = products.find((p) => p.id === line.productId);
+            if (product) {
+              if (!productCode) productCode = product.code;
+              if (!description) description = product.name ?? '';
+            }
+          }
+          return {
+            productId: line?.productId?.trim() || undefined,
+            productCode,
+            description,
+            unitPrice: line?.unitPrice,
+            quantity: line?.quantity,
+            vatRate: line?.vatRate,
+            warehouseId: line?.warehouseId?.trim() || undefined,
+          };
+        });
+
+        const validLines = normalizedLines
+          .filter((line) => line.productCode.length > 0 && line.description.length > 0)
+          .map((line) => ({
+            productId: line.productId,
+            productCode: line.productCode,
+            description: line.description,
             unitPrice: toDecimalString(line.unitPrice),
             quantity: toDecimalString(line.quantity),
             vatRate: toDecimalString(line.vatRate),
-            warehouseId: line.warehouseId?.trim() || undefined,
+            warehouseId: line.warehouseId,
           }));
-        
-        // Verifica che ci siano righe valide dopo il filtro
-        if (!validLines || validLines.length === 0) {
+
+        if (validLines.length === 0) {
           setError('Il documento deve contenere almeno una riga valida con codice prodotto e descrizione');
           setIsLoading(false);
           return;
@@ -480,6 +567,10 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           lines: validLines,
           ...(data.notes !== undefined && { notes: (data.notes as string)?.trim() || undefined }),
           ...(data.paymentTerms !== undefined && { paymentTerms: (data.paymentTerms as string)?.trim() || undefined }),
+          // Invia condizione pagamento per ricalcolare scadenze (elimina vecchie e crea nuove con data/importo aggiornati)
+          ...(data.paymentConditionId !== undefined && {
+            paymentConditionId: (data.paymentConditionId as string)?.trim() || undefined,
+          }),
         } as unknown as UpdateDocumentInput;
 
         // Valida manualmente i dati prima di inviare (doppia validazione)
@@ -868,10 +959,10 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                               <Input
                                 type="text"
                                 placeholder="1.0000"
-                                value={field.value ? field.value.toString() : ''}
+                                value={field.value != null ? String(field.value) : ''}
                                 onChange={(e) => {
-                                  const value = e.target.value;
-                                  field.onChange(value ? new Decimal(value) : undefined);
+                                  const raw = e.target.value.trim();
+                                  field.onChange(raw === '' ? new Decimal('0') : new Decimal(raw));
                                 }}
                                 onBlur={field.onBlur}
                                 disabled={isLoading}
@@ -894,10 +985,10 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                               <Input
                                 type="text"
                                 placeholder="0.00"
-                                value={field.value ? field.value.toString() : ''}
+                                value={field.value != null ? String(field.value) : ''}
                                 onChange={(e) => {
-                                  const value = e.target.value;
-                                  field.onChange(value ? new Decimal(value) : undefined);
+                                  const raw = e.target.value.trim();
+                                  field.onChange(raw === '' ? new Decimal('0') : new Decimal(raw));
                                 }}
                                 onBlur={field.onBlur}
                                 disabled={isLoading}
@@ -909,7 +1000,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                       />
                     </TableCell>
 
-                    {/* IVA */}
+                    {/* IVA %: in interfaccia si vede 22 (%), internamente si usa 0.22 per i calcoli */}
                     <TableCell>
                       <FormField
                         control={form.control}
@@ -919,11 +1010,25 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                             <FormControl>
                               <Input
                                 type="text"
-                                placeholder="0.2200"
-                                value={field.value ? field.value.toString() : ''}
+                                placeholder="22"
+                                value={
+                                  field.value != null
+                                    ? (() => {
+                                        const n = Number(field.value);
+                                        if (Number.isNaN(n)) return '';
+                                        const pct = n * 100;
+                                        return pct % 1 === 0 ? String(Math.round(pct)) : String(pct);
+                                      })()
+                                    : ''
+                                }
                                 onChange={(e) => {
-                                  const value = e.target.value;
-                                  field.onChange(value ? new Decimal(value) : undefined);
+                                  const raw = e.target.value.trim();
+                                  if (raw === '') {
+                                    field.onChange(new Decimal('0'));
+                                    return;
+                                  }
+                                  const pct = parseFloat(raw);
+                                  field.onChange(Number.isNaN(pct) ? new Decimal('0') : new Decimal(pct / 100));
                                 }}
                                 onBlur={field.onBlur}
                                 disabled={isLoading}
@@ -935,22 +1040,17 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                       />
                     </TableCell>
 
-                    {/* Totale Riga (calcolato) */}
+                    {/* Totale Riga = imponibile (non ivato) */}
                     <TableCell className="text-right font-medium">
                       {(() => {
+                        const line = linesForTotals[index];
+                        if (!line) return '€ 0.00';
                         try {
-                          const line = form.watch(`lines.${index}`);
-                          if (!line) {
-                            return '€ 0.00';
-                          }
-                          if (!line.quantity || !line.unitPrice || !line.vatRate) {
-                            return '€ 0.00';
-                          }
-                          const quantity = toDecimal(line.quantity);
-                          const unitPrice = toDecimal(line.unitPrice);
-                          const vatRate = toDecimal(line.vatRate);
-                          const totals = calculateLineTotal(quantity, unitPrice, vatRate);
-                          return formatCurrency(totals.grossAmount);
+                          const quantity = toDecimal(line.quantity ?? 0);
+                          const unitPrice = toDecimal(line.unitPrice ?? 0);
+                          const vatRate = toDecimal(line.vatRate ?? 0);
+                          const lineTotals = calculateLineTotal(quantity, unitPrice, vatRate);
+                          return formatCurrency(lineTotals.netAmount);
                         } catch {
                           return '€ 0.00';
                         }
