@@ -150,23 +150,49 @@ export async function processDocumentLineStock(
   documentNumber: string,
   organizationId: string
 ): Promise<{ id: string; quantity: Decimal } | null> {
-  // 1. ✅ Determina warehouseId con logica a cascata:
+  // 1. ✅ Verifica se il tipo documento movimenta magazzino
+  if (!config.inventoryMovement) {
+    // Tipo documento non movimenta magazzino (es. Preventivo, Ordine non confermato)
+    return null;
+  }
+
+  // 2. ✅ Verifica se la riga ha un prodotto associato (articolo codificato)
+  // REGOLA: Articoli non codificati (senza productId) non movimentano magazzino
+  if (!line.productId || line.productId.trim() === '') {
+    // Riga senza prodotto codificato (es. descrizione libera) → nessun movimento
+    return null;
+  }
+
+  // 3. ✅ Determina warehouseId con logica a cascata:
   //    Priorità 1: warehouseId della riga (se specificato)
   //    Priorità 2: defaultWarehouseId del prodotto (se presente)
   //    Priorità 3: mainWarehouseId del documento (fallback)
   
-  // Prima recupera il prodotto per ottenere defaultWarehouseId
-  let productDefaultWarehouseId: string | null = null;
-  if (line.productId) {
-    const product = await tx.product.findUnique({
-      where: { id: line.productId },
-      select: { defaultWarehouseId: true },
-    });
-    productDefaultWarehouseId = product?.defaultWarehouseId || null;
+  // Recupera il prodotto per ottenere defaultWarehouseId e verificare manageStock
+  const product = await tx.product.findUnique({
+    where: { id: line.productId },
+    select: {
+      defaultWarehouseId: true,
+      type: {
+        select: {
+          manageStock: true,
+        },
+      },
+    },
+  });
+
+  if (!product) {
+    throw new Error(`Prodotto con ID ${line.productId} non trovato`);
   }
-  
+
+  // 4. ✅ Verifica se il prodotto gestisce magazzino
+  if (!product.type?.manageStock) {
+    // Prodotto non gestito a magazzino (es. servizio) → nessun movimento
+    return null;
+  }
+
   // Determina warehouseId finale con priorità
-  const warehouseId = line.warehouseId || productDefaultWarehouseId || documentMainWarehouseId;
+  const warehouseId = line.warehouseId || product.defaultWarehouseId || documentMainWarehouseId;
   
   if (!warehouseId) {
     // Nessun magazzino specificato (né riga, né prodotto, né documento)
@@ -174,42 +200,14 @@ export async function processDocumentLineStock(
     return null;
   }
 
-  // 2. ✅ Verifica se il tipo documento movimenta magazzino
-  if (!config.inventoryMovement) {
-    // Tipo documento non movimenta magazzino (es. Preventivo, Ordine non confermato)
-    return null;
-  }
-
-  // 3. ✅ Verifica se la riga ha un prodotto associato
-  if (!line.productId) {
-    // Riga senza prodotto (es. descrizione libera) → nessun movimento
-    return null;
-  }
-
-  // 4. ✅ Recupera prodotto con tipologia per verificare manageStock
-  const product = await tx.product.findUnique({
-    where: { id: line.productId },
-    include: { type: true },
-  });
-
-  if (!product) {
-    throw new Error(`Prodotto con ID ${line.productId} non trovato`);
-  }
-
-  // 5. ✅ Verifica se il prodotto gestisce magazzino
-  if (!product.type?.manageStock) {
-    // Prodotto non gestito a magazzino (es. servizio) → nessun movimento
-    return null;
-  }
-
-  // 6. ✅ Verifica che operationSignStock sia definito (dovrebbe essere sempre se inventoryMovement = true)
+  // 5. ✅ Verifica che operationSignStock sia definito (dovrebbe essere sempre se inventoryMovement = true)
   if (config.operationSignStock === null || config.operationSignStock === undefined) {
     throw new Error(
       `Tipo documento ${config.code} ha inventoryMovement=true ma operationSignStock non definito`
     );
   }
 
-  // 7. ✅ Calcola quantità algebrica: line.quantity * operationSignStock
+  // 6. ✅ Calcola quantità algebrica: line.quantity * operationSignStock
   // IMPORTANTE: La quantità in StockMovement è algebrica:
   // - Positiva per carichi (es. +10 pezzi)
   // - Negativa per scarichi (es. -10 pezzi)
@@ -219,13 +217,13 @@ export async function processDocumentLineStock(
   const lineQuantity = toDecimal(line.quantity);
   const signedQuantity = lineQuantity.mul(config.operationSignStock);
 
-  // 8. ✅ Mappa tipo movimento dal codice documento e segno operazione
+  // 7. ✅ Mappa tipo movimento dal codice documento e segno operazione
   const movementType = mapDocumentTypeToMovementType(
     config.code,
     config.operationSignStock
   );
 
-  // 9. ✅ Crea record StockMovement
+  // 8. ✅ Crea record StockMovement
   // REGOLA: Ogni movimento è immutabile e tracciabile al documento origine
   const stockMovement = await tx.stockMovement.create({
     data: {

@@ -87,7 +87,7 @@ const navItems: NavItem[] = [
         icon: Warehouse,
       },
       {
-        title: 'Movimenti Magazzino',
+        title: 'Movimenti',
         href: '/stock-movements',
         icon: Activity,
       },
@@ -123,7 +123,7 @@ const navItems: NavItem[] = [
         icon: FileText,
       },
       {
-        title: 'Modalità di Pagamento',
+        title: 'Pagamenti',
         href: '/settings/payments',
         icon: CreditCard,
       },

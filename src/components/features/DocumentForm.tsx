@@ -411,6 +411,20 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
   }
 
   /**
+   * Helper per convertire Decimal o string in string
+   * Necessario per serializzazione Server Action (Zod trasformerà le stringhe in Decimal)
+   */
+  function toDecimalString(value: Decimal | string | unknown): string {
+    if (value instanceof Decimal) {
+      return value.toString();
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return '0';
+  }
+
+  /**
    * Handler submit form
    */
   async function onSubmit(data: CreateDocumentInput | UpdateDocumentInput) {
@@ -437,9 +451,11 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             productId: line.productId?.trim() || undefined,
             productCode: (line.productCode || '').trim(),
             description: (line.description || '').trim(),
-            unitPrice: line.unitPrice,
-            quantity: line.quantity,
-            vatRate: line.vatRate,
+            // ✅ Converti Decimal in stringhe per serializzazione Server Action
+            // Zod trasformerà le stringhe in Decimal durante la validazione
+            unitPrice: toDecimalString(line.unitPrice),
+            quantity: toDecimalString(line.quantity),
+            vatRate: toDecimalString(line.vatRate),
             warehouseId: line.warehouseId?.trim() || undefined,
           }));
         
@@ -450,7 +466,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           return;
         }
         
-        const updateData: UpdateDocumentInput = {
+        const updateData = {
           id: documentId,
           ...(entityIdValue !== undefined && { 
             entityId: entityIdValue?.trim() || undefined
@@ -460,10 +476,11 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             mainWarehouseId: mainWarehouseIdValue?.trim() || undefined
           }),
           // Le righe sono sempre obbligatorie in update
+          // Passiamo stringhe che Zod trasformerà in Decimal durante la validazione
           lines: validLines,
           ...(data.notes !== undefined && { notes: (data.notes as string)?.trim() || undefined }),
           ...(data.paymentTerms !== undefined && { paymentTerms: (data.paymentTerms as string)?.trim() || undefined }),
-        };
+        } as unknown as UpdateDocumentInput;
 
         // Valida manualmente i dati prima di inviare (doppia validazione)
         try {
@@ -495,10 +512,32 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         }
       } else {
         // Creazione nuovo documento
-        const submitData: CreateDocumentInput = {
-          ...data,
-          date: data.date,
-        } as CreateDocumentInput;
+        // ✅ Converti Decimal in stringhe per serializzazione Server Action
+        // Zod trasformerà le stringhe in Decimal durante la validazione
+        const createData = data as CreateDocumentInput;
+        const submitData = {
+          documentTypeId: createData.documentTypeId || '',
+          number: createData.number || undefined,
+          entityId: createData.entityId?.trim() || undefined,
+          date: createData.date,
+          // ✅ Converti stringa vuota in undefined per mainWarehouseId
+          mainWarehouseId: createData.mainWarehouseId?.trim() || undefined,
+          lines: (createData.lines || []).map(line => ({
+            productId: line.productId?.trim() || undefined,
+            productCode: (line.productCode || '').trim(),
+            description: (line.description || '').trim(),
+            // Converti Decimal in stringhe
+            unitPrice: toDecimalString(line.unitPrice),
+            quantity: toDecimalString(line.quantity),
+            vatRate: toDecimalString(line.vatRate),
+            warehouseId: line.warehouseId?.trim() || undefined,
+          })),
+          notes: createData.notes?.trim() || undefined,
+          paymentTerms: createData.paymentTerms?.trim() || undefined,
+          paymentConditionId: createData.paymentConditionId?.trim() || undefined,
+          codiceCIG: createData.codiceCIG?.trim() || undefined,
+          codiceCUP: createData.codiceCUP?.trim() || undefined,
+        } as unknown as CreateDocumentInput;
 
         const result = await createDocumentAction(submitData);
 
