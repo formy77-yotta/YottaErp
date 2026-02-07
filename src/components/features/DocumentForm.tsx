@@ -108,10 +108,17 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
   // Crea resolver dinamicamente basato su isEditing
   // NOTA: useMemo assicura che il resolver venga ricreato quando isEditing cambia
+  // In modifica, usiamo un resolver più permissivo che ignora i campi extra
   const resolver = useMemo(() => {
-    const schema = isEditing ? updateDocumentSchema : createDocumentSchema;
-    console.log('Creating resolver with schema:', isEditing ? 'updateDocumentSchema' : 'createDocumentSchema'); // Debug
-    return zodResolver(schema);
+    if (isEditing) {
+      // In modifica, crea uno schema che ignora i campi extra (documentTypeId, number)
+      const permissiveSchema = updateDocumentSchema.passthrough();
+      console.log('Creating resolver with updateDocumentSchema (permissive)'); // Debug
+      return zodResolver(permissiveSchema);
+    } else {
+      console.log('Creating resolver with createDocumentSchema'); // Debug
+      return zodResolver(createDocumentSchema);
+    }
   }, [isEditing]);
 
   // Setup form con validazione Zod (usa schema appropriato)
@@ -122,6 +129,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     shouldUnregister: true, // Rimuove campi non presenti nei valori quando vengono rimossi
     defaultValues: isEditing ? {
       // In modifica, solo campi presenti in UpdateDocumentInput
+      // NOTA: id viene aggiunto in onSubmit, non nei defaultValues
       entityId: '',
       date: new Date().toISOString().split('T')[0],
       mainWarehouseId: '',
@@ -227,6 +235,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           // Vengono determinati al momento della creazione/aggiornamento con logica a cascata
           // In modifica, lasciamo i campi vuoti e l'utente può selezionarli manualmente
           // IMPORTANTE: reset con keepDefaultValues: false per rimuovere campi non presenti nello schema
+          // NOTA: Non includiamo 'id' nel reset perché viene aggiunto manualmente in onSubmit
           form.reset({
             entityId: doc.entity?.id || '',
             date: new Date(doc.date).toISOString().split('T')[0],
@@ -399,6 +408,22 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         };
 
         console.log('Submitting update:', updateData); // Debug
+
+        // Valida manualmente i dati prima di inviare (doppia validazione)
+        try {
+          updateDocumentSchema.parse(updateData);
+        } catch (validationError) {
+          console.error('Validation error before submit:', validationError); // Debug
+          if (validationError && typeof validationError === 'object' && 'issues' in validationError) {
+            const zodError = validationError as { issues: Array<{ path: string[]; message: string }> };
+            const firstError = zodError.issues[0];
+            const errorMessage = `${firstError.path.join('.')}: ${firstError.message}`;
+            setError(errorMessage);
+            onError?.(errorMessage);
+            setIsLoading(false);
+            return;
+          }
+        }
 
         const result = await updateDocumentAction(updateData);
 

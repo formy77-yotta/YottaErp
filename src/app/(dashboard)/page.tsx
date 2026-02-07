@@ -13,7 +13,6 @@ import {
   FileText,
   Package,
   Warehouse,
-  TrendingUp,
   Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
