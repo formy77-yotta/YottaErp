@@ -10,7 +10,81 @@
  * - Se il campo è presente, DEVE essere valido (non accetta stringhe vuote)
  */
 
+import { z } from 'zod';
 import { validateItalianVAT, validateItalianFiscalCode } from '@/lib/validators';
+
+/**
+ * Schema Zod per validazione entità
+ * 
+ * REGOLE:
+ * - name (businessName): string, minimo 2 caratteri
+ * - entityType: enum ['CLIENT', 'SUPPLIER', 'BOTH']
+ * - vatNumber: string opzionale, regex 11 cifre
+ * - fiscalCode: string opzionale, regex 16 caratteri
+ * - address, city, zip, province: stringhe opzionali
+ */
+export const entitySchema = z.object({
+  name: z
+    .string()
+    .min(2, 'Il nome deve contenere almeno 2 caratteri')
+    .max(255, 'Il nome è troppo lungo'),
+  entityType: z.enum(['CLIENT', 'SUPPLIER', 'BOTH'], {
+    message: 'Tipo entità non valido. Deve essere CLIENT, SUPPLIER o BOTH',
+  }),
+  vatNumber: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true; // Opzionale
+        return /^\d{11}$/.test(val) && validateItalianVAT(val);
+      },
+      {
+        message: 'P.IVA deve contenere esattamente 11 cifre numeriche e passare il checksum',
+      }
+    ),
+  fiscalCode: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true; // Opzionale
+        return validateItalianFiscalCode(val);
+      },
+      {
+        message: 'Codice Fiscale non valido (16 caratteri per persona fisica o 11 cifre per società)',
+      }
+    ),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  zip: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true; // Opzionale
+        return /^\d{5}$/.test(val);
+      },
+      {
+        message: 'CAP deve contenere esattamente 5 cifre',
+      }
+    ),
+  province: z
+    .string()
+    .optional()
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true; // Opzionale
+        return /^[A-Z]{2}$/.test(val.toUpperCase());
+      },
+      {
+        message: 'Provincia deve essere 2 lettere maiuscole (es. MI, RM)',
+      }
+    )
+    .transform((val) => (val ? val.toUpperCase() : val)),
+});
+
+export type EntitySchemaInput = z.infer<typeof entitySchema>;
 
 /**
  * Valida una Partita IVA italiana

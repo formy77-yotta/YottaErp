@@ -13,6 +13,26 @@
 
 'use client';
 
+// #region agent log
+if (typeof window === 'undefined') {
+  fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'global-error.tsx:16',
+      message: 'GlobalError module loaded during SSR/build',
+      data: { isServer: true, timestamp: Date.now() },
+      timestamp: Date.now(),
+      runId: 'initial',
+      hypothesisId: 'A'
+    })
+  }).catch(() => {});
+}
+// #endregion
+
+// Nota: 'force-static' non esiste in Next.js 16 per client components
+// Usiamo invece un approccio completamente isolato
+
 export default function GlobalError({
   error,
   reset: _reset,
@@ -20,6 +40,23 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // #region agent log
+  if (typeof window === 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'global-error.tsx:25',
+        message: 'GlobalError component rendering during SSR/build',
+        data: { hasError: !!error, errorDigest: error?.digest, timestamp: Date.now() },
+        timestamp: Date.now(),
+        runId: 'initial',
+        hypothesisId: 'B'
+      })
+    }).catch(() => {});
+  }
+  // #endregion
+
   // Render completamente statico, senza hooks, senza context, senza nulla
   // Usa solo HTML puro e inline styles per evitare qualsiasi dipendenza
   return (
