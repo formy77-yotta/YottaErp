@@ -131,6 +131,8 @@ function ProductRow({ product }: { product: {
   price: string; // Decimal come stringa
   vatRateId: string | null;
   vatRate: { id: string; name: string; value: string } | null;
+  defaultWarehouseId: string | null;
+  defaultWarehouse: { id: string; code: string; name: string } | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;

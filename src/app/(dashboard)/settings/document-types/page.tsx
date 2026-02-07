@@ -101,6 +101,7 @@ async function DocumentTypesTable() {
                 <TableHead>Impatto Valutazione</TableHead>
                 <TableHead>Segno Magazzino</TableHead>
                 <TableHead>Segno Valorizzazione</TableHead>
+                <TableHead>Direzione</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -129,6 +130,7 @@ function DocumentTypeRow({ documentType }: { documentType: {
   valuationImpact: boolean;
   operationSignStock: number | null;
   operationSignValuation: number | null;
+  documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -183,6 +185,23 @@ function DocumentTypeRow({ documentType }: { documentType: {
         )}
       </TableCell>
       <TableCell>
+        {documentType.documentDirection === 'SALE' && (
+          <Badge variant="default" className="bg-blue-600">
+            Vendita
+          </Badge>
+        )}
+        {documentType.documentDirection === 'PURCHASE' && (
+          <Badge variant="default" className="bg-orange-600">
+            Acquisto
+          </Badge>
+        )}
+        {documentType.documentDirection === 'INTERNAL' && (
+          <Badge variant="default" className="bg-purple-600">
+            Interno
+          </Badge>
+        )}
+      </TableCell>
+      <TableCell>
         <Badge variant={documentType.active ? 'default' : 'secondary'}>
           {documentType.active ? 'Attiva' : 'Disattiva'}
         </Badge>
@@ -218,6 +237,7 @@ function DocumentTypesTableSkeleton() {
                 <TableHead>Impatto Valutazione</TableHead>
                 <TableHead>Segno Magazzino</TableHead>
                 <TableHead>Segno Valorizzazione</TableHead>
+                <TableHead>Direzione</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -245,6 +265,9 @@ function DocumentTypesTableSkeleton() {
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-12 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-16 bg-muted animate-pulse rounded" />

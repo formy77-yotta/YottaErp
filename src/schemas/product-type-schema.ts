@@ -20,6 +20,9 @@ export const createProductTypeSchema = z.object({
     .min(2, 'Descrizione deve contenere almeno 2 caratteri')
     .max(200, 'Descrizione troppo lunga'),
   manageStock: z.boolean().default(true),
+  visibleInPurchase: z.boolean().default(true),
+  visibleInSale: z.boolean().default(true),
+  visibleInInternal: z.boolean().default(true),
   active: z.boolean().default(true),
 });
 
@@ -42,6 +45,9 @@ export const updateProductTypeSchema = z.object({
     .max(200, 'Descrizione troppo lunga')
     .optional(),
   manageStock: z.boolean().optional(),
+  visibleInPurchase: z.boolean().optional(),
+  visibleInSale: z.boolean().optional(),
+  visibleInInternal: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 

@@ -43,6 +43,9 @@ export async function getProductTypesAction(): Promise<ActionResult<Array<{
   code: string;
   description: string;
   manageStock: boolean;
+  visibleInPurchase: boolean;
+  visibleInSale: boolean;
+  visibleInInternal: boolean;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -64,6 +67,9 @@ export async function getProductTypesAction(): Promise<ActionResult<Array<{
         code: true,
         description: true,
         manageStock: true,
+        visibleInPurchase: true,
+        visibleInSale: true,
+        visibleInInternal: true,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -142,6 +148,9 @@ export async function createProductTypeAction(
         code: normalizedCode,
         description: validatedData.description.trim(),
         manageStock: validatedData.manageStock,
+        visibleInPurchase: validatedData.visibleInPurchase,
+        visibleInSale: validatedData.visibleInSale,
+        visibleInInternal: validatedData.visibleInInternal,
         active: validatedData.active,
       },
     });
@@ -259,6 +268,9 @@ export async function updateProductTypeAction(
           description: validatedData.description.trim() 
         }),
         ...(validatedData.manageStock !== undefined && { manageStock: validatedData.manageStock }),
+        ...(validatedData.visibleInPurchase !== undefined && { visibleInPurchase: validatedData.visibleInPurchase }),
+        ...(validatedData.visibleInSale !== undefined && { visibleInSale: validatedData.visibleInSale }),
+        ...(validatedData.visibleInInternal !== undefined && { visibleInInternal: validatedData.visibleInInternal }),
         ...(validatedData.active !== undefined && { active: validatedData.active }),
       },
     });

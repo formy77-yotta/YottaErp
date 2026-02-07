@@ -53,6 +53,7 @@ type DocumentTypeConfigOutput = {
   valuationImpact: boolean;
   operationSignStock: number | null;
   operationSignValuation: number | null;
+  documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -87,6 +88,7 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
         valuationImpact: true,
         operationSignStock: true,
         operationSignValuation: true,
+        documentDirection: true,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -170,6 +172,7 @@ export async function createDocumentTypeAction(
         valuationImpact: validatedData.valuationImpact,
         operationSignStock: validatedData.inventoryMovement ? validatedData.operationSignStock : null,
         operationSignValuation: validatedData.valuationImpact ? validatedData.operationSignValuation : null,
+        documentDirection: validatedData.documentDirection,
         active: validatedData.active,
       },
     });
@@ -305,6 +308,9 @@ export async function updateDocumentTypeAction(
           operationSignValuation: validatedData.valuationImpact 
             ? validatedData.operationSignValuation ?? null
             : null
+        }),
+        ...(validatedData.documentDirection !== undefined && { 
+          documentDirection: validatedData.documentDirection 
         }),
         ...(validatedData.active !== undefined && { active: validatedData.active }),
       },
@@ -471,6 +477,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
       valuationImpact: boolean;
       operationSignStock: number | null;
       operationSignValuation: number | null;
+      documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
       active: boolean;
     }>;
 
@@ -484,6 +491,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: boolean;
         operationSignStock: number | null;
         operationSignValuation: number | null;
+        documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
         active: boolean;
       }>);
     } else {
@@ -509,6 +517,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
+        documentDirection: 'SALE' as const,
         active: true,
       },
       {
@@ -519,6 +528,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
+        documentDirection: 'SALE' as const,
         active: true,
       },
       {
@@ -529,6 +539,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: false,
         operationSignStock: -1, // Scarico magazzino
         operationSignValuation: null as number | null,
+        documentDirection: 'SALE' as const,
         active: true,
       },
       {
@@ -539,6 +550,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: true,
         operationSignStock: -1, // Scarico magazzino
         operationSignValuation: 1, // Incremento ricavi
+        documentDirection: 'SALE' as const,
         active: true,
       },
       {
@@ -549,6 +561,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: true,
         operationSignStock: null as number | null,
         operationSignValuation: 1, // Incremento ricavi
+        documentDirection: 'SALE' as const,
         active: true,
       },
       {
@@ -559,6 +572,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: true,
         operationSignStock: 1, // Carico magazzino (reso)
         operationSignValuation: -1, // Decremento ricavi
+        documentDirection: 'SALE' as const,
         active: true,
       },
       
@@ -573,6 +587,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
+        documentDirection: 'PURCHASE' as const,
         active: true,
       },
       {
@@ -583,6 +598,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: false,
         operationSignStock: 1, // Carico magazzino
         operationSignValuation: null as number | null,
+        documentDirection: 'PURCHASE' as const,
         active: true,
       },
       {
@@ -593,6 +609,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: true,
         operationSignStock: 1, // Carico magazzino (se non già fatto da CAF)
         operationSignValuation: 1, // Incremento costi
+        documentDirection: 'PURCHASE' as const,
         active: true,
       },
       {
@@ -603,6 +620,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         valuationImpact: true,
         operationSignStock: -1, // Scarico magazzino (reso)
         operationSignValuation: -1, // Decremento costi
+        documentDirection: 'PURCHASE' as const,
         active: true,
       },
     ];
@@ -628,6 +646,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
           valuationImpact: type.valuationImpact,
           operationSignStock: type.operationSignStock,
           operationSignValuation: type.operationSignValuation,
+          documentDirection: type.documentDirection,
           active: type.active,
         },
         create: {
@@ -639,6 +658,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
           valuationImpact: type.valuationImpact,
           operationSignStock: type.operationSignStock,
           operationSignValuation: type.operationSignValuation,
+          documentDirection: type.documentDirection,
           active: type.active,
         },
       });

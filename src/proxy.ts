@@ -61,11 +61,11 @@ function isSuperAdmin(request: NextRequest): { isAdmin: boolean; userId?: string
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // ===== PROTEZIONE ROUTE ORGANIZATIONS (SUPER ADMIN ONLY) =====
+  // ===== PROTEZIONE ROUTE ADMIN (SUPER ADMIN ONLY) =====
   // NOTA: La verifica completa avviene nel layout (admin)/layout.tsx che legge dal database
   // Questo è solo un controllo leggero per performance (opzionale)
   // Se SUPER_ADMIN_IDS non è configurato, il layout gestirà la verifica completa
-  if (pathname.startsWith('/organizations')) {
+  if (pathname.startsWith('/admin')) {
     // Se SUPER_ADMIN_IDS è configurato, fai un controllo leggero
     if (SUPER_ADMIN_IDS.length > 0) {
       const { isAdmin } = isSuperAdmin(request);
@@ -84,8 +84,13 @@ export async function proxy(request: NextRequest) {
   }
   
   // ===== PROTEZIONE ROUTE STANDARD (AUTENTICAZIONE BASE) =====
-  // Esempio: Proteggi tutte le route tranne public
+  // Esempio: Proteggi tutte le route tranne public e admin (già protette sopra)
   const publicRoutes = ['/', '/login', '/register', '/access-denied'];
+  
+  // Skip controllo autenticazione base per route admin (già protette sopra)
+  if (pathname.startsWith('/admin')) {
+    return NextResponse.next();
+  }
   
   if (!publicRoutes.some(route => pathname === route || pathname.startsWith('/api/public'))) {
     const userId = request.cookies.get('userId')?.value;

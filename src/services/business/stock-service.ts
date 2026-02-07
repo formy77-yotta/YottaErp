@@ -98,35 +98,41 @@ function mapDocumentTypeToMovementType(
  * - Crea solo nuovi record in StockMovement
  * - La giacenza viene calcolata dinamicamente sommando tutti i movimenti
  * 
+ * LOGICA MAGAZZINO PER RIGA:
+ * - Se la riga ha un warehouseId specifico, usa quello
+ * - Se la riga NON ha warehouseId, usa il mainWarehouseId del documento (default)
+ * - Se anche il documento non ha mainWarehouseId, non crea movimento (errore logico)
+ * 
  * FLUSSO:
- * 1. Verifica se il tipo documento movimenta magazzino (inventoryMovement)
- * 2. Verifica se il prodotto gestisce magazzino (product.type.manageStock)
- * 3. Calcola quantità algebrica: line.quantity * config.operationSignStock
- * 4. Crea record StockMovement con tracciabilità documento
+ * 1. Determina warehouseId: line.warehouseId ?? document.mainWarehouseId
+ * 2. Verifica se il tipo documento movimenta magazzino (inventoryMovement)
+ * 3. Verifica se il prodotto gestisce magazzino (product.type.manageStock)
+ * 4. Calcola quantità algebrica: line.quantity * config.operationSignStock
+ * 5. Crea record StockMovement con tracciabilità documento
  * 
  * @param tx - Prisma Client transazione (deve essere eseguito dentro una transazione)
- * @param line - Riga documento da processare
+ * @param line - Riga documento da processare (deve includere warehouseId opzionale)
  * @param config - Configurazione tipo documento
- * @param warehouseId - ID magazzino
+ * @param documentMainWarehouseId - ID magazzino predefinito del documento (opzionale)
  * @param documentId - ID documento origine (per tracciabilità)
  * @param documentNumber - Numero documento (per ricerca)
  * @param organizationId - ID organizzazione (MULTITENANT)
  * @returns StockMovement creato, o null se non necessario
  * 
  * @throws {Error} Se productId non valido o prodotto non trovato
- * @throws {Error} Se warehouseId non valido
+ * @throws {Error} Se warehouseId non determinabile (né riga né documento)
  * 
  * @example
  * ```typescript
  * await prisma.$transaction(async (tx) => {
- *   const document = await tx.document.create({ data: ... });
+ *   const document = await tx.document.create({ data: { mainWarehouseId: '...', ... } });
  *   
  *   for (const line of document.lines) {
  *     await processDocumentLineStock(
  *       tx,
  *       line,
  *       documentTypeConfig,
- *       warehouseId,
+ *       document.mainWarehouseId, // Default per tutte le righe
  *       document.id,
  *       document.number,
  *       organizationId
@@ -137,26 +143,50 @@ function mapDocumentTypeToMovementType(
  */
 export async function processDocumentLineStock(
   tx: PrismaClient,
-  line: DocumentLine,
+  line: DocumentLine & { warehouseId?: string | null },
   config: DocumentTypeConfig,
-  warehouseId: string,
+  documentMainWarehouseId: string | null | undefined,
   documentId: string,
   documentNumber: string,
   organizationId: string
 ): Promise<{ id: string; quantity: Decimal } | null> {
-  // 1. ✅ Verifica se il tipo documento movimenta magazzino
+  // 1. ✅ Determina warehouseId con logica a cascata:
+  //    Priorità 1: warehouseId della riga (se specificato)
+  //    Priorità 2: defaultWarehouseId del prodotto (se presente)
+  //    Priorità 3: mainWarehouseId del documento (fallback)
+  
+  // Prima recupera il prodotto per ottenere defaultWarehouseId
+  let productDefaultWarehouseId: string | null = null;
+  if (line.productId) {
+    const product = await tx.product.findUnique({
+      where: { id: line.productId },
+      select: { defaultWarehouseId: true },
+    });
+    productDefaultWarehouseId = product?.defaultWarehouseId || null;
+  }
+  
+  // Determina warehouseId finale con priorità
+  const warehouseId = line.warehouseId || productDefaultWarehouseId || documentMainWarehouseId;
+  
+  if (!warehouseId) {
+    // Nessun magazzino specificato (né riga, né prodotto, né documento)
+    // Non creiamo movimento (potrebbe essere un documento senza movimentazione magazzino)
+    return null;
+  }
+
+  // 2. ✅ Verifica se il tipo documento movimenta magazzino
   if (!config.inventoryMovement) {
     // Tipo documento non movimenta magazzino (es. Preventivo, Ordine non confermato)
     return null;
   }
 
-  // 2. ✅ Verifica se la riga ha un prodotto associato
+  // 3. ✅ Verifica se la riga ha un prodotto associato
   if (!line.productId) {
     // Riga senza prodotto (es. descrizione libera) → nessun movimento
     return null;
   }
 
-  // 3. ✅ Recupera prodotto con tipologia per verificare manageStock
+  // 4. ✅ Recupera prodotto con tipologia per verificare manageStock
   const product = await tx.product.findUnique({
     where: { id: line.productId },
     include: { type: true },
@@ -166,20 +196,20 @@ export async function processDocumentLineStock(
     throw new Error(`Prodotto con ID ${line.productId} non trovato`);
   }
 
-  // 4. ✅ Verifica se il prodotto gestisce magazzino
+  // 5. ✅ Verifica se il prodotto gestisce magazzino
   if (!product.type?.manageStock) {
     // Prodotto non gestito a magazzino (es. servizio) → nessun movimento
     return null;
   }
 
-  // 5. ✅ Verifica che operationSignStock sia definito (dovrebbe essere sempre se inventoryMovement = true)
+  // 6. ✅ Verifica che operationSignStock sia definito (dovrebbe essere sempre se inventoryMovement = true)
   if (config.operationSignStock === null || config.operationSignStock === undefined) {
     throw new Error(
       `Tipo documento ${config.code} ha inventoryMovement=true ma operationSignStock non definito`
     );
   }
 
-  // 6. ✅ Calcola quantità algebrica: line.quantity * operationSignStock
+  // 7. ✅ Calcola quantità algebrica: line.quantity * operationSignStock
   // IMPORTANTE: La quantità in StockMovement è algebrica:
   // - Positiva per carichi (es. +10 pezzi)
   // - Negativa per scarichi (es. -10 pezzi)
@@ -189,13 +219,13 @@ export async function processDocumentLineStock(
   const lineQuantity = toDecimal(line.quantity);
   const signedQuantity = lineQuantity.mul(config.operationSignStock);
 
-  // 7. ✅ Mappa tipo movimento dal codice documento e segno operazione
+  // 8. ✅ Mappa tipo movimento dal codice documento e segno operazione
   const movementType = mapDocumentTypeToMovementType(
     config.code,
     config.operationSignStock
   );
 
-  // 8. ✅ Crea record StockMovement
+  // 9. ✅ Crea record StockMovement
   // REGOLA: Ogni movimento è immutabile e tracciabile al documento origine
   const stockMovement = await tx.stockMovement.create({
     data: {

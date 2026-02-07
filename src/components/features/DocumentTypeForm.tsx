@@ -59,6 +59,7 @@ interface DocumentTypeFormProps {
     valuationImpact: boolean;
     operationSignStock: number | null;
     operationSignValuation: number | null;
+    documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
     active: boolean;
   };
   
@@ -94,6 +95,7 @@ export function DocumentTypeForm({
       valuationImpact: false,
       operationSignStock: null,
       operationSignValuation: null,
+      documentDirection: 'SALE' as const,
       active: true,
       ...(isEditing && documentType ? { id: documentType.id } : {}),
     },
@@ -110,6 +112,7 @@ export function DocumentTypeForm({
         valuationImpact: documentType.valuationImpact,
         operationSignStock: documentType.operationSignStock,
         operationSignValuation: documentType.operationSignValuation,
+        documentDirection: documentType.documentDirection,
         active: documentType.active,
         ...(isEditing ? { id: documentType.id } : {}),
       }, { keepDefaultValues: false });
@@ -379,6 +382,37 @@ export function DocumentTypeForm({
               </FormItem>
             );
           }}
+        />
+
+        {/* Direzione Documento */}
+        <FormField
+          control={form.control}
+          name="documentDirection"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Direzione Documento *</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={isLoading}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona direzione documento" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="SALE">Vendita (a cliente)</SelectItem>
+                  <SelectItem value="PURCHASE">Acquisto (da fornitore)</SelectItem>
+                  <SelectItem value="INTERNAL">Interno (trasferimenti, rettifiche)</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Determina il tipo di operazione del documento e quali prodotti sono visibili
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
         />
 
         {/* Attivo */}

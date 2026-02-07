@@ -47,6 +47,7 @@ export const createDocumentTypeSchema = z.object({
     .refine((val) => val === 1 || val === -1, 'Segno operazione valorizzazione deve essere 1 o -1')
     .nullable()
     .optional(),
+  documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).default('SALE'),
   active: z.boolean().default(true),
 }).refine(
   (data) => {
@@ -119,6 +120,7 @@ export const updateDocumentTypeSchema = z.object({
     .refine((val) => val === 1 || val === -1, 'Segno operazione valorizzazione deve essere 1 o -1')
     .nullable()
     .optional(),
+  documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).optional(),
   active: z.boolean().optional(),
 }).refine(
   (data) => {

@@ -23,6 +23,9 @@ interface EditProductTypeDialogProps {
     code: string;
     description: string;
     manageStock: boolean;
+    visibleInPurchase: boolean;
+    visibleInSale: boolean;
+    visibleInInternal: boolean;
     active: boolean;
   };
 }

@@ -52,6 +52,7 @@ async function main() {
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
+        documentDirection: 'SALE' as const,
         active: true,
         // category: QUOTE (quando si crea Document)
       },
@@ -63,6 +64,7 @@ async function main() {
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
+        documentDirection: 'SALE' as const,
         active: true,
         // category: ORDER (quando si crea Document)
       },
@@ -74,6 +76,7 @@ async function main() {
         valuationImpact: false,
         operationSignStock: -1, // Scarico magazzino
         operationSignValuation: null as number | null,
+        documentDirection: 'SALE' as const,
         active: true,
         // category: DELIVERY_NOTE (quando si crea Document)
       },
@@ -85,6 +88,7 @@ async function main() {
         valuationImpact: true,
         operationSignStock: -1, // Scarico magazzino
         operationSignValuation: 1, // Incremento ricavi
+        documentDirection: 'SALE' as const,
         active: true,
         // category: INVOICE (quando si crea Document)
       },
@@ -96,6 +100,7 @@ async function main() {
         valuationImpact: true,
         operationSignStock: null as number | null,
         operationSignValuation: 1, // Incremento ricavi
+        documentDirection: 'SALE' as const,
         active: true,
         // category: INVOICE (quando si crea Document)
       },
@@ -107,6 +112,7 @@ async function main() {
         valuationImpact: true,
         operationSignStock: 1, // Carico magazzino (reso)
         operationSignValuation: -1, // Decremento ricavi
+        documentDirection: 'SALE' as const,
         active: true,
         // category: CREDIT_NOTE (quando si crea Document)
       },
@@ -122,6 +128,7 @@ async function main() {
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
+        documentDirection: 'PURCHASE' as const,
         active: true,
         // category: ORDER (quando si crea Document)
       },
@@ -133,6 +140,7 @@ async function main() {
         valuationImpact: false,
         operationSignStock: 1, // Carico magazzino
         operationSignValuation: null as number | null,
+        documentDirection: 'PURCHASE' as const,
         active: true,
         // category: DELIVERY_NOTE (quando si crea Document)
       },
@@ -144,6 +152,7 @@ async function main() {
         valuationImpact: true,
         operationSignStock: 1, // Carico magazzino (se non già fatto da CAF)
         operationSignValuation: 1, // Incremento costi
+        documentDirection: 'PURCHASE' as const,
         active: true,
         // category: INVOICE (quando si crea Document)
       },
@@ -155,6 +164,7 @@ async function main() {
         valuationImpact: true,
         operationSignStock: -1, // Scarico magazzino (reso)
         operationSignValuation: -1, // Decremento costi
+        documentDirection: 'PURCHASE' as const,
         active: true,
         // category: CREDIT_NOTE (quando si crea Document)
       },

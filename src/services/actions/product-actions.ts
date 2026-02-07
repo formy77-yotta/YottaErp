@@ -21,7 +21,7 @@
 import { revalidatePath } from 'next/cache';
 import { Decimal } from 'decimal.js';
 import { prisma } from '@/lib/prisma';
-import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError } from '@/lib/auth';
+import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError, UnauthorizedError } from '@/lib/auth';
 import { 
   createProductSchema, 
   updateProductSchema,
@@ -60,6 +60,8 @@ export async function getProductsAction(filters?: {
   price: string; // Decimal come stringa per il frontend
   vatRateId: string | null;
   vatRate: { id: string; name: string; value: string } | null;
+  defaultWarehouseId: string | null;
+  defaultWarehouse: { id: string; code: string; name: string } | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -96,7 +98,19 @@ export async function getProductsAction(filters?: {
       orderBy: [
         { code: 'asc' }, // Ordina per codice
       ],
-      include: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        categoryId: true,
+        typeId: true,
+        price: true, // Decimal dal DB
+        vatRateId: true,
+        defaultWarehouseId: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
         category: {
           select: {
             id: true,
@@ -119,19 +133,13 @@ export async function getProductsAction(filters?: {
             value: true,
           },
         },
-      },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        description: true,
-        categoryId: true,
-        typeId: true,
-        price: true, // Decimal dal DB
-        vatRateId: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
+        defaultWarehouse: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -155,16 +163,26 @@ export async function getProductsAction(filters?: {
   } catch (error) {
     console.error('Errore recupero prodotti:', error);
 
-    if (error instanceof ForbiddenError) {
+    // Gestione errori di autenticazione/autorizzazione
+    if (error instanceof ForbiddenError || error instanceof UnauthorizedError) {
       return {
         success: false,
         error: error.message,
       };
     }
 
+    // Gestione errori generici con messaggio più dettagliato
+    if (error instanceof Error) {
+      console.error('Dettagli errore:', error.message, error.stack);
+      return {
+        success: false,
+        error: `Errore durante il recupero dei prodotti: ${error.message}`,
+      };
+    }
+
     return {
       success: false,
-      error: 'Errore durante il recupero dei prodotti',
+      error: 'Errore sconosciuto durante il recupero dei prodotti',
     };
   }
 }
@@ -191,6 +209,8 @@ export async function getProductAction(
   price: string; // Decimal come stringa
   vatRateId: string | null;
   vatRate: { id: string; name: string; value: string } | null;
+  defaultWarehouseId: string | null;
+  defaultWarehouse: { id: string; code: string; name: string } | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -202,7 +222,20 @@ export async function getProductAction(
     // 2. Recupera prodotto con classificazioni
     const product = await prisma.product.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        categoryId: true,
+        typeId: true,
+        price: true,
+        vatRateId: true,
+        defaultWarehouseId: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+        organizationId: true, // Per verifica multitenant
         category: {
           select: {
             id: true,
@@ -225,20 +258,13 @@ export async function getProductAction(
             value: true,
           },
         },
-      },
-      select: {
-        id: true,
-        code: true,
-        name: true,
-        description: true,
-        categoryId: true,
-        typeId: true,
-        price: true,
-        vatRateId: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-        organizationId: true, // Per verifica multitenant
+        defaultWarehouse: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -272,16 +298,26 @@ export async function getProductAction(
   } catch (error) {
     console.error('Errore recupero prodotto:', error);
 
-    if (error instanceof ForbiddenError) {
+    // Gestione errori di autenticazione/autorizzazione
+    if (error instanceof ForbiddenError || error instanceof UnauthorizedError) {
       return {
         success: false,
         error: error.message,
       };
     }
 
+    // Gestione errori generici con messaggio più dettagliato
+    if (error instanceof Error) {
+      console.error('Dettagli errore:', error.message, error.stack);
+      return {
+        success: false,
+        error: `Errore durante il recupero del prodotto: ${error.message}`,
+      };
+    }
+
     return {
       success: false,
-      error: 'Errore durante il recupero del prodotto',
+      error: 'Errore sconosciuto durante il recupero del prodotto',
     };
   }
 }
@@ -401,10 +437,32 @@ export async function createProductAction(
       }
     }
 
-    // 9. ✅ Converti prezzo a Decimal (MAI number!)
+    // 10. Verifica che magazzino predefinito appartenga all'organizzazione (se presente)
+    if (validatedData.defaultWarehouseId) {
+      const warehouse = await prisma.warehouse.findUnique({
+        where: { id: validatedData.defaultWarehouseId },
+        select: { organizationId: true },
+      });
+
+      if (!warehouse) {
+        return {
+          success: false,
+          error: 'Magazzino non trovato',
+        };
+      }
+
+      if (warehouse.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Magazzino non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    // 11. ✅ Converti prezzo a Decimal (MAI number!)
     const priceDecimal = new Decimal(validatedData.price);
 
-    // 10. ✅ Creazione prodotto con organizationId
+    // 12. ✅ Creazione prodotto con organizationId
     const product = await prisma.product.create({
       data: {
         organizationId: ctx.organizationId, // ✅ Associa automaticamente all'organizzazione
@@ -415,11 +473,12 @@ export async function createProductAction(
         typeId: validatedData.typeId || null,
         price: priceDecimal, // ✅ Decimal, non number!
         vatRateId: validatedData.vatRateId || null,
+        defaultWarehouseId: validatedData.defaultWarehouseId || null,
         active: validatedData.active,
       },
     });
 
-    // 11. Revalidazione cache Next.js
+    // 12. Revalidazione cache Next.js
     revalidatePath('/products');
 
     return {
@@ -596,6 +655,7 @@ export async function updateProductAction(
       typeId?: string | null;
       price?: Decimal;
       vatRateId?: string | null;
+      defaultWarehouseId?: string | null;
       active?: boolean;
     } = {};
 
@@ -626,6 +686,10 @@ export async function updateProductAction(
 
     if (validatedData.vatRateId !== undefined) {
       updateData.vatRateId = validatedData.vatRateId || null;
+    }
+
+    if (validatedData.defaultWarehouseId !== undefined) {
+      updateData.defaultWarehouseId = validatedData.defaultWarehouseId || null;
     }
 
     if (validatedData.active !== undefined) {

@@ -26,6 +26,7 @@ import {
 import { getProductCategoriesAction } from '@/services/actions/product-category-actions';
 import { getProductTypesAction } from '@/services/actions/product-type-actions';
 import { getVatRatesAction } from '@/services/actions/vat-actions';
+import { getWarehousesAction } from '@/services/actions/warehouse-actions';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -87,6 +88,7 @@ export function ProductForm({
   const [categories, setCategories] = useState<Array<{ id: string; code: string; description: string }>>([]);
   const [types, setTypes] = useState<Array<{ id: string; code: string; description: string; manageStock: boolean }>>([]);
   const [vatRates, setVatRates] = useState<Array<{ id: string; name: string; value: string }>>([]);
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [loadingData, setLoadingData] = useState(true);
   const isEditing = !!product;
 
@@ -101,6 +103,7 @@ export function ProductForm({
       typeId: '',
       price: '',
       vatRateId: '',
+      defaultWarehouseId: '',
       active: true,
       ...(isEditing && product ? { id: product.id } : {}),
     },
@@ -128,6 +131,12 @@ export function ProductForm({
         if (vatRatesResult.success) {
           setVatRates(vatRatesResult.data.filter(v => v.active));
         }
+
+        // Carica magazzini
+        const warehousesResult = await getWarehousesAction();
+        if (warehousesResult.success) {
+          setWarehouses(warehousesResult.data);
+        }
       } catch (error) {
         console.error('Errore caricamento classificazioni:', error);
       } finally {
@@ -149,6 +158,7 @@ export function ProductForm({
         typeId: product.typeId || '',
         price: product.price,
         vatRateId: product.vatRateId || '',
+        defaultWarehouseId: (product as any).defaultWarehouseId || '',
         active: product.active,
         ...(isEditing ? { id: product.id } : {}),
       }, { keepDefaultValues: false });
@@ -162,6 +172,7 @@ export function ProductForm({
         typeId: '',
         price: '',
         vatRateId: '',
+        defaultWarehouseId: '',
         active: true,
       }, { keepDefaultValues: false });
     }
@@ -425,6 +436,42 @@ export function ProductForm({
             )}
           />
         </div>
+
+        {/* Magazzino Predefinito */}
+        <FormField
+          control={form.control}
+          name="defaultWarehouseId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Magazzino Predefinito</FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}
+                value={field.value || 'none'}
+                disabled={isLoading}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona magazzino predefinito" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="none">Nessun magazzino predefinito</SelectItem>
+                  {warehouses.map((warehouse) => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {warehouse.code} - {warehouse.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Magazzino predefinito per questo prodotto. Quando si crea un documento,
+                se la riga non ha un magazzino specifico, viene usato questo magazzino
+                (priorità sul magazzino predefinito del documento).
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         {/* Attivo */}
         <FormField

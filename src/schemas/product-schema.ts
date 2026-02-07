@@ -76,6 +76,10 @@ export const createProductSchema = z.object({
   // IVA predefinita (opzionale)
   vatRateId: z.string().cuid().optional().or(z.literal('')),
 
+  // Magazzino predefinito (opzionale)
+  // Se specificato, viene usato quando si crea un documento (priorità sul magazzino documento)
+  defaultWarehouseId: z.string().cuid().optional().or(z.literal('')),
+
   // Metadata
   active: z.boolean().default(true),
 });
@@ -121,6 +125,9 @@ export const updateProductSchema = z.object({
 
   // IVA predefinita (opzionale)
   vatRateId: z.string().cuid().optional().or(z.literal('')).optional(),
+
+  // Magazzino predefinito (opzionale)
+  defaultWarehouseId: z.string().cuid().optional().or(z.literal('')).optional(),
 
   // Metadata
   active: z.boolean().optional(),

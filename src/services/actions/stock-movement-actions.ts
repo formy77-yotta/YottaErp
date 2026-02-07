@@ -163,21 +163,37 @@ export async function getStockMovementsAction(
             description: true,
           },
         },
-        document: {
+      },
+    });
+
+    // 4. Recupera documenti collegati (se documentId presente)
+    const documentIds = movements
+      .map((m) => m.documentId)
+      .filter((id): id is string => id !== null);
+    
+    const documents = documentIds.length > 0
+      ? await prisma.document.findMany({
+          where: {
+            id: { in: documentIds },
+            organizationId: ctx.organizationId,
+          },
           select: {
             id: true,
             number: true,
             date: true,
             category: true,
           },
-        },
-      },
-    });
+        })
+      : [];
 
-    // 4. Converti Decimal a stringa per il frontend
+    // 5. Crea mappa documentId -> document per lookup veloce
+    const documentMap = new Map(documents.map((doc) => [doc.id, doc]));
+
+    // 6. Converti Decimal a stringa e aggiungi documento (se presente)
     const movementsWithStringQuantity = movements.map((movement) => ({
       ...movement,
       quantity: movement.quantity.toString(),
+      document: movement.documentId ? documentMap.get(movement.documentId) || null : null,
     }));
 
     return {

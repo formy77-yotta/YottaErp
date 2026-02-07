@@ -42,6 +42,9 @@ interface ProductTypeFormProps {
     code: string;
     description: string;
     manageStock: boolean;
+    visibleInPurchase: boolean;
+    visibleInSale: boolean;
+    visibleInInternal: boolean;
     active: boolean;
   };
   
@@ -74,6 +77,9 @@ export function ProductTypeForm({
       code: '',
       description: '',
       manageStock: true,
+      visibleInPurchase: true,
+      visibleInSale: true,
+      visibleInInternal: true,
       active: true,
       ...(isEditing && type ? { id: type.id } : {}),
     },
@@ -86,6 +92,9 @@ export function ProductTypeForm({
         code: type.code,
         description: type.description,
         manageStock: type.manageStock,
+        visibleInPurchase: type.visibleInPurchase,
+        visibleInSale: type.visibleInSale,
+        visibleInInternal: type.visibleInInternal,
         active: type.active,
         ...(isEditing ? { id: type.id } : {}),
       }, { keepDefaultValues: false });
@@ -116,6 +125,9 @@ export function ProductTypeForm({
           code: data.code,
           description: data.description,
           manageStock: data.manageStock,
+          visibleInPurchase: data.visibleInPurchase,
+          visibleInSale: data.visibleInSale,
+          visibleInInternal: data.visibleInInternal,
           active: data.active,
         };
         
@@ -126,6 +138,9 @@ export function ProductTypeForm({
           code: data.code,
           description: data.description,
           manageStock: data.manageStock,
+          visibleInPurchase: data.visibleInPurchase,
+          visibleInSale: data.visibleInSale,
+          visibleInInternal: data.visibleInInternal,
           active: data.active,
         };
         
@@ -252,6 +267,78 @@ export function ProductTypeForm({
               </FormItem>
             )}
           />
+        </div>
+
+        {/* Flag Visibilità per Tipo Documento */}
+        <div className="space-y-4">
+          <div className="text-sm font-medium">Visibilità in Documenti</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Visibile in Acquisto */}
+            <FormField
+              control={form.control}
+              name="visibleInPurchase"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Visibile in Acquisto</FormLabel>
+                    <FormDescription>
+                      Prodotti visibili in documenti di acquisto
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* Visibile in Vendita */}
+            <FormField
+              control={form.control}
+              name="visibleInSale"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Visibile in Vendita</FormLabel>
+                    <FormDescription>
+                      Prodotti visibili in documenti di vendita
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* Visibile in Interno */}
+            <FormField
+              control={form.control}
+              name="visibleInInternal"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-base">Visibile in Interno</FormLabel>
+                    <FormDescription>
+                      Prodotti visibili in documenti interni
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
         </div>
 
         {/* Pulsanti Azione */}

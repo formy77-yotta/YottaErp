@@ -15,7 +15,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { Decimal } from 'decimal.js';
 import type { ActionResult } from '@/types/action-result';
-import { ForbiddenError } from '@/lib/errors';
+import { ForbiddenError } from '@/lib/auth';
 
 // ============================================================================
 // UTILITY - VERIFICA SUPER ADMIN
@@ -395,6 +395,376 @@ export async function deleteStandardConfigAction(
     return {
       success: false,
       error: 'Errore durante l\'eliminazione della configurazione standard',
+    };
+  }
+}
+
+/**
+ * Inizializza tutte le configurazioni standard con i dati predefiniti (Super Admin)
+ * 
+ * PERMESSI: Solo Super Admin
+ * 
+ * Crea le configurazioni standard per:
+ * - Aliquote IVA standard italiane
+ * - Unità di misura standard italiane
+ * - Tipi documento standard
+ * 
+ * @returns Numero di configurazioni create
+ */
+export async function initializeStandardConfigsAction(): Promise<ActionResult<{ count: number }>> {
+  try {
+    // 1. Verifica Super Admin
+    if (!(await isSuperAdmin())) {
+      return {
+        success: false,
+        error: 'Accesso negato. Solo Super Admin può inizializzare configurazioni standard.',
+      };
+    }
+
+    let createdCount = 0;
+
+    // 2. Inizializza Aliquote IVA
+    const vatRatesExists = await prisma.standardConfig.findFirst({
+      where: { type: 'VAT_RATES', active: true },
+    });
+
+    if (!vatRatesExists) {
+      const vatRatesData: VatRateConfig[] = [
+        {
+          name: 'Standard 22%',
+          value: '0.2200',
+          nature: null,
+          description: 'Aliquota IVA standard italiana',
+          isDefault: true,
+          active: true,
+        },
+        {
+          name: 'Ridotta 10%',
+          value: '0.1000',
+          nature: null,
+          description: 'Aliquota IVA ridotta',
+          isDefault: false,
+          active: true,
+        },
+        {
+          name: 'Ridotta 5%',
+          value: '0.0500',
+          nature: null,
+          description: 'Aliquota IVA ridotta',
+          isDefault: false,
+          active: true,
+        },
+        {
+          name: 'Super Ridotta 4%',
+          value: '0.0400',
+          nature: null,
+          description: 'Aliquota IVA super ridotta',
+          isDefault: false,
+          active: true,
+        },
+        {
+          name: 'Esente',
+          value: '0.0000',
+          nature: 'N4',
+          description: 'Operazione esente IVA',
+          isDefault: false,
+          active: true,
+        },
+      ];
+
+      await prisma.standardConfig.create({
+        data: {
+          type: 'VAT_RATES',
+          data: vatRatesData,
+          version: 1,
+          description: 'Aliquote IVA standard italiane',
+          active: true,
+        },
+      });
+      createdCount++;
+    }
+
+    // 3. Inizializza Unità di Misura
+    const unitsExists = await prisma.standardConfig.findFirst({
+      where: { type: 'UNITS_OF_MEASURE', active: true },
+    });
+
+    if (!unitsExists) {
+      const unitsData: UnitOfMeasureConfig[] = [
+        // PESO (WEIGHT) - Base: Grammi (G)
+        {
+          code: 'G',
+          name: 'Grammi',
+          measureClass: 'WEIGHT',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        {
+          code: 'KG',
+          name: 'Chilogrammi',
+          measureClass: 'WEIGHT',
+          baseFactor: '1000.000000',
+          active: true,
+        },
+        {
+          code: 'T',
+          name: 'Tonnellate',
+          measureClass: 'WEIGHT',
+          baseFactor: '1000000.000000',
+          active: true,
+        },
+        {
+          code: 'MG',
+          name: 'Milligrammi',
+          measureClass: 'WEIGHT',
+          baseFactor: '0.001000',
+          active: true,
+        },
+        // LUNGHEZZA (LENGTH) - Base: Millimetri (MM)
+        {
+          code: 'MM',
+          name: 'Millimetri',
+          measureClass: 'LENGTH',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        {
+          code: 'CM',
+          name: 'Centimetri',
+          measureClass: 'LENGTH',
+          baseFactor: '10.000000',
+          active: true,
+        },
+        {
+          code: 'M',
+          name: 'Metri',
+          measureClass: 'LENGTH',
+          baseFactor: '1000.000000',
+          active: true,
+        },
+        {
+          code: 'KM',
+          name: 'Chilometri',
+          measureClass: 'LENGTH',
+          baseFactor: '1000000.000000',
+          active: true,
+        },
+        // VOLUME (VOLUME) - Base: Millilitri (ML)
+        {
+          code: 'ML',
+          name: 'Millilitri',
+          measureClass: 'VOLUME',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        {
+          code: 'L',
+          name: 'Litri',
+          measureClass: 'VOLUME',
+          baseFactor: '1000.000000',
+          active: true,
+        },
+        {
+          code: 'M3',
+          name: 'Metri cubi',
+          measureClass: 'VOLUME',
+          baseFactor: '1000000.000000',
+          active: true,
+        },
+        // PEZZI (PIECE) - Base: Pezzi (PZ)
+        {
+          code: 'PZ',
+          name: 'Pezzi',
+          measureClass: 'PIECE',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        {
+          code: 'CT',
+          name: 'Cartoni',
+          measureClass: 'PIECE',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        {
+          code: 'SC',
+          name: 'Scatole',
+          measureClass: 'PIECE',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        // SUPERFICIE (AREA) - Base: Metri quadri (M2)
+        {
+          code: 'M2',
+          name: 'Metri quadri',
+          measureClass: 'AREA',
+          baseFactor: '1.000000',
+          active: true,
+        },
+        {
+          code: 'HA',
+          name: 'Ettari',
+          measureClass: 'AREA',
+          baseFactor: '10000.000000',
+          active: true,
+        },
+      ];
+
+      await prisma.standardConfig.create({
+        data: {
+          type: 'UNITS_OF_MEASURE',
+          data: unitsData,
+          version: 1,
+          description: 'Unità di misura standard italiane',
+          active: true,
+        },
+      });
+      createdCount++;
+    }
+
+    // 4. Inizializza Tipi Documento
+    const docTypesExists = await prisma.standardConfig.findFirst({
+      where: { type: 'DOCUMENT_TYPES', active: true },
+    });
+
+    if (!docTypesExists) {
+      const docTypesData: DocumentTypeConfig[] = [
+        // CICLO ATTIVO (VENDITA)
+        {
+          code: 'PRO',
+          description: 'Preventivo',
+          numeratorCode: 'PRO',
+          inventoryMovement: false,
+          valuationImpact: false,
+          operationSignStock: null,
+          operationSignValuation: null,
+          active: true,
+        },
+        {
+          code: 'ORD',
+          description: 'Ordine Cliente',
+          numeratorCode: 'ORD',
+          inventoryMovement: false,
+          valuationImpact: false,
+          operationSignStock: null,
+          operationSignValuation: null,
+          active: true,
+        },
+        {
+          code: 'DDT',
+          description: 'DDT Vendita',
+          numeratorCode: 'DDT',
+          inventoryMovement: true,
+          valuationImpact: false,
+          operationSignStock: -1,
+          operationSignValuation: null,
+          active: true,
+        },
+        {
+          code: 'FAI',
+          description: 'Fattura Immediata',
+          numeratorCode: 'FAT',
+          inventoryMovement: true,
+          valuationImpact: true,
+          operationSignStock: -1,
+          operationSignValuation: 1,
+          active: true,
+        },
+        {
+          code: 'FAD',
+          description: 'Fattura Differita',
+          numeratorCode: 'FAT',
+          inventoryMovement: false,
+          valuationImpact: true,
+          operationSignStock: null,
+          operationSignValuation: 1,
+          active: true,
+        },
+        {
+          code: 'NDC',
+          description: 'Nota di Credito',
+          numeratorCode: 'FAT',
+          inventoryMovement: true,
+          valuationImpact: true,
+          operationSignStock: 1,
+          operationSignValuation: -1,
+          active: true,
+        },
+        // CICLO PASSIVO (ACQUISTO)
+        {
+          code: 'OF',
+          description: 'Ordine Fornitore',
+          numeratorCode: 'OF',
+          inventoryMovement: false,
+          valuationImpact: false,
+          operationSignStock: null,
+          operationSignValuation: null,
+          active: true,
+        },
+        {
+          code: 'CAF',
+          description: 'Carico Fornitore',
+          numeratorCode: 'CAF',
+          inventoryMovement: true,
+          valuationImpact: false,
+          operationSignStock: 1,
+          operationSignValuation: null,
+          active: true,
+        },
+        {
+          code: 'FAC',
+          description: 'Fattura Acquisto',
+          numeratorCode: 'FAC',
+          inventoryMovement: true,
+          valuationImpact: true,
+          operationSignStock: 1,
+          operationSignValuation: 1,
+          active: true,
+        },
+        {
+          code: 'NCF',
+          description: 'Nota Credito Fornitore',
+          numeratorCode: 'FAC',
+          inventoryMovement: true,
+          valuationImpact: true,
+          operationSignStock: -1,
+          operationSignValuation: -1,
+          active: true,
+        },
+      ];
+
+      await prisma.standardConfig.create({
+        data: {
+          type: 'DOCUMENT_TYPES',
+          data: docTypesData,
+          version: 1,
+          description: 'Tipi documento standard per ciclo attivo e passivo',
+          active: true,
+        },
+      });
+      createdCount++;
+    }
+
+    // 5. Revalidazione cache
+    revalidatePath('/admin/standard-configs');
+
+    return {
+      success: true,
+      data: { count: createdCount },
+    };
+  } catch (error) {
+    console.error('Errore inizializzazione configurazioni standard:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante l\'inizializzazione delle configurazioni standard',
     };
   }
 }

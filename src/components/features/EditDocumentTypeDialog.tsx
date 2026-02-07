@@ -27,6 +27,7 @@ interface EditDocumentTypeDialogProps {
     valuationImpact: boolean;
     operationSignStock: number | null;
     operationSignValuation: number | null;
+    documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
     active: boolean;
   };
 }

@@ -95,6 +95,9 @@ async function ProductTypesTable() {
                 <TableHead>Codice</TableHead>
                 <TableHead>Descrizione</TableHead>
                 <TableHead>Gestione Magazzino</TableHead>
+                <TableHead>Visibile in Acquisto</TableHead>
+                <TableHead>Visibile in Vendita</TableHead>
+                <TableHead>Visibile in Interno</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -119,6 +122,9 @@ function ProductTypeRow({ type }: { type: {
   code: string;
   description: string;
   manageStock: boolean;
+  visibleInPurchase: boolean;
+  visibleInSale: boolean;
+  visibleInInternal: boolean;
   active: boolean;
 } }) {
   return (
@@ -133,6 +139,33 @@ function ProductTypeRow({ type }: { type: {
         <Badge variant={type.manageStock ? 'default' : 'secondary'}>
           {type.manageStock ? 'Sì' : 'No'}
         </Badge>
+      </TableCell>
+      <TableCell>
+        {type.visibleInPurchase ? (
+          <Badge variant="default" className="bg-orange-600">
+            Sì
+          </Badge>
+        ) : (
+          <Badge variant="secondary">No</Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        {type.visibleInSale ? (
+          <Badge variant="default" className="bg-blue-600">
+            Sì
+          </Badge>
+        ) : (
+          <Badge variant="secondary">No</Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        {type.visibleInInternal ? (
+          <Badge variant="default" className="bg-purple-600">
+            Sì
+          </Badge>
+        ) : (
+          <Badge variant="secondary">No</Badge>
+        )}
       </TableCell>
       <TableCell>
         <Badge variant={type.active ? 'default' : 'secondary'}>
@@ -166,6 +199,9 @@ function ProductTypesTableSkeleton() {
                 <TableHead>Codice</TableHead>
                 <TableHead>Descrizione</TableHead>
                 <TableHead>Gestione Magazzino</TableHead>
+                <TableHead>Visibile in Acquisto</TableHead>
+                <TableHead>Visibile in Vendita</TableHead>
+                <TableHead>Visibile in Interno</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -181,6 +217,15 @@ function ProductTypesTableSkeleton() {
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-12 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-12 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-12 bg-muted animate-pulse rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-16 bg-muted animate-pulse rounded" />

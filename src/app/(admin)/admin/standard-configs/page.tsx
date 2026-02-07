@@ -19,6 +19,7 @@ import {
   upsertStandardConfigAction,
   deactivateStandardConfigAction,
   deleteStandardConfigAction,
+  initializeStandardConfigsAction,
   type StandardConfigType,
 } from '@/services/actions/standard-config-actions';
 import { Button } from '@/components/ui/button';
@@ -192,6 +193,25 @@ export default function StandardConfigsAdminPage() {
   }
 
   /**
+   * Inizializza configurazioni standard
+   */
+  async function handleInitialize() {
+    setIsLoading(true);
+    const result = await initializeStandardConfigsAction();
+
+    if (result.success) {
+      showToast(
+        `Configurazioni standard inizializzate: ${result.data.count} configurazioni create`,
+        'success'
+      );
+      await loadConfigs();
+    } else {
+      showToast(result.error || 'Errore durante l\'inizializzazione', 'error');
+    }
+    setIsLoading(false);
+  }
+
+  /**
    * Mostra toast
    */
   function showToast(message: string, type: 'success' | 'error') {
@@ -211,6 +231,17 @@ export default function StandardConfigsAdminPage() {
    */
   function getActiveConfig(type: StandardConfigType): StandardConfig | undefined {
     return configs.find((c) => c.type === type && c.active);
+  }
+
+  /**
+   * Verifica se ci sono configurazioni attive
+   */
+  function hasActiveConfigs(): boolean {
+    return (
+      getActiveConfig('VAT_RATES') !== undefined ||
+      getActiveConfig('UNITS_OF_MEASURE') !== undefined ||
+      getActiveConfig('DOCUMENT_TYPES') !== undefined
+    );
   }
 
   if (isLoading) {
@@ -233,8 +264,58 @@ export default function StandardConfigsAdminPage() {
           </CardHeader>
           <CardContent>
             <p>{error}</p>
-            <Button onClick={loadConfigs} className="mt-4">
-              Riprova
+            <div className="flex gap-2 mt-4">
+              <Button onClick={loadConfigs} variant="outline">
+                Riprova
+              </Button>
+              <Button onClick={handleInitialize}>
+                Inizializza Configurazioni Standard
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Se non ci sono configurazioni, mostra pulsante inizializzazione
+  if (!isLoading && !hasActiveConfigs() && configs.length === 0) {
+    return (
+      <div className="container mx-auto py-10 space-y-8">
+        {/* Header */}
+        <div className="space-y-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Configurazioni Standard</h1>
+            <p className="text-muted-foreground">
+              Gestisci le configurazioni standard caricate dai pulsanti "Carica Standard"
+            </p>
+          </div>
+        </div>
+
+        {/* Card Inizializzazione */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Nessuna Configurazione Standard
+            </CardTitle>
+            <CardDescription>
+              Le configurazioni standard non sono ancora state inizializzate
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Clicca il pulsante qui sotto per inizializzare automaticamente le configurazioni
+              standard con i dati predefiniti:
+            </p>
+            <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+              <li>Aliquote IVA standard italiane (22%, 10%, 5%, 4%, Esente)</li>
+              <li>Unità di misura standard (Peso, Lunghezza, Volume, Pezzi, Superficie)</li>
+              <li>Tipi documento standard (Preventivo, Ordine, DDT, Fattura, Nota Credito)</li>
+            </ul>
+            <Button onClick={handleInitialize} size="lg" className="w-full sm:w-auto">
+              <Download className="mr-2 h-4 w-4" />
+              Inizializza Configurazioni Standard
             </Button>
           </CardContent>
         </Card>

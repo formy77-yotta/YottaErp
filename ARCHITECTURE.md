@@ -930,11 +930,18 @@ model Product {
   vatRateId     String?
   vatRate       VatRate? @relation(...)
   
+  // Magazzino predefinito per questo prodotto
+  // Quando si crea un documento, se la riga non ha warehouseId specifico,
+  // viene usato questo magazzino (priorità sul mainWarehouseId del documento)
+  defaultWarehouseId String?
+  defaultWarehouse   Warehouse? @relation(...)
+  
   active        Boolean  @default(true)
   
   @@unique([organizationId, code])
   @@index([categoryId])
   @@index([typeId])
+  @@index([defaultWarehouseId])
 }
 ```
 
@@ -1132,16 +1139,17 @@ useEffect(() => {
         ┌──────────────┼──────────────┐
         │              │              │
         ▼              ▼              ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────┐
-│ProductCategory│ │ProductType   │ │ Product  │
-│              │ │              │ │          │
-│• code        │ │• code        │ │• code    │
-│• description │ │• description │ │• name    │
-│              │ │• manageStock │ │• price   │
-│              │ │              │ │          │
-│              │ │              │ │• categoryId (FK)
-│              │ │              │ │• typeId (FK)
-└──────────────┘ └──────────────┘ └──────────┘
+┌──────────────┐ ┌──────────────┐ ┌──────────┐ ┌──────────┐
+│ProductCategory│ │ProductType   │ │ Product  │ │Warehouse │
+│              │ │              │ │          │ │          │
+│• code        │ │• code        │ │• code    │ │• code    │
+│• description │ │• description │ │• name    │ │• name    │
+│              │ │• manageStock │ │• price   │ │          │
+│              │ │              │ │          │ │          │
+│              │ │              │ │• categoryId (FK)       │
+│              │ │              │ │• typeId (FK)           │
+│              │ │              │ │• defaultWarehouseId (FK)│
+└──────────────┘ └──────────────┘ └──────────┘ └──────────┘
 ```
 
 ### 🎯 Best Practices
@@ -1668,37 +1676,60 @@ src/services/business/
 **Scopo**: Processa una riga documento e crea il movimento di magazzino se necessario.
 
 **Flusso**:
-1. Verifica `config.inventoryMovement` → Se `false`, esce senza fare nulla
-2. Verifica `product.type.manageStock` → Se `false`, esce (prodotto non gestito a magazzino)
-3. Calcola quantità algebrica: `line.quantity * config.operationSignStock`
-4. Mappa tipo documento al `MovementType` corretto
-5. Crea record `StockMovement` con tracciabilità completa
+1. **Determina warehouseId con logica a cascata** (priorità):
+   - Priorità 1: `line.warehouseId` (se specificato sulla riga)
+   - Priorità 2: `product.defaultWarehouseId` (se presente nel prodotto)
+   - Priorità 3: `documentMainWarehouseId` (magazzino predefinito documento)
+   - Se nessuno presente → esce senza creare movimento
+2. Verifica `config.inventoryMovement` → Se `false`, esce senza fare nulla
+3. Verifica `product.type.manageStock` → Se `false`, esce (prodotto non gestito a magazzino)
+4. Calcola quantità algebrica: `line.quantity * config.operationSignStock`
+5. Mappa tipo documento al `MovementType` corretto
+6. Crea record `StockMovement` con tracciabilità completa
+
+**LOGICA MAGAZZINO A CASCATA**:
+```
+Riga Documento
+├─ warehouseId specifico? → USA QUELLO ✅ (Priorità 1)
+└─ NO warehouseId riga?
+   ├─ Prodotto ha defaultWarehouseId? → USA QUELLO ✅ (Priorità 2)
+   └─ NO defaultWarehouseId prodotto?
+      ├─ Documento ha mainWarehouseId? → USA QUELLO ✅ (Priorità 3)
+      └─ NO mainWarehouseId documento? → Nessun movimento (errore logico)
+```
 
 **Parametri**:
 ```typescript
 processDocumentLineStock(
-  tx: PrismaClient,              // Transazione Prisma (obbligatoria)
-  line: DocumentLine,            // Riga documento da processare
-  config: DocumentTypeConfig,    // Configurazione tipo documento
-  warehouseId: string,            // ID magazzino
-  documentId: string,            // ID documento origine
-  documentNumber: string,        // Numero documento
-  organizationId: string        // ID organizzazione (MULTITENANT)
+  tx: PrismaClient,                    // Transazione Prisma (obbligatoria)
+  line: DocumentLine & {               // Riga documento (con warehouseId opzionale)
+    warehouseId?: string | null;
+  },
+  config: DocumentTypeConfig,          // Configurazione tipo documento
+  documentMainWarehouseId: string | null | undefined, // Magazzino predefinito documento
+  documentId: string,                  // ID documento origine
+  documentNumber: string,              // Numero documento
+  organizationId: string              // ID organizzazione (MULTITENANT)
 ): Promise<{ id: string; quantity: Decimal } | null>
 ```
 
 **Esempio Utilizzo**:
 ```typescript
 await prisma.$transaction(async (tx) => {
-  const document = await tx.document.create({ data: ... });
+  const document = await tx.document.create({ 
+    data: { 
+      mainWarehouseId: 'centrale', // Magazzino predefinito documento
+      ... 
+    } 
+  });
   
   // Per ogni riga documento
   for (const line of document.lines) {
     await processDocumentLineStock(
       tx,
-      line,
+      line, // Può avere line.warehouseId specifico
       documentTypeConfig,
-      warehouseId,
+      document.mainWarehouseId, // Fallback se riga non ha warehouseId
       document.id,
       document.number,
       organizationId
@@ -1847,23 +1878,30 @@ Giacenza = 100 + 50 - 30 - 20 = 100
 
 1. **Movimento Magazzino Creato Solo Se**:
    - `documentType.inventoryMovement = true` **E**
-   - `product.type.manageStock = true`
+   - `product.type.manageStock = true` **E**
+   - `warehouseId` determinabile (riga, prodotto o documento)
 
-2. **Quantità Algebrica**:
+2. **Logica Magazzino a Cascata (Priorità)**:
+   - **Priorità 1**: `line.warehouseId` (magazzino specifico della riga)
+   - **Priorità 2**: `product.defaultWarehouseId` (magazzino predefinito del prodotto)
+   - **Priorità 3**: `document.mainWarehouseId` (magazzino predefinito del documento)
+   - Se nessuno presente → nessun movimento creato
+
+3. **Quantità Algebrica**:
    - Positiva per carichi (es. `+10` pezzi)
    - Negativa per scarichi (es. `-10` pezzi)
    - Il segno viene determinato da `operationSignStock`
 
-3. **Tracciabilità**:
+4. **Tracciabilità**:
    - Ogni movimento è collegato al documento origine
    - Campi: `documentTypeId`, `documentId`, `documentNumber`
    - Permette audit completo e rettifiche
 
-4. **Immutabilità**:
+5. **Immutabilità**:
    - I movimenti NON si modificano, solo si creano
    - Per rettifiche, creare nuovo movimento con segno opposto
 
-5. **MULTITENANT**:
+6. **MULTITENANT**:
    - Ogni movimento appartiene a un'organizzazione
    - Le query filtrano automaticamente per `organizationId`
 
@@ -1922,8 +1960,10 @@ export async function createDocumentAction(data: CreateDocumentInput) {
 │Product       │ │Document      │ │Warehouse     │
 │              │ │              │ │              │
 │• id          │ │• id           │ │• id          │
-│• typeId (FK) │ │• documentType │ │              │
-│              │ │  Id (FK)      │ │              │
+│• typeId (FK) │ │• documentType │ │• code        │
+│• default     │ │  Id (FK)      │ │• name        │
+│  WarehouseId │ │• mainWarehouse│ │              │
+│  (FK)        │ │  Id (FK)      │ │              │
 │              │ │• number       │ │              │
 └──────────────┘ └──────────────┘ └──────────────┘
        │                  │                  │
