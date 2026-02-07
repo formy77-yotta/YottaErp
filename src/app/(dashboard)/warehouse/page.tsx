@@ -21,6 +21,9 @@ import { CreateWarehouseDialog } from '@/components/features/CreateWarehouseDial
 import { EditWarehouseDialog } from '@/components/features/EditWarehouseDialog';
 import { DeleteWarehouseButton } from '@/components/features/DeleteWarehouseButton';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */

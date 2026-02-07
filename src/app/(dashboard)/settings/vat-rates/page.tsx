@@ -21,6 +21,9 @@ import { CreateVatRateDialog } from '@/components/features/CreateVatRateDialog';
 import { EditVatRateDialog } from '@/components/features/EditVatRateDialog';
 import { SeedDefaultVatRatesButton } from '@/components/features/SeedDefaultVatRatesButton';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */

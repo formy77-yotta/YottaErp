@@ -25,6 +25,9 @@ import { Decimal } from 'decimal.js';
 import { VatNumberDisplay } from '@/components/features/VatNumberDisplay';
 import { DownloadXMLIconButton } from '@/components/features/DownloadXMLIconButton';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */

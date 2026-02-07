@@ -22,6 +22,9 @@ import { DeleteProductCategoryButton } from '@/components/features/DeleteProduct
 import { Badge } from '@/components/ui/badge';
 import { Package } from 'lucide-react';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */

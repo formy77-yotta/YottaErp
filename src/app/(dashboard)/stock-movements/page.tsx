@@ -21,6 +21,9 @@ import { Badge } from '@/components/ui/badge';
 import { Activity, ArrowUp, ArrowDown } from 'lucide-react';
 import { Decimal } from 'decimal.js';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Tipo per i movimenti di magazzino
  */

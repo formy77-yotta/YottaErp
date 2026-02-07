@@ -24,6 +24,9 @@ import { Package } from 'lucide-react';
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */

@@ -11,6 +11,9 @@ import { getCurrentOrganizationAction } from '@/services/actions/organization-ac
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrganizationProfileForm } from '@/components/features/OrganizationProfileForm';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */

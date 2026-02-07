@@ -23,6 +23,9 @@ import { SeedDefaultUnitsOfMeasureButton } from '@/components/features/SeedDefau
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 /**
  * Componente principale della pagina
  */
