@@ -23,6 +23,7 @@ import { FileText, Plus } from 'lucide-react';
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { VatNumberDisplay } from '@/components/features/VatNumberDisplay';
+import { DownloadXMLIconButton } from '@/components/features/DownloadXMLIconButton';
 
 /**
  * Componente principale della pagina
@@ -145,11 +146,16 @@ async function DocumentsTable() {
                     {formatCurrency(new Decimal(doc.grossTotal))}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link href={`/documents/${doc.id}`}>
-                      <Button variant="ghost" size="sm">
-                        Dettagli
-                      </Button>
-                    </Link>
+                    <div className="flex items-center justify-end gap-2">
+                      {(doc.category === 'INVOICE' || doc.category === 'CREDIT_NOTE') && (
+                        <DownloadXMLIconButton documentId={doc.id} />
+                      )}
+                      <Link href={`/documents/${doc.id}`}>
+                        <Button variant="ghost" size="sm">
+                          Dettagli
+                        </Button>
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

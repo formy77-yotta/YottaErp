@@ -220,16 +220,7 @@ function buildFatturaPAXML(
   // Progressivo invio (numero documento)
   datiTrasmissione.ele('ProgressivoInvio').txt(document.number);
 
-  // Formato trasmissione: FPA12 = FatturaPA 1.2
-  datiTrasmissione.ele('FormatoTrasmissione').txt('FPA12');
-
-  // ✅ Contatti Trasmittente (opzionale ma suggerito dalle Technical Rules)
-  // Utile per comunicazioni tecniche con SdI
-  if (document.organization.email) {
-    const contattiTrasmittente = datiTrasmissione.ele('ContattiTrasmittente');
-    contattiTrasmittente.ele('Email').txt(document.organization.email);
-  }
-
+  // ✅ Ordine corretto secondo schema XSD: CodiceDestinatario/PEC prima di FormatoTrasmissione
   // Codice Destinatario o PEC
   if (codiceDestinatario) {
     // ✅ Per FPA12, CodiceDestinatario deve essere di 6 cifre (non 7)
@@ -241,6 +232,17 @@ function buildFatturaPAXML(
     // Se PEC, CodiceDestinatario deve essere "0000000" (7 caratteri per PEC)
     datiTrasmissione.ele('CodiceDestinatario').txt('0000000');
     datiTrasmissione.ele('PECDestinatario').txt(document.organization.pec);
+  }
+
+  // Formato trasmissione: FPA12 = FatturaPA 1.2
+  datiTrasmissione.ele('FormatoTrasmissione').txt('FPA12');
+
+  // ✅ Contatti Trasmittente (opzionale ma suggerito dalle Technical Rules)
+  // ✅ DEVE essere DOPO FormatoTrasmissione secondo schema XSD
+  // Utile per comunicazioni tecniche con SdI
+  if (document.organization.email) {
+    const contattiTrasmittente = datiTrasmissione.ele('ContattiTrasmittente');
+    contattiTrasmittente.ele('Email').txt(document.organization.email);
   }
 
   // CedentePrestatore (Organization)
@@ -288,14 +290,36 @@ function buildFatturaPAXML(
   }
 
   // ✅ Contatti Cedente (opzionale ma suggerito dalle Technical Rules)
+  // ✅ Ordine corretto secondo schema XSD: Telefono PRIMA di Email
   // Utile per automazione gestione contestazioni
   if (document.organization.email || document.organization.phone) {
     const contattiCedente = cedente.ele('Contatti');
+    // Telefono deve venire PRIMA di Email
+    if (document.organization.phone) {
+      // ✅ Validazione lunghezza: min 5, max 12 caratteri secondo schema XSD
+      let telefono = document.organization.phone.trim();
+      // Rimuovi spazi
+      telefono = telefono.replace(/\s+/g, '');
+      
+      // Se troppo lungo, rimuovi il prefisso + se presente per mantenere più cifre
+      if (telefono.length > 12) {
+        if (telefono.startsWith('+')) {
+          telefono = telefono.substring(1); // Rimuovi +
+        }
+        // Tronca a 12 caratteri se ancora troppo lungo
+        if (telefono.length > 12) {
+          telefono = telefono.substring(0, 12);
+        }
+      }
+      
+      // Verifica lunghezza minima (5 caratteri)
+      if (telefono.length >= 5 && telefono.length <= 12) {
+        contattiCedente.ele('Telefono').txt(telefono);
+      }
+      // Se non valido, non inseriamo il nodo (meglio che errore)
+    }
     if (document.organization.email) {
       contattiCedente.ele('Email').txt(document.organization.email);
-    }
-    if (document.organization.phone) {
-      contattiCedente.ele('Telefono').txt(document.organization.phone);
     }
   }
 
