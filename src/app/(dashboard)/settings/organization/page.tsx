@@ -49,6 +49,16 @@ async function OrganizationFormContent() {
     );
   }
 
+  if (!result.organization) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <p className="text-destructive">Organizzazione non trovata</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return <OrganizationProfileForm organization={result.organization} />;
 }
 

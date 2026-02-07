@@ -183,7 +183,7 @@ export type UpdateProductInput = z.infer<typeof updateProductSchema>;
  * Mappatura: CUSTOMER -> CLIENT, SUPPLIER -> PROVIDER, LEAD -> CLIENT
  */
 export const entityTypeSchema = z.enum(['CUSTOMER', 'SUPPLIER', 'LEAD'], {
-  errorMap: () => ({ message: 'Tipo entità non valido' }),
+  message: 'Tipo entità non valido',
 });
 
 export type EntityType = z.infer<typeof entityTypeSchema>;

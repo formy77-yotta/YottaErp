@@ -92,21 +92,27 @@ export async function getDashboardStats(): Promise<{
       prisma.document.count({
         where: {
           organizationId: ctx.organizationId,
-          type: 'QUOTE',
+          documentType: {
+            code: 'QUOTE',
+          },
         },
       }),
       // Ordini
       prisma.document.count({
         where: {
           organizationId: ctx.organizationId,
-          type: 'ORDER',
+          documentType: {
+            code: 'ORDER',
+          },
         },
       }),
       // Fatture
       prisma.document.count({
         where: {
           organizationId: ctx.organizationId,
-          type: 'INVOICE',
+          documentType: {
+            code: 'INVOICE',
+          },
         },
       }),
       // Totale prodotti

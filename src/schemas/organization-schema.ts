@@ -151,7 +151,7 @@ export const organizationSchema = z
     // Valori: RF01=Ordinario, RF02=Contribuenti minimi, RF04=Agricoltura, etc.
     regimeFiscale: z
       .enum(['RF01', 'RF02', 'RF04', 'RF05', 'RF06', 'RF07', 'RF08', 'RF09', 'RF10', 'RF11', 'RF12', 'RF13', 'RF14', 'RF15', 'RF16', 'RF17', 'RF18', 'RF19'], {
-        errorMap: () => ({ message: 'Regime fiscale non valido' }),
+        message: 'Regime fiscale non valido',
       })
       .default('RF01'),
 

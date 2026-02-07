@@ -134,14 +134,17 @@ export function ProductTypeForm({
         result = await updateProductTypeAction(updateData);
       } else {
         // Creazione nuova tipologia
+        if (!data.code) {
+          throw new Error('Codice tipologia obbligatorio');
+        }
         const createData: CreateProductTypeInput = {
-          code: data.code,
-          description: data.description,
-          manageStock: data.manageStock,
-          visibleInPurchase: data.visibleInPurchase,
-          visibleInSale: data.visibleInSale,
-          visibleInInternal: data.visibleInInternal,
-          active: data.active,
+          code: data.code as string,
+          description: data.description as string,
+          manageStock: data.manageStock ?? true,
+          visibleInPurchase: data.visibleInPurchase ?? true,
+          visibleInSale: data.visibleInSale ?? true,
+          visibleInInternal: data.visibleInInternal ?? true,
+          active: data.active ?? true,
         };
         
         result = await createProductTypeAction(createData);

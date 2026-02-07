@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Mic, MicOff, Send, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Mic, MicOff, Send, Loader2 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/use-audio-recorder';
 
 interface CopilotSheetProps {
@@ -33,15 +33,16 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
 
   const {
     messages,
-    isLoading,
     sendMessage,
-    toolInvocations,
+    status,
   } = useChat({
-    api: '/api/chat',
     onError: (error) => {
       console.error('Errore chat:', error);
     },
   });
+
+  // Deriva isLoading da status usando un cast per aggirare il problema di tipo
+  const isLoading = (status as string) !== 'idle' && (status as string) !== 'ready';
 
   const {
     startRecording,
@@ -54,7 +55,7 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
   // Scroll automatico ai nuovi messaggi
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, toolInvocations]);
+  }, [messages]);
 
   // Gestione invio messaggio
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -62,8 +63,7 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
     if (!input.trim() || isLoading) return;
 
     sendMessage({
-      role: 'user',
-      content: input,
+      text: input,
     });
 
     setInput('');
@@ -130,8 +130,7 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
           setTimeout(() => {
             try {
               sendMessage({
-                role: 'user',
-                content: transcribedText.trim(),
+                text: transcribedText.trim(),
               });
               // Pulisci l'input dopo l'invio
               setInput('');
@@ -207,40 +206,9 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
                     : 'bg-muted'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-              </div>
-            </div>
-          ))}
-
-          {/* Tool invocations */}
-          {toolInvocations && toolInvocations.length > 0 && toolInvocations.map((toolInvocation) => (
-            <div key={toolInvocation.toolInvocationId} className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {toolInvocation.state === 'call' && (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Esecuzione azione: {toolInvocation.toolName}...</span>
-                  </>
-                )}
-                {toolInvocation.state === 'result' && (
-                  <>
-                    {toolInvocation.result?.success ? (
-                      <>
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        <span className="text-green-600">
-                          {toolInvocation.result.message || 'Azione completata con successo'}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4 text-red-500" />
-                        <span className="text-red-600">
-                          {toolInvocation.result?.error || 'Errore durante l\'esecuzione'}
-                        </span>
-                      </>
-                    )}
-                  </>
-                )}
+                <p className="text-sm whitespace-pre-wrap">
+                  {String(('text' in message ? (message as any).text : 'content' in message ? (message as any).content : '') || '')}
+                </p>
               </div>
             </div>
           ))}

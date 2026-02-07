@@ -13,6 +13,7 @@ import {
   updateUnitOfMeasureSchema,
   type CreateUnitOfMeasureInput,
   type UpdateUnitOfMeasureInput,
+  type MeasureClass,
   MEASURE_CLASSES
 } from '@/schemas/unit-of-measure-schema';
 import { 
@@ -95,7 +96,7 @@ export function UnitOfMeasureForm({
       form.reset({
         code: unit.code,
         name: unit.name,
-        measureClass: unit.measureClass as any,
+        measureClass: unit.measureClass as MeasureClass,
         baseFactor: unit.baseFactor,
         active: unit.active,
         ...(isEditing ? { id: unit.id } : {}),
@@ -135,12 +136,15 @@ export function UnitOfMeasureForm({
         result = await updateUnitOfMeasureAction(updateData);
       } else {
         // Creazione nuova unità
+        if (!data.code || !data.name || !data.measureClass || !data.baseFactor) {
+          throw new Error('Tutti i campi obbligatori devono essere compilati');
+        }
         const createData: CreateUnitOfMeasureInput = {
-          code: data.code,
-          name: data.name,
-          measureClass: data.measureClass,
-          baseFactor: data.baseFactor,
-          active: data.active,
+          code: data.code as string,
+          name: data.name as string,
+          measureClass: data.measureClass as typeof MEASURE_CLASSES[number],
+          baseFactor: data.baseFactor as string,
+          active: data.active ?? true,
         };
         
         result = await createUnitOfMeasureAction(createData);

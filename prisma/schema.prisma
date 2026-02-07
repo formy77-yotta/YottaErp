@@ -83,6 +83,8 @@ model Organization {
   users               UserOrganization[]
   vatRates            VatRate[]
   warehouses          Warehouse[]
+  paymentTypes        PaymentType[]
+  paymentConditions   PaymentCondition[]
 
   @@index([businessName])
 }
@@ -399,6 +401,7 @@ model Document {
   grossTotal                 Decimal            @db.Decimal(12, 2)
   notes                      String?
   paymentTerms               String?
+  paymentConditionId            String?
   
   // ✅ Codici per fatture verso PA (obbligatori per FatturaPA)
   codiceCIG                  String?            // Codice Identificativo Gara
@@ -411,7 +414,9 @@ model Document {
   documentType               DocumentTypeConfig @relation(fields: [documentTypeId], references: [id])
   entity                     Entity?            @relation(fields: [entityId], references: [id])
   organization               Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentCondition           PaymentCondition?  @relation(fields: [paymentConditionId], references: [id])
   lines                      DocumentLine[]
+  paymentDeadlines           PaymentDeadline[]
 
   @@unique([organizationId, number])
   @@index([organizationId])
@@ -419,6 +424,7 @@ model Document {
   @@index([organizationId, entityId])
   @@index([organizationId, category])
   @@index([organizationId, documentTypeId])
+  @@index([paymentConditionId])
 }
 
 /// *
@@ -472,6 +478,127 @@ enum MovementType {
   RESO_FORNITORE
   TRASFERIMENTO_USCITA
   TRASFERIMENTO_ENTRATA
+}
+
+/// *
+///  * PaymentType: Anagrafica metodi di pagamento (SDI/SEPA compliant)
+///  * 
+///  * SEPARA il "come" si paga (Bonifico, RiBa, Assegno, etc.) dalla
+///  * condizione di pagamento (il "quando" si paga).
+///  * 
+///  * REGOLE:
+///  * - sdiCode: Codice MPxx obbligatorio per fatturazione elettronica (es. MP05 per Bonifico)
+///  * - sepaCode: Codice per flussi bancari SEPA (es. TRF per Bonifico, OXI per RiBa)
+///  * - MULTITENANT: Ogni tipo di pagamento appartiene a un'organizzazione
+///  * 
+///  * CODICI SDI STANDARD:
+///  * - MP01: Contanti
+///  * - MP02: Assegno
+///  * - MP03: Assegno circolare
+///  * - MP04: Contanti presso Tesoreria
+///  * - MP05: Bonifico
+///  * - MP06: Vaglia cambiario
+///  * - MP07: Bollettino bancario
+///  * - MP08: Carta di pagamento
+///  * - MP09: RID
+///  * - MP10: RID utenze
+///  * - MP11: RID veloce
+///  * - MP12: RiBa
+///  * - MP13: MAV
+///  * - MP14: Quietanza erario
+///  * - MP15: Giroconto su conti di contabilità speciale
+///  * - MP16: Domiciliazione bancaria
+///  * - MP17: Domiciliazione postale
+///  * - MP18: Bollettino di c/c postale
+///  * - MP19: SEPA Direct Debit
+///  * - MP20: SEPA Direct Debit CORE
+///  * - MP21: SEPA Direct Debit B2B
+///  * - MP22: Trattenuta su somme già riscosse
+///  * - MP23: PagoPA
+model PaymentType {
+  id              String             @id @default(cuid())
+  organizationId  String
+  name            String             // es: "Bonifico Bancario"
+  sdiCode         String             // Codice MPxx (es: MP05 per Bonifico, MP12 per RIBA)
+  sepaCode        String?            // Codice TRF (Bonifico) o OXI (RiBa) per flussi bancari
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conditions      PaymentCondition[]
+
+  @@unique([organizationId, sdiCode])
+  @@index([organizationId])
+  @@index([organizationId, active])
+}
+
+/// *
+///  * PaymentCondition: Condizione di pagamento (logica di calcolo scadenze)
+///  * 
+///  * SEPARA il "quando" si paga dalla modalità (il "come").
+///  * 
+///  * REGOLE:
+///  * - daysToFirstDue: Giorni dalla data base alla prima scadenza
+///  * - gapBetweenDues: Giorni tra una scadenza e la successiva
+///  * - numberOfDues: Numero di rate (default: 1 = pagamento unico)
+///  * - isEndOfMonth: Se true, sposta le scadenze all'ultimo giorno del mese
+///  * - MULTITENANT: Ogni condizione appartiene a un'organizzazione
+///  * 
+///  * ESEMPI:
+///  * - "30 gg FM": daysToFirstDue=30, numberOfDues=1, isEndOfMonth=true
+///  * - "30/60 gg": daysToFirstDue=30, gapBetweenDues=30, numberOfDues=2
+///  * - "Immediato": daysToFirstDue=0, numberOfDues=1
+model PaymentCondition {
+  id              String             @id @default(cuid())
+  organizationId  String
+  name            String             // es: "30/60 gg FM"
+  paymentTypeId   String
+  daysToFirstDue Int                 @default(0)
+  gapBetweenDues Int                 @default(0)
+  numberOfDues    Int                 @default(1)
+  isEndOfMonth    Boolean            @default(false)
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  
+  paymentType     PaymentType        @relation(fields: [paymentTypeId], references: [id])
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents       Document[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([organizationId, paymentTypeId])
+  @@index([organizationId, active])
+}
+
+/// *
+///  * PaymentDeadline: Scadenze reali generate sui documenti (SNAPSHOT)
+///  * 
+///  * REGOLA SNAPSHOT: Le scadenze sono calcolate al momento della creazione del documento
+///  * e memorizzate come snapshot. Se domani la PaymentCondition cambia, le scadenze
+///  * del documento rimangono invariate.
+///  * 
+///  * REGOLE:
+///  * - amount: Importo della scadenza (rigorosamente Decimal)
+///  * - status: PENDING, PAID, PARTIAL
+///  * - paidAmount: Importo già pagato (per gestire pagamenti parziali)
+///  * - MULTITENANT: Implicito tramite documentId -> organizationId
+model PaymentDeadline {
+  id          String   @id @default(cuid())
+  documentId  String
+  dueDate     DateTime
+  amount      Decimal  @db.Decimal(12, 2)
+  status      String   @default("PENDING") // PENDING, PAID, PARTIAL
+  paidAmount  Decimal  @default(0) @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([dueDate])
+  @@index([status])
 }
 
 /// *

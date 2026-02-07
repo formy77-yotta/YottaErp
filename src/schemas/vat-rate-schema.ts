@@ -18,7 +18,7 @@ import { Decimal } from 'decimal.js';
  * N7 = IVA assolta in altro stato UE
  */
 export const vatNatureSchema = z.enum(['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7'], {
-  errorMap: () => ({ message: 'Codice natura non valido (N1-N7)' }),
+  message: 'Codice natura non valido (N1-N7)',
 }).optional();
 
 /**

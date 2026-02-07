@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { seedDefaultVatRatesAction } from '@/services/actions/vat-actions';

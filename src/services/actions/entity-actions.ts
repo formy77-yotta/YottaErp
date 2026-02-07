@@ -675,13 +675,13 @@ export async function checkEntityDependenciesAction(
         entityId: id,
       },
       select: {
-        type: true,
+        category: true,
       },
     });
 
     const documentCount = documents.length;
     const documentTypes = documents.reduce((acc, doc) => {
-      const type = doc.type;
+      const type = doc.category;
       const existing = acc.find((item) => item.type === type);
       if (existing) {
         existing.count++;
@@ -763,7 +763,7 @@ export async function deleteEntityAction(
       },
       select: {
         id: true,
-        type: true,
+        category: true,
         number: true,
       },
     });
@@ -777,7 +777,7 @@ export async function deleteEntityAction(
         CREDIT_NOTE: 'nota di credito',
       };
 
-      const typeLabel = documentTypeLabels[documents.type] || 'documento';
+      const typeLabel = documentTypeLabels[documents.category] || 'documento';
       
       return {
         success: false,

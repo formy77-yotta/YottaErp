@@ -35,7 +35,7 @@ export const createUnitOfMeasureSchema = z.object({
     .min(2, 'Nome deve contenere almeno 2 caratteri')
     .max(100, 'Nome troppo lungo'),
   measureClass: z.enum(MEASURE_CLASSES, {
-    errorMap: () => ({ message: 'Classe di misura non valida' }),
+    message: 'Classe di misura non valida',
   }),
   baseFactor: z
     .string()
@@ -73,7 +73,7 @@ export const updateUnitOfMeasureSchema = z.object({
     .max(100, 'Nome troppo lungo')
     .optional(),
   measureClass: z.enum(MEASURE_CLASSES, {
-    errorMap: () => ({ message: 'Classe di misura non valida' }),
+    message: 'Classe di misura non valida',
   }).optional(),
   baseFactor: z
     .string()

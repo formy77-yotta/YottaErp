@@ -142,7 +142,7 @@ function mapDocumentTypeToMovementType(
  * ```
  */
 export async function processDocumentLineStock(
-  tx: PrismaClient,
+  tx: Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>,
   line: DocumentLine & { warehouseId?: string | null },
   config: DocumentTypeConfig,
   documentMainWarehouseId: string | null | undefined,

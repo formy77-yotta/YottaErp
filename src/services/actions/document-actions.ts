@@ -8,6 +8,7 @@ import { createDocumentSchema, updateDocumentSchema, type CreateDocumentInput, t
 import { calculateLineTotal, toDecimal } from '@/lib/decimal-utils';
 import { processDocumentLineStock } from '@/services/business/stock-service';
 import { generateInvoiceXML, InvoiceXMLError } from '@/services/business/invoice-xml-service';
+import { calculateDeadlines } from '@/lib/utils/payment-calculator';
 import type { Prisma } from '@prisma/client';
 
 /**
@@ -172,6 +173,15 @@ export async function getDocumentAction(
   grossTotal: string;
   notes: string | null;
   paymentTerms: string | null;
+  paymentCondition: {
+    id: string;
+    name: string;
+    paymentType: {
+      id: string;
+      name: string;
+      sdiCode: string;
+    };
+  } | null;
   createdAt: Date;
   updatedAt: Date;
   lines: Array<{
@@ -227,6 +237,20 @@ export async function getDocumentAction(
         grossTotal: true,
         notes: true,
         paymentTerms: true,
+        paymentConditionId: true,
+        paymentCondition: {
+          select: {
+            id: true,
+            name: true,
+            paymentType: {
+              select: {
+                id: true,
+                name: true,
+                sdiCode: true,
+              },
+            },
+          },
+        },
         createdAt: true,
         updatedAt: true,
         organizationId: true, // Per verifica multitenant
@@ -284,6 +308,7 @@ export async function getDocumentAction(
         grossTotal: document.grossTotal.toString(),
         notes: document.notes,
         paymentTerms: document.paymentTerms,
+        paymentCondition: document.paymentCondition,
         createdAt: document.createdAt,
         updatedAt: document.updatedAt,
         lines: document.lines.map((line) => ({
@@ -341,9 +366,7 @@ export async function updateDocumentAction(
     const ctx = await getAuthContext();
 
     // 2. Validazione con Zod
-    console.log('Validating update input:', input); // Debug
     const validatedData = updateDocumentSchema.parse(input);
-    console.log('Validated data:', validatedData); // Debug
 
     // 3. Esegui aggiornamento in transazione
     const updatedDocument = await prisma.$transaction(async (tx) => {
@@ -351,11 +374,7 @@ export async function updateDocumentAction(
       const existingDocument = await tx.document.findUnique({
         where: { id: validatedData.id },
         include: {
-          documentType: {
-            include: {
-              type: true, // Per verificare inventoryMovement
-            },
-          },
+          documentType: true, // Include tutti i campi di DocumentTypeConfig (inventoryMovement, etc.)
           lines: true,
         },
       });
@@ -534,7 +553,68 @@ export async function updateDocumentAction(
           }
         }
 
-        // 3.3.5. Aggiorna documento con nuovi totali e snapshot entità (se modificata)
+        // 3.3.5. Gestione scadenze pagamento (se paymentConditionId modificato)
+        if (validatedData.paymentConditionId !== undefined) {
+          // Elimina scadenze esistenti (se presenti)
+          await tx.paymentDeadline.deleteMany({
+            where: { documentId: validatedData.id },
+          });
+
+          // Se è stata selezionata una nuova condizione, genera nuove scadenze
+          if (validatedData.paymentConditionId) {
+            // Recupera condizione di pagamento e verifica appartenenza
+            const paymentCondition = await tx.paymentCondition.findUnique({
+              where: { id: validatedData.paymentConditionId },
+              select: {
+                id: true,
+                organizationId: true,
+                daysToFirstDue: true,
+                gapBetweenDues: true,
+                numberOfDues: true,
+                isEndOfMonth: true,
+              },
+            });
+
+            if (!paymentCondition) {
+              throw new Error('Condizione di pagamento non trovata');
+            }
+
+            // ✅ Verifica che appartenga all'organizzazione corrente
+            verifyOrganizationAccess(ctx, paymentCondition);
+
+            // Usa la data del documento (o quella modificata se presente)
+            const documentDate = validatedData.date 
+              ? (validatedData.date instanceof Date ? validatedData.date : new Date(validatedData.date))
+              : existingDocument.date;
+
+            // Calcola scadenze usando il calcolatore
+            const deadlines = calculateDeadlines(
+              grossTotal,
+              {
+                daysToFirstDue: paymentCondition.daysToFirstDue,
+                gapBetweenDues: paymentCondition.gapBetweenDues,
+                numberOfDues: paymentCondition.numberOfDues,
+                isEndOfMonth: paymentCondition.isEndOfMonth,
+              },
+              documentDate
+            );
+
+            // Crea PaymentDeadline per ogni scadenza calcolata
+            for (const deadline of deadlines) {
+              await tx.paymentDeadline.create({
+                data: {
+                  documentId: validatedData.id,
+                  dueDate: deadline.dueDate,
+                  amount: deadline.amount,
+                  status: 'PENDING',
+                  paidAmount: new Decimal(0),
+                },
+              });
+            }
+          }
+        }
+
+        // 3.3.6. Aggiorna documento con nuovi totali e snapshot entità (se modificata)
         const updated = await tx.document.update({
           where: { id: validatedData.id },
           data: {
@@ -550,6 +630,9 @@ export async function updateDocumentAction(
             }),
             ...(validatedData.paymentTerms !== undefined && {
               paymentTerms: validatedData.paymentTerms || null,
+            }),
+            ...(validatedData.paymentConditionId !== undefined && {
+              paymentConditionId: validatedData.paymentConditionId || null,
             }),
             ...(validatedData.codiceCIG !== undefined && {
               codiceCIG: validatedData.codiceCIG || null,
@@ -582,6 +665,9 @@ export async function updateDocumentAction(
             ...(validatedData.paymentTerms !== undefined && {
               paymentTerms: validatedData.paymentTerms || null,
             }),
+            ...(validatedData.paymentConditionId !== undefined && {
+              paymentConditionId: validatedData.paymentConditionId || null,
+            }),
             ...(validatedData.codiceCIG !== undefined && {
               codiceCIG: validatedData.codiceCIG || null,
             }),
@@ -590,6 +676,75 @@ export async function updateDocumentAction(
             }),
           },
         });
+
+        // 3.4.1. Gestione scadenze pagamento (se paymentConditionId modificato)
+        if (validatedData.paymentConditionId !== undefined) {
+          // Elimina scadenze esistenti (se presenti)
+          await tx.paymentDeadline.deleteMany({
+            where: { documentId: validatedData.id },
+          });
+
+          // Se è stata selezionata una nuova condizione, genera nuove scadenze
+          if (validatedData.paymentConditionId) {
+            // Recupera documento per ottenere grossTotal
+            const doc = await tx.document.findUnique({
+              where: { id: validatedData.id },
+              select: { grossTotal: true, date: true },
+            });
+
+            if (doc) {
+              // Recupera condizione di pagamento e verifica appartenenza
+              const paymentCondition = await tx.paymentCondition.findUnique({
+                where: { id: validatedData.paymentConditionId },
+                select: {
+                  id: true,
+                  organizationId: true,
+                  daysToFirstDue: true,
+                  gapBetweenDues: true,
+                  numberOfDues: true,
+                  isEndOfMonth: true,
+                },
+              });
+
+              if (!paymentCondition) {
+                throw new Error('Condizione di pagamento non trovata');
+              }
+
+              // ✅ Verifica che appartenga all'organizzazione corrente
+              verifyOrganizationAccess(ctx, paymentCondition);
+
+              // Usa la data del documento (o quella modificata se presente)
+              const documentDate = validatedData.date 
+                ? (validatedData.date instanceof Date ? validatedData.date : new Date(validatedData.date))
+                : doc.date;
+
+              // Calcola scadenze usando il calcolatore
+              const deadlines = calculateDeadlines(
+                doc.grossTotal,
+                {
+                  daysToFirstDue: paymentCondition.daysToFirstDue,
+                  gapBetweenDues: paymentCondition.gapBetweenDues,
+                  numberOfDues: paymentCondition.numberOfDues,
+                  isEndOfMonth: paymentCondition.isEndOfMonth,
+                },
+                documentDate
+              );
+
+              // Crea PaymentDeadline per ogni scadenza calcolata
+              for (const deadline of deadlines) {
+                await tx.paymentDeadline.create({
+                  data: {
+                    documentId: validatedData.id,
+                    dueDate: deadline.dueDate,
+                    amount: deadline.amount,
+                    status: 'PENDING',
+                    paidAmount: new Decimal(0),
+                  },
+                });
+              }
+            }
+          }
+        }
 
         return updated;
       }
@@ -1077,6 +1232,7 @@ export async function createDocumentAction(
           grossTotal: grossTotal.toDecimalPlaces(2),
           notes: validatedData.notes || null,
           paymentTerms: validatedData.paymentTerms || null,
+          paymentConditionId: validatedData.paymentConditionId || null,
           // ✅ Codici per fatture verso PA
           codiceCIG: validatedData.codiceCIG || null,
           codiceCUP: validatedData.codiceCUP || null,
@@ -1108,7 +1264,55 @@ export async function createDocumentAction(
         });
       }
 
-      // 6.5. ✅ Integrazione magazzino (se configurato)
+      // 6.5. ✅ Genera scadenze pagamento (se paymentConditionId presente)
+      if (validatedData.paymentConditionId) {
+        // Recupera condizione di pagamento e verifica appartenenza
+        const paymentCondition = await tx.paymentCondition.findUnique({
+          where: { id: validatedData.paymentConditionId },
+          select: {
+            id: true,
+            organizationId: true,
+            daysToFirstDue: true,
+            gapBetweenDues: true,
+            numberOfDues: true,
+            isEndOfMonth: true,
+          },
+        });
+
+        if (!paymentCondition) {
+          throw new Error('Condizione di pagamento non trovata');
+        }
+
+        // ✅ Verifica che appartenga all'organizzazione corrente
+        verifyOrganizationAccess(ctx, paymentCondition);
+
+        // Calcola scadenze usando il calcolatore
+        const deadlines = calculateDeadlines(
+          grossTotal,
+          {
+            daysToFirstDue: paymentCondition.daysToFirstDue,
+            gapBetweenDues: paymentCondition.gapBetweenDues,
+            numberOfDues: paymentCondition.numberOfDues,
+            isEndOfMonth: paymentCondition.isEndOfMonth,
+          },
+          validatedData.date instanceof Date ? validatedData.date : new Date(validatedData.date)
+        );
+
+        // Crea PaymentDeadline per ogni scadenza calcolata
+        for (const deadline of deadlines) {
+          await tx.paymentDeadline.create({
+            data: {
+              documentId: createdDocument.id,
+              dueDate: deadline.dueDate,
+              amount: deadline.amount,
+              status: 'PENDING',
+              paidAmount: new Decimal(0),
+            },
+          });
+        }
+      }
+
+      // 6.6. ✅ Integrazione magazzino (se configurato)
       // Processa movimenti magazzino per ogni riga creata
       for (const { line, warehouseId } of createdLines) {
         // Crea riga documento con warehouseId opzionale per passare al servizio stock

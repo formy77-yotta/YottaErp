@@ -18,6 +18,16 @@ import {
 } from '@/schemas/vat-rate-schema';
 
 type VatRateFormInput = CreateVatRateInput | (UpdateVatRateInput & { id?: string });
+
+const VALID_VAT_NATURE_VALUES = ['N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7'] as const;
+
+function validateVatNature(value: string | null | undefined): 'N1' | 'N2' | 'N3' | 'N4' | 'N5' | 'N6' | 'N7' | undefined {
+  if (value && VALID_VAT_NATURE_VALUES.includes(value as typeof VALID_VAT_NATURE_VALUES[number])) {
+    return value as typeof VALID_VAT_NATURE_VALUES[number];
+  }
+  return undefined;
+}
+
 import { 
   createVatRateAction, 
   updateVatRateAction
@@ -108,7 +118,7 @@ export function VatRateForm({
       const resetData = {
         name: rate.name,
         value: valueToPercentage(rate.value), // Converte 0.2200 -> 22
-        nature: rate.nature || undefined,
+        nature: validateVatNature(rate.nature),
         description: rate.description || '',
         isDefault: rate.isDefault,
         active: rate.active,
@@ -160,13 +170,16 @@ export function VatRateForm({
         result = await updateVatRateAction(updateData);
       } else {
         // Creazione nuova aliquota
+        if (!data.name || !data.value) {
+          throw new Error('Nome e valore sono obbligatori');
+        }
         const createData: CreateVatRateInput = {
-          name: data.name,
-          value: data.value,
+          name: data.name as string,
+          value: data.value as string,
           nature: data.nature,
           description: data.description,
-          isDefault: data.isDefault,
-          active: data.active,
+          isDefault: data.isDefault ?? false,
+          active: data.active ?? true,
         };
         
         result = await createVatRateAction(createData);
@@ -250,11 +263,11 @@ export function VatRateForm({
             name="nature"
             render={({ field }) => {
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:241',message:'Nature field render - field value check',data:{fieldValue:field.value,fieldValueType:typeof field.value,convertedValue:field.value || '',isUndefined:field.value === undefined,isNull:field.value === null,isEmptyString:field.value === ''},timestamp:Date.now(),runId:'initial',hypothesisId:'B'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:264',message:'Nature field render - field value check',data:{fieldValue:field.value,fieldValueType:typeof field.value,isUndefined:field.value === undefined},timestamp:Date.now(),runId:'initial',hypothesisId:'B'})}).catch(()=>{});
               // #endregion
-              const selectValue = field.value || '';
+              const selectValue = field.value ?? '';
               // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:244',message:'Nature field - selectValue calculated',data:{selectValue,selectValueType:typeof selectValue,isEmptyString:selectValue === ''},timestamp:Date.now(),runId:'initial',hypothesisId:'B'})}).catch(()=>{});
+              fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:268',message:'Nature field - selectValue calculated',data:{selectValue,selectValueType:typeof selectValue},timestamp:Date.now(),runId:'initial',hypothesisId:'B'})}).catch(()=>{});
               // #endregion
               return (
                 <FormItem>

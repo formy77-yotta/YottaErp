@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -128,7 +128,7 @@ function VatRateRow({ rate }: { rate: VatRate }) {
               </DialogHeader>
               <VatRateForm
                 key={key}
-                vatRate={rate}
+                rate={rate}
                 onSuccess={() => {
                   setOpen(false);
                   setKey((k) => k + 1); // Reset form

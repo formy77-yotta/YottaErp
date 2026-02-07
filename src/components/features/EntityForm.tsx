@@ -15,7 +15,6 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { 
   createEntitySchema, 
-  updateEntitySchema,
   type CreateEntityInput,
   type UpdateEntityInput
 } from '@/schemas/entity-schema';
@@ -54,10 +53,10 @@ interface EntityFormProps {
     businessName: string;
     vatNumber?: string | null;
     fiscalCode?: string | null;
-    address: string;
-    city: string;
-    province: string;
-    zipCode: string;
+    address: string | null;
+    city: string | null;
+    province: string | null;
+    zipCode: string | null;
     email?: string | null;
     pec?: string | null;
     sdiCode?: string | null;

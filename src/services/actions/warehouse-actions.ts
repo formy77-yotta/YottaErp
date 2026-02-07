@@ -114,7 +114,7 @@ export async function getWarehouseAction(
     }
 
     // 3. ✅ Verifica che appartenga all'organizzazione corrente
-    await verifyOrganizationAccess(warehouse.organizationId, ctx);
+    verifyOrganizationAccess(ctx, warehouse);
 
     return {
       success: true,
@@ -259,7 +259,7 @@ export async function updateWarehouseAction(
     }
 
     // 5. ✅ Verifica accesso organizzazione
-    await verifyOrganizationAccess(existingWarehouse.organizationId, ctx);
+    verifyOrganizationAccess(ctx, existingWarehouse);
 
     // 6. Verifica unicità codice (se modificato)
     if (validatedData.code && validatedData.code !== existingWarehouse.code) {
@@ -351,8 +351,7 @@ export async function deleteWarehouseAction(
         _count: {
           select: {
             stockMovements: true,
-            documents: true,
-            documentLines: true,
+            products: true,
           },
         },
       },
@@ -366,7 +365,7 @@ export async function deleteWarehouseAction(
     }
 
     // 4. ✅ Verifica accesso organizzazione
-    await verifyOrganizationAccess(warehouse.organizationId, ctx);
+    verifyOrganizationAccess(ctx, warehouse);
 
     // 5. Verifica che non ci siano movimenti o documenti collegati
     if (warehouse._count.stockMovements > 0) {
@@ -376,10 +375,10 @@ export async function deleteWarehouseAction(
       };
     }
 
-    if (warehouse._count.documents > 0 || warehouse._count.documentLines > 0) {
+    if (warehouse._count.stockMovements > 0 || warehouse._count.products > 0) {
       return {
         success: false,
-        error: 'Impossibile eliminare: ci sono documenti collegati',
+        error: 'Impossibile eliminare: ci sono movimenti di magazzino o prodotti collegati',
       };
     }
 

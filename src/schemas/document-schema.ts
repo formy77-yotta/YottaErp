@@ -77,6 +77,10 @@ export const createDocumentSchema = z.object({
   // Note e termini pagamento (opzionali)
   notes: z.string().optional(),
   paymentTerms: z.string().optional(),
+  
+  // ✅ Condizione di pagamento (opzionale)
+  // Se presente, verranno generate automaticamente le scadenze (PaymentDeadline)
+  paymentConditionId: z.string().cuid().optional(),
 
   // ✅ Codici per fatture verso PA (opzionali ma obbligatori per FatturaPA)
   codiceCIG: z
@@ -132,6 +136,10 @@ export const updateDocumentSchema = z.object({
   // Note e termini pagamento (modificabili)
   notes: z.string().optional(),
   paymentTerms: z.string().optional(),
+  
+  // ✅ Condizione di pagamento (modificabile)
+  // Se modificata, le scadenze esistenti verranno ricalcolate
+  paymentConditionId: z.string().cuid().optional(),
 
   // ✅ Codici per fatture verso PA (modificabili)
   codiceCIG: z

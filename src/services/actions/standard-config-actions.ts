@@ -13,9 +13,12 @@
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
-import { Decimal } from 'decimal.js';
-import type { ActionResult } from '@/types/action-result';
 import { ForbiddenError } from '@/lib/auth';
+import type { Prisma } from '@prisma/client';
+
+type ActionResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
 
 // ============================================================================
 // UTILITY - VERIFICA SUPER ADMIN
@@ -128,7 +131,11 @@ export async function getStandardConfigsAction(): Promise<ActionResult<Array<{
 
     return {
       success: true,
-      data: configs,
+      data: configs.map(config => ({
+        ...config,
+        type: config.type as StandardConfigType,
+        data: config.data as unknown,
+      })),
     };
   } catch (error) {
     console.error('Errore recupero configurazioni standard:', error);
@@ -189,7 +196,11 @@ export async function getStandardConfigByTypeAction(
 
     return {
       success: true,
-      data: config,
+      data: config ? {
+        ...config,
+        type: config.type as StandardConfigType,
+        data: config.data as unknown,
+      } : null,
     };
   } catch (error) {
     console.error('Errore recupero configurazione standard:', error);
@@ -266,7 +277,7 @@ export async function upsertStandardConfigAction(
     const config = await prisma.standardConfig.create({
       data: {
         type,
-        data: data as any, // Prisma accetta JSON
+        data: data as unknown as Prisma.InputJsonValue, // Prisma accetta JSON
         version: nextVersion,
         description: description || null,
         active: true,
@@ -475,7 +486,7 @@ export async function initializeStandardConfigsAction(): Promise<ActionResult<{ 
       await prisma.standardConfig.create({
         data: {
           type: 'VAT_RATES',
-          data: vatRatesData,
+          data: vatRatesData as unknown as Prisma.InputJsonValue,
           version: 1,
           description: 'Aliquote IVA standard italiane',
           active: true,
@@ -613,7 +624,7 @@ export async function initializeStandardConfigsAction(): Promise<ActionResult<{ 
       await prisma.standardConfig.create({
         data: {
           type: 'UNITS_OF_MEASURE',
-          data: unitsData,
+          data: unitsData as unknown as Prisma.InputJsonValue,
           version: 1,
           description: 'Unità di misura standard italiane',
           active: true,
@@ -736,7 +747,7 @@ export async function initializeStandardConfigsAction(): Promise<ActionResult<{ 
       await prisma.standardConfig.create({
         data: {
           type: 'DOCUMENT_TYPES',
-          data: docTypesData,
+          data: docTypesData as unknown as Prisma.InputJsonValue,
           version: 1,
           description: 'Tipi documento standard per ciclo attivo e passivo',
           active: true,

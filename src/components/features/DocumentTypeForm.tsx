@@ -110,8 +110,12 @@ export function DocumentTypeForm({
         numeratorCode: documentType.numeratorCode,
         inventoryMovement: documentType.inventoryMovement,
         valuationImpact: documentType.valuationImpact,
-        operationSignStock: documentType.operationSignStock,
-        operationSignValuation: documentType.operationSignValuation,
+        operationSignStock: (documentType.operationSignStock === 1 || documentType.operationSignStock === -1) 
+          ? documentType.operationSignStock 
+          : null,
+        operationSignValuation: (documentType.operationSignValuation === 1 || documentType.operationSignValuation === -1) 
+          ? documentType.operationSignValuation 
+          : null,
         documentDirection: documentType.documentDirection,
         active: documentType.active,
         ...(isEditing ? { id: documentType.id } : {}),

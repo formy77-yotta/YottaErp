@@ -63,6 +63,7 @@ interface ProductFormProps {
     typeId: string | null;
     price: string; // Decimal come stringa
     vatRateId: string | null;
+    defaultWarehouseId?: string | null;
     active: boolean;
   };
   
@@ -158,7 +159,7 @@ export function ProductForm({
         typeId: product.typeId || '',
         price: product.price,
         vatRateId: product.vatRateId || '',
-        defaultWarehouseId: (product as any).defaultWarehouseId || '',
+        defaultWarehouseId: product.defaultWarehouseId || '',
         active: product.active,
         ...(isEditing ? { id: product.id } : {}),
       }, { keepDefaultValues: false });

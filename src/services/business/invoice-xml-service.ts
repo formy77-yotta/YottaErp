@@ -297,7 +297,7 @@ function buildFatturaPAXML(
   // IdFiscaleIVA (un solo elemento con due figli)
   const idFiscaleIVACedente = datiAnagraficiCedente.ele('IdFiscaleIVA');
   idFiscaleIVACedente.ele('IdPaese').txt('IT');
-  idFiscaleIVACedente.ele('IdCodice').txt(document.organization.vatNumber);
+  idFiscaleIVACedente.ele('IdCodice').txt(document.organization.vatNumber || '');
 
   if (document.organization.fiscalCode) {
     datiAnagraficiCedente.ele('CodiceFiscale').txt(document.organization.fiscalCode);

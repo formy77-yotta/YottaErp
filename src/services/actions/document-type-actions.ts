@@ -97,7 +97,10 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
 
     return {
       success: true,
-      data: types,
+      data: types.map(type => ({
+        ...type,
+        documentDirection: type.documentDirection as 'PURCHASE' | 'SALE' | 'INTERNAL',
+      })),
     };
   } catch (error) {
     console.error('Errore recupero configurazioni tipi documento:', error);

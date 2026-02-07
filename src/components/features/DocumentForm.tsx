@@ -12,18 +12,19 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { Decimal } from 'decimal.js';
-import { createDocumentSchema, updateDocumentSchema, type CreateDocumentInput, type UpdateDocumentInput } from '@/schemas/document-schema';
+import { updateDocumentSchema, type CreateDocumentInput, type UpdateDocumentInput, type DocumentLineInput } from '@/schemas/document-schema';
 import { createDocumentAction, updateDocumentAction, getProposedDocumentNumberAction, getDocumentAction } from '@/services/actions/document-actions';
 import { getDocumentTypesAction } from '@/services/actions/document-type-actions';
 import { getEntitiesAction } from '@/services/actions/entity-actions';
 import { getProductsAction } from '@/services/actions/product-actions';
 import { getWarehousesAction } from '@/services/actions/warehouse-actions';
+import { getPaymentConditionsAction } from '@/services/actions/payment-actions';
 import { calculateLineTotal, formatCurrency, toDecimal } from '@/lib/decimal-utils';
+import { calculateDeadlines, type CalculatedDeadline } from '@/lib/utils/payment-calculator';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -71,7 +72,7 @@ interface DocumentFormProps {
   onError?: (error: string) => void;
 }
 
-export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormProps = {}) {
+export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,21 +106,23 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     code: string;
     name: string;
   }>>([]);
+  const [paymentConditions, setPaymentConditions] = useState<Array<{
+    id: string;
+    name: string;
+    paymentType: {
+      id: string;
+      name: string;
+      sdiCode: string;
+    };
+    daysToFirstDue: number;
+    gapBetweenDues: number;
+    numberOfDues: number;
+    isEndOfMonth: boolean;
+  }>>([]);
 
   // Crea resolver dinamicamente basato su isEditing
-  // NOTA: useMemo assicura che il resolver venga ricreato quando isEditing cambia
-  // In modifica, usiamo un resolver più permissivo che ignora i campi extra
-  const resolver = useMemo(() => {
-    if (isEditing) {
-      // In modifica, crea uno schema che ignora i campi extra (documentTypeId, number)
-      const permissiveSchema = updateDocumentSchema.passthrough();
-      console.log('Creating resolver with updateDocumentSchema (permissive)'); // Debug
-      return zodResolver(permissiveSchema);
-    } else {
-      console.log('Creating resolver with createDocumentSchema'); // Debug
-      return zodResolver(createDocumentSchema);
-    }
-  }, [isEditing]);
+  // NOTA: Resolver disabilitato temporaneamente (commentato nella configurazione del form)
+  // La validazione viene fatta manualmente in onSubmit
 
   // Setup form con validazione Zod (usa schema appropriato)
   // NOTA: In modifica, usiamo UpdateDocumentInput che non ha documentTypeId e number
@@ -133,149 +136,49 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       // In modifica, solo campi presenti in UpdateDocumentInput
       // NOTA: id viene aggiunto in onSubmit, non nei defaultValues
       entityId: '',
-      date: new Date().toISOString().split('T')[0],
+      date: new Date(),
       mainWarehouseId: '',
       lines: [
         {
           productId: '',
           productCode: '',
           description: '',
-          unitPrice: '0.00',
-          quantity: '1.0000',
-          vatRate: '0.2200',
+          unitPrice: new Decimal('0.00'),
+          quantity: new Decimal('1.0000'),
+          vatRate: new Decimal('0.2200'),
           warehouseId: '',
         },
       ],
       notes: '',
       paymentTerms: '',
+      paymentConditionId: '',
     } : {
       // In creazione, tutti i campi
       documentTypeId: '',
       number: '',
       entityId: '',
-      date: new Date().toISOString().split('T')[0], // Data odierna
+      date: new Date(), // Data odierna
       mainWarehouseId: '',
       lines: [
         {
           productId: '',
           productCode: '',
           description: '',
-          unitPrice: '0.00',
-          quantity: '1.0000',
-          vatRate: '0.2200',
+          unitPrice: new Decimal('0.00'),
+          quantity: new Decimal('1.0000'),
+          vatRate: new Decimal('0.2200'),
           warehouseId: '',
         },
       ],
       notes: '',
       paymentTerms: '',
+      paymentConditionId: '',
     },
   });
 
   // Watch documentTypeId per proporre numero automaticamente
   const documentTypeId = form.watch('documentTypeId');
-
-  // Carica numero proposto quando si seleziona tipo documento
-  useEffect(() => {
-    async function loadProposedNumber() {
-      if (!documentTypeId) {
-        form.setValue('number', '');
-        return;
-      }
-
-      try {
-        const result = await getProposedDocumentNumberAction(documentTypeId);
-        if (result.success) {
-          form.setValue('number', result.data.number);
-        }
-      } catch (error) {
-        console.error('Errore caricamento numero proposto:', error);
-      }
-    }
-
-    loadProposedNumber();
-  }, [documentTypeId, form]);
-
-  // Gestione righe dinamiche
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'lines',
-  });
-
-  // Carica dati iniziali e documento (se in modifica)
-  useEffect(() => {
-    async function loadData() {
-      setLoadingData(true);
-      
-      try {
-        const [typesResult, entitiesResult, productsResult, warehousesResult, documentResult] = await Promise.all([
-          getDocumentTypesAction(),
-          getEntitiesAction(),
-          getProductsAction({ active: true }),
-          getWarehousesAction(),
-          isEditing && documentId ? getDocumentAction(documentId) : Promise.resolve(null),
-        ]);
-
-        if (typesResult.success) {
-          setDocumentTypes(typesResult.data.filter(t => t.active));
-        }
-        if (entitiesResult.success) {
-          setEntities(entitiesResult.data.filter(e => e.active));
-        }
-        if (productsResult.success) {
-          setProducts(productsResult.data);
-        }
-        if (warehousesResult.success) {
-          setWarehouses(warehousesResult.data);
-        }
-        
-        // Se in modifica, carica dati documento nel form
-        if (isEditing && documentResult && documentResult.success) {
-          const doc = documentResult.data;
-          console.log('Loading document data:', doc); // Debug
-          
-          // NOTA: mainWarehouseId e warehouseId non sono salvati nel database
-          // Vengono determinati al momento della creazione/aggiornamento con logica a cascata
-          // In modifica, lasciamo i campi vuoti e l'utente può selezionarli manualmente
-          // IMPORTANTE: reset con keepDefaultValues: false per rimuovere campi non presenti nello schema
-          // NOTA: Non includiamo 'id' nel reset perché viene aggiunto manualmente in onSubmit
-          form.reset({
-            entityId: doc.entity?.id || '',
-            date: new Date(doc.date).toISOString().split('T')[0],
-            mainWarehouseId: '', // Non salvato nel DB, lasciare vuoto
-            lines: doc.lines.map(line => ({
-              productId: line.productId || '',
-              productCode: line.productCode,
-              description: line.description,
-              unitPrice: line.unitPrice,
-              quantity: line.quantity,
-              vatRate: line.vatRate,
-              warehouseId: '', // Non salvato nel DB, lasciare vuoto
-            })),
-            notes: doc.notes || '',
-            paymentTerms: doc.paymentTerms || '',
-          }, { 
-            keepDefaultValues: false, // Rimuove campi non presenti nei dati resettati
-            keepValues: false, // Sostituisce completamente i valori
-          });
-          
-          // Rimuovi esplicitamente campi che non sono nello schema update
-          // Questo previene errori di validazione silenziosi
-          setTimeout(() => {
-            form.unregister('documentTypeId');
-            form.unregister('number');
-          }, 0);
-        }
-      } catch (error) {
-        console.error('Errore caricamento dati:', error);
-        setError('Errore durante il caricamento dei dati');
-      } finally {
-        setLoadingData(false);
-      }
-    }
-
-    loadData();
-  }, [isEditing, documentId, form]);
-
+  
   // Calcola totali documento (reactive)
   const totals = useMemo(() => {
     const lines = form.watch('lines');
@@ -315,6 +218,150 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     };
   }, [form.watch('lines')]);
 
+  // Watch paymentConditionId e date per calcolare anteprima scadenze
+  const paymentConditionId = form.watch('paymentConditionId');
+  const documentDate = form.watch('date');
+  const grossTotal = totals.grossTotal;
+
+  // Carica numero proposto quando si seleziona tipo documento
+  useEffect(() => {
+    async function loadProposedNumber() {
+      if (!documentTypeId) {
+        form.setValue('number', '');
+        return;
+      }
+
+      try {
+        const result = await getProposedDocumentNumberAction(documentTypeId);
+        if (result.success) {
+          form.setValue('number', result.data.number);
+        }
+      } catch (error) {
+        console.error('Errore caricamento numero proposto:', error);
+      }
+    }
+
+    loadProposedNumber();
+  }, [documentTypeId, form]);
+
+  // Gestione righe dinamiche
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: 'lines',
+  });
+
+  // Carica dati iniziali e documento (se in modifica)
+  useEffect(() => {
+    async function loadData() {
+      setLoadingData(true);
+      
+      try {
+        const [typesResult, entitiesResult, productsResult, warehousesResult, paymentConditionsResult, documentResult] = await Promise.all([
+          getDocumentTypesAction(),
+          getEntitiesAction(),
+          getProductsAction({ active: true }),
+          getWarehousesAction(),
+          getPaymentConditionsAction(true), // Solo condizioni attive
+          isEditing && documentId ? getDocumentAction(documentId) : Promise.resolve(null),
+        ]);
+
+        if (typesResult.success) {
+          setDocumentTypes(typesResult.data.filter(t => t.active));
+        }
+        if (entitiesResult.success) {
+          setEntities(entitiesResult.data.filter(e => e.active));
+        }
+        if (productsResult.success) {
+          setProducts(productsResult.data);
+        }
+        if (warehousesResult.success) {
+          setWarehouses(warehousesResult.data);
+        }
+        if (paymentConditionsResult.success) {
+          setPaymentConditions(paymentConditionsResult.data);
+        }
+        
+        // Se in modifica, carica dati documento nel form
+        if (isEditing && documentResult && documentResult.success) {
+          const doc = documentResult.data;
+          
+          // NOTA: mainWarehouseId e warehouseId non sono salvati nel database
+          // Vengono determinati al momento della creazione/aggiornamento con logica a cascata
+          // In modifica, lasciamo i campi vuoti e l'utente può selezionarli manualmente
+          // IMPORTANTE: reset con keepDefaultValues: false per rimuovere campi non presenti nello schema
+          // NOTA: Non includiamo 'id' nel reset perché viene aggiunto manualmente in onSubmit
+          form.reset({
+            entityId: doc.entity?.id || '',
+            date: new Date(doc.date),
+            mainWarehouseId: '', // Non salvato nel DB, lasciare vuoto
+            lines: doc.lines.map(line => ({
+              productId: line.productId || '',
+              productCode: line.productCode,
+              description: line.description,
+              unitPrice: line.unitPrice,
+              quantity: line.quantity,
+              vatRate: line.vatRate,
+              warehouseId: '', // Non salvato nel DB, lasciare vuoto
+            })),
+            notes: doc.notes || '',
+            paymentTerms: doc.paymentTerms || '',
+            paymentConditionId: doc.paymentCondition?.id || '',
+          }, { 
+            keepDefaultValues: false, // Rimuove campi non presenti nei dati resettati
+            keepValues: false, // Sostituisce completamente i valori
+          });
+          
+          // Rimuovi esplicitamente campi che non sono nello schema update
+          // Questo previene errori di validazione silenziosi
+          setTimeout(() => {
+            form.unregister('documentTypeId');
+            form.unregister('number');
+          }, 0);
+        }
+      } catch (error) {
+        console.error('Errore caricamento dati:', error);
+        setError('Errore durante il caricamento dei dati');
+      } finally {
+        setLoadingData(false);
+      }
+    }
+
+    loadData();
+  }, [isEditing, documentId, form]);
+
+  // Calcola anteprima scadenze (reactive)
+  const previewDeadlines = useMemo<CalculatedDeadline[]>(() => {
+    if (!paymentConditionId || !grossTotal || grossTotal.lessThanOrEqualTo(0)) {
+      return [];
+    }
+
+    const condition = paymentConditions.find(c => c.id === paymentConditionId);
+    if (!condition) {
+      return [];
+    }
+
+    try {
+      const baseDate = documentDate instanceof Date 
+        ? documentDate 
+        : documentDate 
+          ? new Date(documentDate) 
+          : new Date();
+      return calculateDeadlines(
+        grossTotal,
+        {
+          daysToFirstDue: condition.daysToFirstDue,
+          gapBetweenDues: condition.gapBetweenDues,
+          numberOfDues: condition.numberOfDues,
+          isEndOfMonth: condition.isEndOfMonth,
+        },
+        baseDate
+      );
+    } catch (error) {
+      console.error('Errore calcolo scadenze:', error);
+      return [];
+    }
+  }, [paymentConditionId, grossTotal, documentDate, paymentConditions]);
+
   /**
    * Handler selezione prodotto
    */
@@ -322,18 +369,15 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
-    const currentLines = form.getValues('lines');
-    const line = currentLines[lineIndex];
-    
     // Aggiorna riga con dati prodotto
     form.setValue(`lines.${lineIndex}.productId`, product.id);
     form.setValue(`lines.${lineIndex}.productCode`, product.code);
     form.setValue(`lines.${lineIndex}.description`, product.name);
-    form.setValue(`lines.${lineIndex}.unitPrice`, product.price);
+    form.setValue(`lines.${lineIndex}.unitPrice`, new Decimal(product.price.toString()));
     
     // Se il prodotto ha un'aliquota IVA predefinita, usala
     if (product.vatRate) {
-      form.setValue(`lines.${lineIndex}.vatRate`, product.vatRate.value);
+      form.setValue(`lines.${lineIndex}.vatRate`, new Decimal(product.vatRate.value.toString()));
     }
 
     // ✅ Se il prodotto ha un magazzino predefinito, impostalo automaticamente
@@ -350,9 +394,9 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       productId: '',
       productCode: '',
       description: '',
-      unitPrice: '0.00',
-      quantity: '1.0000',
-      vatRate: '0.2200',
+      unitPrice: new Decimal('0.00'),
+      quantity: new Decimal('1.0000'),
+      vatRate: new Decimal('0.2200'),
       warehouseId: '',
     });
   }
@@ -370,24 +414,16 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
    * Handler submit form
    */
   async function onSubmit(data: CreateDocumentInput | UpdateDocumentInput) {
-    console.log('onSubmit called with data:', data); // Debug
-    console.log('onSubmit data keys:', Object.keys(data)); // Debug
-    console.log('isEditing:', isEditing); // Debug
-    console.log('documentId:', documentId); // Debug
-    
     setIsLoading(true);
     setError(null);
 
     try {
-      // Valida manualmente con lo schema appropriato prima di procedere
-      const schema = isEditing ? updateDocumentSchema : createDocumentSchema;
-      
       if (isEditing && documentId) {
         // Aggiornamento documento esistente
         // Converti stringhe vuote in undefined per lo schema Zod
         const entityIdValue = data.entityId as string | undefined;
         const mainWarehouseIdValue = data.mainWarehouseId as string | undefined;
-        const linesData = data.lines as any[];
+        const linesData = (data.lines || []) as DocumentLineInput[];
         
         // Filtra righe vuote e assicura che productCode e description siano sempre presenti
         const validLines = linesData
@@ -419,7 +455,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           ...(entityIdValue !== undefined && { 
             entityId: entityIdValue?.trim() || undefined
           }),
-          ...(data.date && { date: new Date(data.date as string) }),
+          ...(data.date && { date: data.date }),
           ...(mainWarehouseIdValue !== undefined && { 
             mainWarehouseId: mainWarehouseIdValue?.trim() || undefined
           }),
@@ -428,8 +464,6 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           ...(data.notes !== undefined && { notes: (data.notes as string)?.trim() || undefined }),
           ...(data.paymentTerms !== undefined && { paymentTerms: (data.paymentTerms as string)?.trim() || undefined }),
         };
-
-        console.log('Submitting update:', updateData); // Debug
 
         // Valida manualmente i dati prima di inviare (doppia validazione)
         try {
@@ -449,8 +483,6 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
         const result = await updateDocumentAction(updateData);
 
-        console.log('Update result:', result); // Debug
-
         if (result.success) {
           onSuccess?.();
           if (!onSuccess) {
@@ -465,7 +497,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // Creazione nuovo documento
         const submitData: CreateDocumentInput = {
           ...data,
-          date: new Date(data.date as string),
+          date: data.date,
         } as CreateDocumentInput;
 
         const result = await createDocumentAction(submitData);
@@ -517,8 +549,6 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         onSubmit={async (e) => {
           e.preventDefault();
           const formValues = form.getValues();
-          console.log('Form submit - values:', formValues); // Debug
-          console.log('Form submit - isEditing:', isEditing); // Debug
           
           // Se il form è vuoto, mostra un errore
           if (Object.keys(formValues).length === 0) {
@@ -640,7 +670,11 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                 <FormControl>
                   <Input
                     type="date"
-                    {...field}
+                    value={field.value ? new Date(field.value).toISOString().split('T')[0] : ''}
+                    onChange={(e) => {
+                      field.onChange(e.target.value ? new Date(e.target.value) : undefined);
+                    }}
+                    onBlur={field.onBlur}
                     disabled={isLoading}
                   />
                 </FormControl>
@@ -785,7 +819,12 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                               <Input
                                 type="text"
                                 placeholder="1.0000"
-                                {...field}
+                                value={field.value ? field.value.toString() : ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  field.onChange(value ? new Decimal(value) : undefined);
+                                }}
+                                onBlur={field.onBlur}
                                 disabled={isLoading}
                               />
                             </FormControl>
@@ -806,7 +845,12 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                               <Input
                                 type="text"
                                 placeholder="0.00"
-                                {...field}
+                                value={field.value ? field.value.toString() : ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  field.onChange(value ? new Decimal(value) : undefined);
+                                }}
+                                onBlur={field.onBlur}
                                 disabled={isLoading}
                               />
                             </FormControl>
@@ -827,7 +871,12 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                               <Input
                                 type="text"
                                 placeholder="0.2200"
-                                {...field}
+                                value={field.value ? field.value.toString() : ''}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  field.onChange(value ? new Decimal(value) : undefined);
+                                }}
+                                onBlur={field.onBlur}
                                 disabled={isLoading}
                               />
                             </FormControl>
@@ -842,6 +891,12 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                       {(() => {
                         try {
                           const line = form.watch(`lines.${index}`);
+                          if (!line) {
+                            return '€ 0.00';
+                          }
+                          if (!line.quantity || !line.unitPrice || !line.vatRate) {
+                            return '€ 0.00';
+                          }
                           const quantity = toDecimal(line.quantity);
                           const unitPrice = toDecimal(line.unitPrice);
                           const vatRate = toDecimal(line.vatRate);
@@ -961,6 +1016,69 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               </FormItem>
             )}
           />
+        </div>
+
+        {/* Condizione di Pagamento */}
+        <div className="space-y-4">
+          <FormField
+            control={form.control}
+            name="paymentConditionId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Condizione di Pagamento</FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}
+                  value={field.value || 'none'}
+                  disabled={isLoading}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona condizione di pagamento" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none">Nessuna (pagamento immediato)</SelectItem>
+                    {paymentConditions.map((condition) => (
+                      <SelectItem key={condition.id} value={condition.id}>
+                        {condition.name} ({condition.paymentType.name} - {condition.paymentType.sdiCode})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Seleziona una condizione di pagamento per generare automaticamente le scadenze
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Anteprima Scadenze */}
+          {previewDeadlines.length > 0 && (
+            <div className="rounded-lg border bg-muted/50 p-4">
+              <h4 className="text-sm font-semibold mb-3">Anteprima Scadenze</h4>
+              <div className="space-y-2">
+                {previewDeadlines.map((deadline, index) => (
+                  <div key={index} className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {deadline.dueDate.toLocaleDateString('it-IT', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                      })}
+                    </span>
+                    <span className="font-medium">
+                      Rata {deadline.installmentNumber}: {formatCurrency(deadline.amount)}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between text-sm font-semibold border-t pt-2 mt-2">
+                  <span>Totale:</span>
+                  <span>{formatCurrency(grossTotal)}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pulsanti Azione */}

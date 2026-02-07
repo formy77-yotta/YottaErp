@@ -86,9 +86,6 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         throw new Error('Il track audio non è attivo. Verifica le impostazioni del microfono.');
       }
 
-      // Verifica impostazioni dispositivo
-      const settings = audioTrack.getSettings();
-
       streamRef.current = stream;
       setHasPermission(true);
 

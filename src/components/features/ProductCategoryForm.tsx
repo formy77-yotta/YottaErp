@@ -117,10 +117,13 @@ export function ProductCategoryForm({
         result = await updateProductCategoryAction(updateData);
       } else {
         // Creazione nuova categoria
+        if (!data.code) {
+          throw new Error('Codice categoria obbligatorio');
+        }
         const createData: CreateProductCategoryInput = {
-          code: data.code,
-          description: data.description,
-          active: data.active,
+          code: data.code as string,
+          description: data.description as string,
+          active: data.active ?? true,
         };
         
         result = await createProductCategoryAction(createData);

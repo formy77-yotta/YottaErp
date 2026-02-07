@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Building2, FileText, Mail, Phone, Upload, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Building2, FileText, Mail, Image as ImageIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface OrganizationProfileFormProps {
@@ -90,6 +90,15 @@ const REGIME_FISCALE_OPTIONS = [
   { value: 'RF19', label: 'RF19 - Regime forfettario (art.1, c.54-89, L. 190/2014)' },
 ] as const;
 
+const VALID_REGIME_FISCALE_VALUES = ['RF01', 'RF02', 'RF04', 'RF05', 'RF06', 'RF07', 'RF08', 'RF09', 'RF10', 'RF11', 'RF12', 'RF13', 'RF14', 'RF15', 'RF16', 'RF17', 'RF18', 'RF19'] as const;
+
+function validateRegimeFiscale(value: string | null | undefined): 'RF01' | 'RF02' | 'RF04' | 'RF05' | 'RF06' | 'RF07' | 'RF08' | 'RF09' | 'RF10' | 'RF11' | 'RF12' | 'RF13' | 'RF14' | 'RF15' | 'RF16' | 'RF17' | 'RF18' | 'RF19' {
+  if (value && VALID_REGIME_FISCALE_VALUES.includes(value as typeof VALID_REGIME_FISCALE_VALUES[number])) {
+    return value as typeof VALID_REGIME_FISCALE_VALUES[number];
+  }
+  return 'RF01';
+}
+
 export function OrganizationProfileForm({ organization }: OrganizationProfileFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -117,7 +126,7 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
       reaUfficio: organization.reaUfficio || '',
       reaNumero: organization.reaNumero || '',
       reaCapitaleSociale: organization.reaCapitaleSociale || '',
-      regimeFiscale: organization.regimeFiscale || 'RF01',
+      regimeFiscale: validateRegimeFiscale(organization.regimeFiscale),
     },
   });
 
