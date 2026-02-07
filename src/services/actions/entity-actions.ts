@@ -608,3 +608,185 @@ export async function updateEntityAction(
     };
   }
 }
+
+/**
+ * Verifica se un'entità ha dipendenze (documenti collegati)
+ * 
+ * MULTITENANT: Verifica che l'entità appartenga all'organizzazione corrente
+ * 
+ * @param id - ID dell'entità
+ * @returns Result con informazioni sulle dipendenze
+ */
+export async function checkEntityDependenciesAction(
+  id: string
+): Promise<ActionResult<{
+  hasDependencies: boolean;
+  documentCount: number;
+  documentTypes: Array<{ type: string; count: number }>;
+}>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+
+    // 2. ✅ Verifica esistenza E appartenenza all'organizzazione
+    const existingEntity = await prisma.entity.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true, businessName: true },
+    });
+
+    if (!existingEntity) {
+      return {
+        success: false,
+        error: 'Entità non trovata',
+      };
+    }
+    
+    // ✅ Verifica che appartenga all'organizzazione corrente
+    verifyOrganizationAccess(ctx, existingEntity);
+
+    // 3. Conta documenti collegati
+    const documents = await prisma.document.findMany({
+      where: {
+        organizationId: ctx.organizationId,
+        entityId: id,
+      },
+      select: {
+        type: true,
+      },
+    });
+
+    const documentCount = documents.length;
+    const documentTypes = documents.reduce((acc, doc) => {
+      const type = doc.type;
+      const existing = acc.find((item) => item.type === type);
+      if (existing) {
+        existing.count++;
+      } else {
+        acc.push({ type, count: 1 });
+      }
+      return acc;
+    }, [] as Array<{ type: string; count: number }>);
+
+    return {
+      success: true,
+      data: {
+        hasDependencies: documentCount > 0,
+        documentCount,
+        documentTypes,
+      },
+    };
+  } catch (error) {
+    console.error('Errore verifica dipendenze entità:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante la verifica delle dipendenze',
+    };
+  }
+}
+
+/**
+ * Elimina un'entità dopo aver verificato che non abbia dipendenze
+ * 
+ * MULTITENANT: Verifica che l'entità appartenga all'organizzazione corrente
+ * 
+ * @param id - ID dell'entità da eliminare
+ * @returns Result con successo o errore
+ */
+export async function deleteEntityAction(
+  id: string
+): Promise<ActionResult<void>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+    
+    // 2. ✅ Verifica permessi scrittura
+    if (!canWrite(ctx)) {
+      return {
+        success: false,
+        error: 'Non hai i permessi per eliminare entità',
+      };
+    }
+
+    // 3. ✅ Verifica esistenza E appartenenza all'organizzazione
+    const existingEntity = await prisma.entity.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true },
+    });
+
+    if (!existingEntity) {
+      return {
+        success: false,
+        error: 'Entità non trovata',
+      };
+    }
+    
+    // ✅ Verifica che appartenga all'organizzazione corrente
+    verifyOrganizationAccess(ctx, existingEntity);
+
+    // 4. Verifica dipendenze (documenti collegati)
+    const documents = await prisma.document.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        entityId: id,
+      },
+      select: {
+        id: true,
+        type: true,
+        number: true,
+      },
+    });
+
+    if (documents) {
+      const documentTypeLabels: Record<string, string> = {
+        QUOTE: 'preventivo',
+        ORDER: 'ordine',
+        DELIVERY_NOTE: 'DDT',
+        INVOICE: 'fattura',
+        CREDIT_NOTE: 'nota di credito',
+      };
+
+      const typeLabel = documentTypeLabels[documents.type] || 'documento';
+      
+      return {
+        success: false,
+        error: `Impossibile eliminare l'anagrafica: esistono documenti collegati (es. ${typeLabel} n. ${documents.number}). Elimina prima i documenti associati.`,
+      };
+    }
+
+    // 5. Elimina entità
+    await prisma.entity.delete({
+      where: { id },
+    });
+
+    // 6. Revalidazione cache
+    revalidatePath('/entities');
+    revalidatePath(`/entities/${id}`);
+
+    return {
+      success: true,
+      data: undefined,
+    };
+  } catch (error) {
+    console.error('Errore eliminazione entità:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante l\'eliminazione dell\'entità',
+    };
+  }
+}

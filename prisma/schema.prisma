@@ -121,6 +121,7 @@ model Organization {
   documents      Document[]
   vatRates       VatRate[]
   productCategories ProductCategory[]
+  unitsOfMeasure UnitOfMeasure[]
   stockMovements StockMovement[]
 
   @@index([businessName])
@@ -304,6 +305,44 @@ model ProductCategory {
 
   @@unique([organizationId, code]) // Codice categoria unico per organizzazione
   @@index([organizationId])
+  @@index([organizationId, active])
+}
+
+/**
+ * UnitOfMeasure: Unità di misura
+ * 
+ * Gestisce le unità di misura per prodotti e documenti.
+ * Supporta conversioni automatiche tramite measureClass e baseFactor.
+ * MULTITENANT: Ogni unità di misura appartiene a un'organizzazione
+ */
+model UnitOfMeasure {
+  id              String   @id @default(cuid())
+  
+  // ✅ MULTITENANT: Ogni unità di misura appartiene a un'organizzazione
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  code            String   // Es: "G", "KG", "M", "KM", "PZ"
+  name            String   // Es: "Grammi", "Chilogrammi", "Metri", "Pezzi"
+  
+  // Classe di misura per conversioni automatiche
+  // Es: "WEIGHT", "LENGTH", "VOLUME", "PIECE"
+  measureClass    String   
+  
+  // Valore rispetto all'unità di base della classe (es. se base è G: G=1, KG=1000)
+  // Usiamo Decimal per la precisione fiscale 
+  baseFactor      Decimal  @db.Decimal(12, 6) 
+
+  // Metadata
+  active          Boolean  @default(true)
+
+  // Timestamp
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, code]) // Codice unico per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, measureClass])
   @@index([organizationId, active])
 }
 

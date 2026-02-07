@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Edit } from 'lucide-react';
+import { DeleteEntityButton } from './DeleteEntityButton';
 
 interface Entity {
   id: string;
@@ -69,15 +70,6 @@ export function EntityTable({ entities }: EntityTableProps) {
  * Riga singola della tabella con link alla pagina di dettaglio
  */
 function EntityRow({ entity }: { entity: Entity }) {
-  useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EntityTable.tsx:83',message:'EntityRow mounted',data:{entityId:entity.id,hasVatNumber:Boolean(entity.vatNumber),vatNumberLength:entity.vatNumber ? entity.vatNumber.length : 0,hasFiscalCode:Boolean(entity.fiscalCode),fiscalCodeLength:entity.fiscalCode ? entity.fiscalCode.length : 0,hasAddress:Boolean(entity.address),hasEmail:Boolean(entity.email),windowExists:typeof window !== 'undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-  }, [entity.id, entity.vatNumber, entity.fiscalCode, entity.address, entity.email]);
-
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'EntityTable.tsx:90',message:'EntityRow render',data:{entityId:entity.id,hasVatNumber:Boolean(entity.vatNumber),hasFiscalCode:Boolean(entity.fiscalCode),hasAddress:Boolean(entity.address),hasEmail:Boolean(entity.email)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
 
   const typeLabels: Record<Entity['type'], string> = {
     CUSTOMER: 'Cliente',
@@ -152,11 +144,17 @@ function EntityRow({ entity }: { entity: Entity }) {
         </Badge>
       </TableCell>
       <TableCell className="text-right">
-        <Link href={`/entities/${entity.id}`}>
-          <Button variant="ghost" size="icon">
-            <Edit className="h-4 w-4" />
-          </Button>
-        </Link>
+        <div className="flex items-center justify-end gap-2">
+          <Link href={`/entities/${entity.id}`}>
+            <Button variant="ghost" size="icon">
+              <Edit className="h-4 w-4" />
+            </Button>
+          </Link>
+          <DeleteEntityButton 
+            entityId={entity.id} 
+            entityName={entity.businessName}
+          />
+        </div>
       </TableCell>
     </TableRow>
   );

@@ -79,6 +79,7 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
         
         if (!audioBlob) {
           setIsTranscribing(false);
+          alert('Registrazione troppo corta. Assicurati di registrare almeno 1-2 secondi di audio.');
           return;
         }
 
@@ -92,34 +93,69 @@ export function CopilotSheet({ open, onOpenChange }: CopilotSheetProps) {
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const errorMessage = errorData.error || errorData.details || 'Errore durante la trascrizione';
+          let errorMessage = `Errore server (${response.status})`;
+          try {
+            const errorData = await response.json();
+            // Combina error e details se presenti
+            const parts = [];
+            if (errorData.error) parts.push(errorData.error);
+            if (errorData.details) parts.push(errorData.details);
+            if (parts.length > 0) {
+              errorMessage = parts.join('\n');
+            }
+          } catch {
+            // Se non è JSON, usa il testo della risposta
+            const text = await response.text().catch(() => '');
+            if (text) errorMessage = text;
+          }
           throw new Error(errorMessage);
         }
 
         const data = await response.json();
         
-        // Verifica se c'è un errore nella risposta
+        // Verifica se c'è un errore nella risposta (anche con status 200)
         if (data.error) {
-          throw new Error(data.error);
+          const errorDetails = data.details ? `${data.error}\n\nDettagli: ${data.details}` : data.error;
+          throw new Error(errorDetails);
         }
         
         const transcribedText = data.text;
 
         if (transcribedText && transcribedText.trim()) {
-          // Inserisci testo trascritto e invia automaticamente
+          // Inserisci testo trascritto nell'input
           setInput(transcribedText);
-          sendMessage({
-            role: 'user',
-            content: transcribedText,
-          });
+          
+          // Invia automaticamente il messaggio
+          // Usa un piccolo delay per assicurarsi che l'input sia aggiornato
+          setTimeout(() => {
+            try {
+              sendMessage({
+                role: 'user',
+                content: transcribedText.trim(),
+              });
+              // Pulisci l'input dopo l'invio
+              setInput('');
+            } catch (sendError) {
+              console.error('Errore durante l\'invio del messaggio:', sendError);
+              // Mantieni il testo nell'input in caso di errore, così l'utente può inviarlo manualmente
+            }
+          }, 50);
+        } else {
+          // Se non c'è testo trascritto, mostra un messaggio informativo
+          alert('Nessun testo rilevato nella registrazione. Assicurati di parlare chiaramente e riprova.');
         }
       } catch (error) {
         console.error('Errore trascrizione:', error);
         const errorMessage = error instanceof Error 
           ? error.message 
           : 'Errore durante la trascrizione. Riprova.';
-        alert(`Errore trascrizione: ${errorMessage}\n\nNota: Assicurati che l'API Speech-to-Text sia abilitata nel Google Cloud Console.`);
+        
+        // Mostra messaggio di errore dettagliato
+        const fullMessage = errorMessage.includes('API Speech-to-Text') || errorMessage.includes('403') || errorMessage.includes('401')
+          ? `Errore trascrizione: ${errorMessage}`
+          : `Errore trascrizione: ${errorMessage}\n\nNota: Assicurati che l'API Speech-to-Text sia abilitata nel Google Cloud Console.`;
+        
+        alert(fullMessage);
       } finally {
         setIsTranscribing(false);
       }

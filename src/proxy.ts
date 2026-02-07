@@ -36,26 +36,19 @@ const SUPER_ADMIN_IDS = process.env.SUPER_ADMIN_IDS?.split(',').map(id => id.tri
  * con database avviene nelle Server Actions che girano in Node.js runtime.
  */
 function isSuperAdmin(request: NextRequest): { isAdmin: boolean; userId?: string } {
-  // Leggi userId da cookie
   const userId = request.cookies.get('userId')?.value;
   
   if (!userId) {
-    console.warn('[AUTH] Tentativo accesso senza userId cookie');
     return { isAdmin: false };
   }
   
   // In development, puoi bypassare il controllo (RIMUOVI IN PRODUZIONE!)
   if (process.env.NODE_ENV === 'development' && process.env.DEV_BYPASS_AUTH === 'true') {
-    console.warn('[AUTH] ⚠️ DEVELOPMENT MODE: Bypass autenticazione attivo!');
     return { isAdmin: true, userId };
   }
   
   // Verifica se userId è nella lista Super Admin da env
   const isAdmin = SUPER_ADMIN_IDS.length > 0 && SUPER_ADMIN_IDS.includes(userId);
-  
-  if (!isAdmin) {
-    console.warn(`[AUTH] Accesso negato per userId: ${userId} (non in SUPER_ADMIN_IDS)`);
-  }
   
   return { isAdmin, userId };
 }
@@ -68,25 +61,26 @@ function isSuperAdmin(request: NextRequest): { isAdmin: boolean; userId?: string
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  console.log(`[PROXY] ${request.method} ${pathname}`);
-  
   // ===== PROTEZIONE ROUTE ORGANIZATIONS (SUPER ADMIN ONLY) =====
+  // NOTA: La verifica completa avviene nel layout (admin)/layout.tsx che legge dal database
+  // Questo è solo un controllo leggero per performance (opzionale)
+  // Se SUPER_ADMIN_IDS non è configurato, il layout gestirà la verifica completa
   if (pathname.startsWith('/organizations')) {
-    const { isAdmin, userId } = isSuperAdmin(request);
-    
-    if (!isAdmin) {
-      console.error(`[SECURITY] ❌ Tentativo accesso non autorizzato a ${pathname}`);
+    // Se SUPER_ADMIN_IDS è configurato, fai un controllo leggero
+    if (SUPER_ADMIN_IDS.length > 0) {
+      const { isAdmin } = isSuperAdmin(request);
       
-      // Redirect a pagina di accesso negato
-      const url = request.nextUrl.clone();
-      url.pathname = '/access-denied';
-      url.searchParams.set('reason', 'super_admin_required');
-      url.searchParams.set('from', pathname);
-      
-      return NextResponse.redirect(url);
+      if (!isAdmin) {
+        // Redirect a pagina di accesso negato
+        const url = request.nextUrl.clone();
+        url.pathname = '/access-denied';
+        url.searchParams.set('reason', 'super_admin_required');
+        url.searchParams.set('from', pathname);
+        
+        return NextResponse.redirect(url);
+      }
     }
-    
-    console.log(`[SECURITY] ✅ Super Admin ${userId} accede a ${pathname}`);
+    // Se SUPER_ADMIN_IDS non è configurato, lascia che il layout gestisca la verifica
   }
   
   // ===== PROTEZIONE ROUTE STANDARD (AUTENTICAZIONE BASE) =====

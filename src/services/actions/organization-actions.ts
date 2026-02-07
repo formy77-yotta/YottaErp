@@ -422,23 +422,6 @@ export async function createOrganizationAdmin(data: {
       }
     }
     
-    // #region agent log
-    console.log('[DEBUG] Server Action received data:', JSON.stringify({
-      address: data.address,
-      zipCode: data.zipCode,
-      pec: data.pec,
-      sdiCode: data.sdiCode,
-      email: data.email,
-      phone: data.phone,
-      addressType: typeof data.address,
-      zipCodeType: typeof data.zipCode,
-      addressIsUndefined: data.address === undefined,
-      addressIsNull: data.address === null,
-      addressIsString: typeof data.address === 'string',
-      addressLength: typeof data.address === 'string' ? data.address.length : 'N/A',
-    }, null, 2));
-    // #endregion
-    
     // Crea organizzazione e associa utenti admin in transazione
     const result = await prisma.$transaction(async (tx) => {
       // Helper per normalizzare stringhe: preserva stringhe non vuote, converte tutto il resto in null
@@ -469,35 +452,10 @@ export async function createOrganizationAdmin(data: {
         active: data.active ?? true,
       };
       
-      // #region agent log
-      console.log('[DEBUG] Data before Prisma create:', {
-        address: orgData.address,
-        zipCode: orgData.zipCode,
-        pec: orgData.pec,
-        sdiCode: orgData.sdiCode,
-        email: orgData.email,
-        phone: orgData.phone,
-        addressIsNull: orgData.address === null,
-        zipCodeIsNull: orgData.zipCode === null,
-      });
-      // #endregion
-      
       // 1. Crea organizzazione
       const organization = await tx.organization.create({
         data: orgData
       });
-      
-      // #region agent log
-      console.log('[DEBUG] Organization created in DB:', {
-        id: organization.id,
-        address: organization.address,
-        zipCode: organization.zipCode,
-        pec: organization.pec,
-        sdiCode: organization.sdiCode,
-        email: organization.email,
-        phone: organization.phone,
-      });
-      // #endregion
 
       // 2. Associa utenti admin se specificati
       if (data.adminUserEmails && data.adminUserEmails.length > 0) {

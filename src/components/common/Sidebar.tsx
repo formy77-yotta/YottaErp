@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   Settings,
+  Ruler,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -93,6 +94,11 @@ const navItems: NavItem[] = [
         title: 'Categorie Articoli',
         href: '/settings/product-categories',
         icon: Package,
+      },
+      {
+        title: 'Unità di Misura',
+        href: '/settings/unit-of-measure',
+        icon: Ruler,
       },
     ],
   },

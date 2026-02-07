@@ -19,9 +19,9 @@ import { createEntityAction } from '@/services/actions/entity-actions';
  * Crea un nuovo lead (entità di tipo LEAD)
  */
 const createLeadTool = tool({
-  description: 'Crea un nuovo lead (contatto potenziale). Usa questo quando l\'utente vuole salvare un nuovo contatto o lead.',
+  description: 'Crea un nuovo lead (contatto potenziale). Usa questo quando l\'utente vuole salvare un nuovo contatto o lead. PARAMETRI OBBLIGATORI: businessName (ragione sociale o nome del contatto). PARAMETRI OPZIONALI: email, phone, address, city, province, zipCode.',
   parameters: z.object({
-    businessName: z.string().min(2, 'Ragione sociale deve contenere almeno 2 caratteri'),
+    businessName: z.string().min(2, 'Ragione sociale deve contenere almeno 2 caratteri').describe('Ragione sociale o nome del contatto (OBBLIGATORIO)'),
     email: z.string().email('Email non valida').optional(),
     phone: z.string().optional(),
     address: z.string().optional(),
@@ -31,11 +31,19 @@ const createLeadTool = tool({
   }),
   execute: async ({ businessName, email, phone, address, city, province, zipCode }) => {
     try {
+      // Validazione esplicita: businessName è obbligatorio
+      if (!businessName || businessName.trim() === '') {
+        return {
+          success: false,
+          error: 'Ragione sociale obbligatoria per creare un lead',
+        };
+      }
+
       const result = await createEntityAction({
         type: 'LEAD',
-        businessName,
+        businessName: businessName.trim(),
         email: email || '',
-        phone: phone || '',
+        // phone non è supportato nello schema createEntitySchema, viene ignorato
         address: address || '',
         city: city || '',
         province: province || '',
@@ -71,9 +79,9 @@ const createLeadTool = tool({
  * In futuro si potrà estendere con una Server Action dedicata per i documenti.
  */
 const createOpportunityTool = tool({
-  description: 'Crea una nuova opportunità di vendita (preventivo/quote). Usa questo quando l\'utente vuole creare un preventivo o un\'opportunità commerciale.',
+  description: 'Crea una nuova opportunità di vendita (preventivo/quote). Usa questo quando l\'utente vuole creare un preventivo o un\'opportunità commerciale. PARAMETRI OBBLIGATORI: customerName (nome del cliente), description (descrizione dell\'opportunità). PARAMETRI OPZIONALI: expectedValue (valore atteso in euro), email, phone.',
   parameters: z.object({
-    customerName: z.string().min(2, 'Nome cliente deve contenere almeno 2 caratteri'),
+    customerName: z.string().min(2, 'Nome cliente deve contenere almeno 2 caratteri').describe('Nome del cliente (OBBLIGATORIO)'),
     description: z.string().min(5, 'Descrizione deve contenere almeno 5 caratteri'),
     expectedValue: z.number().positive('Il valore atteso deve essere positivo').optional(),
     email: z.string().email('Email non valida').optional(),
@@ -81,13 +89,21 @@ const createOpportunityTool = tool({
   }),
   execute: async ({ customerName, description, expectedValue, email, phone }) => {
     try {
+      // Validazione esplicita: customerName è obbligatorio
+      if (!customerName || customerName.trim() === '') {
+        return {
+          success: false,
+          error: 'Nome cliente obbligatorio per creare un\'opportunità',
+        };
+      }
+
       // Per ora creiamo un LEAD con la descrizione nelle note
       // In futuro si potrà creare un documento QUOTE vero e proprio
       const result = await createEntityAction({
         type: 'LEAD',
-        businessName: customerName,
+        businessName: customerName.trim(),
         email: email || '',
-        phone: phone || '',
+        // phone non è supportato nello schema createEntitySchema, viene ignorato
       });
 
       if (result.success) {
@@ -126,8 +142,32 @@ export async function POST(req: Request) {
       );
     }
 
+    // Normalizza i messaggi: rimuovi campi extra e assicura formato corretto per ModelMessage[]
+    // I messaggi devono avere solo 'role' e 'content' (string)
+    const normalizedMessages = messages
+      .filter((msg: any) => msg && msg.role && (msg.content || msg.text))
+      .map((msg: any) => {
+        // Estrai solo i campi supportati: role e content
+        // Supporta sia 'content' che 'text' (formato legacy)
+        const content = typeof msg.content === 'string' 
+          ? msg.content 
+          : typeof msg.text === 'string'
+          ? msg.text
+          : '';
+        
+        // Filtra solo messaggi user e assistant (ignora system, tool, etc. che sono gestiti separatamente)
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          return {
+            role: msg.role,
+            content: content,
+          };
+        }
+        return null;
+      })
+      .filter((msg: any) => msg !== null);
+
     const result = streamText({
-      model: google('gemini-1.5-flash'),
+      model: google('gemini-3-flash-preview'),
       system: `Sei un assistente ERP esperto per YottaErp, un sistema di gestione aziendale italiano.
       
 REGOLE FONDAMENTALI:
@@ -142,7 +182,7 @@ AZIONI DISPONIBILI:
 - createOpportunity: Per creare opportunità commerciali/preventivi
 
 Sii sempre chiaro e conciso nelle risposte.`,
-      messages,
+      messages: normalizedMessages,
       tools: {
         createLead: createLeadTool,
         createOpportunity: createOpportunityTool,

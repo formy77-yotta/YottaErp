@@ -51,6 +51,33 @@ Per abilitare l'API Speech-to-Text:
 4. Cerca "Cloud Speech-to-Text API"
 5. Clicca "Enable"
 
+**⚠️ Risoluzione errore "Requests to this API method are blocked":**
+
+Se ricevi l'errore `"Requests to this API speech.googleapis.com method google.cloud.speech.v1.Speech.Recognize are blocked"`, significa che la chiave API ha restrizioni che bloccano questo metodo.
+
+**Soluzione:**
+
+1. **Verifica le restrizioni della chiave API:**
+   - Vai su Google Cloud Console > "API & Services" > "Credentials"
+   - Clicca sulla tua chiave API
+   - Nella sezione "API restrictions" o "Restrictions", verifica che:
+     - "Cloud Speech-to-Text API" sia selezionata
+     - OPPURE le restrizioni siano rimosse (per test) o configurate correttamente
+
+2. **Crea una nuova chiave API senza restrizioni (per test):**
+   - Vai su "API & Services" > "Credentials"
+   - Clicca "Create Credentials" > "API Key"
+   - Nella nuova chiave, NON impostare restrizioni (o imposta solo "Cloud Speech-to-Text API")
+   - Copia la nuova chiave e aggiorna `.env.local`
+
+3. **Alternativa: Rimuovi le restrizioni dalla chiave esistente:**
+   - Vai su "API & Services" > "Credentials"
+   - Clicca sulla chiave API
+   - Nella sezione "API restrictions", seleziona "Don't restrict key" (per test)
+   - OPPURE assicurati che "Cloud Speech-to-Text API" sia nella lista delle API permesse
+
+**Nota:** Per produzione, è consigliabile mantenere le restrizioni ma assicurarsi che "Cloud Speech-to-Text API" sia permessa.
+
 ### 3. Riavvia il Server
 
 Dopo aver aggiunto le variabili d'ambiente, riavvia il server di sviluppo:
@@ -159,7 +186,7 @@ Utente → CopilotSheet → /api/chat → Gemini AI
 
 ## 📝 Note Implementative
 
-- Il modello Gemini usato è `gemini-1.5-flash` (veloce e economico)
+- Il modello Gemini usato è `gemini-3-flash-preview` (ultima versione preview, veloce e performante)
 - La trascrizione audio usa Google Cloud Speech-to-Text con lingua italiana (it-IT)
 - I tools sono limitati a 5 step per evitare loop infiniti
 - Il sistema prompt è configurato per rispondere sempre in italiano

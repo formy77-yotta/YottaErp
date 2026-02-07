@@ -199,19 +199,6 @@ export function OrganizationForm({
    * Handler submit form
    */
   async function onSubmit(data: OrganizationInput) {
-    // #region agent log
-    console.log('[DEBUG] Form onSubmit - raw data:', {
-      address: data.address,
-      zipCode: data.zipCode,
-      pec: data.pec,
-      sdiCode: data.sdiCode,
-      email: data.email,
-      phone: data.phone,
-      addressInData: 'address' in data,
-      zipCodeInData: 'zipCode' in data,
-    });
-    // #endregion
-    
     setIsLoading(true);
 
     try {
@@ -253,37 +240,11 @@ export function OrganizationForm({
           return;
         }
 
-        // #region agent log
-        console.log('[DEBUG] Form data before transformation:', {
-          address: data.address,
-          zipCode: data.zipCode,
-          pec: data.pec,
-          sdiCode: data.sdiCode,
-          email: data.email,
-          phone: data.phone,
-          addressType: typeof data.address,
-          addressInData: 'address' in data,
-          allKeys: Object.keys(data),
-        });
-        // #endregion
-        
         // Passa i dati così come sono - la Server Action li normalizzerà
         const transformedData = {
           ...data,
           adminUserEmails: validAdminEmails,
         };
-        
-        // #region agent log
-        console.log('[DEBUG] Form data after transformation:', {
-          address: transformedData.address,
-          zipCode: transformedData.zipCode,
-          pec: transformedData.pec,
-          sdiCode: transformedData.sdiCode,
-          email: transformedData.email,
-          phone: transformedData.phone,
-          addressType: typeof transformedData.address,
-        });
-        // #endregion
         
         result = await createOrganizationAdmin(transformedData);
       }

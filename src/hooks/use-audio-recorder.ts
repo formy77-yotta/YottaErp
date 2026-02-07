@@ -51,19 +51,43 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   const startRecording = useCallback(async () => {
     try {
       setError(null);
 
       // Richiedi permesso microfono
+
+      // Richiedi permesso microfono con configurazione migliorata
+      // Specifica che vogliamo un dispositivo audio input (microfono)
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          // Forza l'uso di un dispositivo input (microfono) e non output
+          // Questo aiuta Edge a selezionare il dispositivo corretto
+          channelCount: 1, // Mono (più compatibile)
+          sampleRate: 48000, // Sample rate standard
         } 
       });
+
+      // Log informazioni sul dispositivo utilizzato e verifica che sia attivo
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        throw new Error('Nessun track audio disponibile. Verifica che un microfono sia collegato e funzionante.');
+      }
+
+      const audioTrack = audioTracks[0];
+      
+      // Verifica che il track sia attivo
+      if (audioTrack.readyState !== 'live') {
+        throw new Error('Il track audio non è attivo. Verifica le impostazioni del microfono.');
+      }
+
+      // Verifica impostazioni dispositivo
+      const settings = audioTrack.getSettings();
 
       streamRef.current = stream;
       setHasPermission(true);
@@ -93,7 +117,9 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
       // Avvia registrazione
       mediaRecorder.start(100); // Raccoglie dati ogni 100ms
+      startTimeRef.current = Date.now();
       setIsRecording(true);
+      
     } catch (err) {
       console.error('Errore avvio registrazione:', err);
       
@@ -124,9 +150,47 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       const mediaRecorder = mediaRecorderRef.current;
 
       mediaRecorder.onstop = () => {
+        // Verifica durata registrazione (minimo 500ms)
+        const duration = startTimeRef.current ? Date.now() - startTimeRef.current : 0;
+        
+        if (duration < 500) {
+          // Pulisci risorse
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+          }
+          mediaRecorderRef.current = null;
+          chunksRef.current = [];
+          setIsRecording(false);
+          startTimeRef.current = null;
+          resolve(null);
+          return;
+        }
+        
+        // Verifica che ci siano dati registrati
+        if (chunksRef.current.length === 0) {
+          // Pulisci risorse
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+          }
+          mediaRecorderRef.current = null;
+          chunksRef.current = [];
+          setIsRecording(false);
+          startTimeRef.current = null;
+          resolve(null);
+          return;
+        }
+
         // Crea Blob finale
         const mimeType = getSupportedMimeType() || 'audio/webm';
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        
+        // Verifica che il blob abbia una dimensione ragionevole (almeno 1KB per secondo di registrazione)
+        const minExpectedSize = Math.max(1024, (duration / 1000) * 1024); // 1KB al secondo minimo
+        if (audioBlob.size < minExpectedSize) {
+          // Blob troppo piccolo, potrebbe indicare problemi con il microfono
+        }
         
         // Pulisci risorse
         if (streamRef.current) {
@@ -137,6 +201,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         mediaRecorderRef.current = null;
         chunksRef.current = [];
         setIsRecording(false);
+        startTimeRef.current = null;
         
         resolve(audioBlob);
       };
