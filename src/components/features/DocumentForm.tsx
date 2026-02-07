@@ -389,9 +389,27 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         const mainWarehouseIdValue = data.mainWarehouseId as string | undefined;
         const linesData = data.lines as any[];
         
-        // Verifica che ci siano righe
-        if (!linesData || linesData.length === 0) {
-          setError('Il documento deve contenere almeno una riga');
+        // Filtra righe vuote e assicura che productCode e description siano sempre presenti
+        const validLines = linesData
+          .filter(line => {
+            // Filtra righe completamente vuote
+            const productCode = line.productCode && typeof line.productCode === 'string' ? line.productCode.trim() : '';
+            const description = line.description && typeof line.description === 'string' ? line.description.trim() : '';
+            return productCode.length > 0 && description.length > 0;
+          })
+          .map(line => ({
+            productId: line.productId?.trim() || undefined,
+            productCode: (line.productCode || '').trim(),
+            description: (line.description || '').trim(),
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            vatRate: line.vatRate,
+            warehouseId: line.warehouseId?.trim() || undefined,
+          }));
+        
+        // Verifica che ci siano righe valide dopo il filtro
+        if (!validLines || validLines.length === 0) {
+          setError('Il documento deve contenere almeno una riga valida con codice prodotto e descrizione');
           setIsLoading(false);
           return;
         }
@@ -406,15 +424,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             mainWarehouseId: mainWarehouseIdValue?.trim() || undefined
           }),
           // Le righe sono sempre obbligatorie in update
-          lines: linesData.map(line => ({
-            productId: line.productId?.trim() || undefined,
-            productCode: (line.productCode || '').trim(),
-            description: (line.description || '').trim(),
-            unitPrice: line.unitPrice,
-            quantity: line.quantity,
-            vatRate: line.vatRate,
-            warehouseId: line.warehouseId?.trim() || undefined,
-          })),
+          lines: validLines,
           ...(data.notes !== undefined && { notes: (data.notes as string)?.trim() || undefined }),
           ...(data.paymentTerms !== undefined && { paymentTerms: (data.paymentTerms as string)?.trim() || undefined }),
         };

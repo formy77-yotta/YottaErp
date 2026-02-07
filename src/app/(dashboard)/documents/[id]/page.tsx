@@ -28,6 +28,7 @@ import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { DownloadXMLButton } from '@/components/features/DownloadXMLButton';
 import { VatNumberDisplay } from '@/components/features/VatNumberDisplay';
+import { DeleteDocumentButton } from '@/components/features/DeleteDocumentButton';
 
 interface DocumentDetailPageProps {
   params: Promise<{ id: string }>;
@@ -98,6 +99,11 @@ export default async function DocumentDetailPage({ params }: DocumentDetailPageP
               Modifica
             </Button>
           </Link>
+          <DeleteDocumentButton
+            documentId={id}
+            documentNumber={document.number}
+            documentType={document.documentType.description}
+          />
         </div>
       </div>
 

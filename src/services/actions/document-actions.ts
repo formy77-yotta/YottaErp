@@ -1178,6 +1178,107 @@ export async function createDocumentAction(
 }
 
 /**
+ * Elimina un documento esistente
+ * 
+ * MULTITENANT: Verifica che il documento appartenga all'organizzazione corrente
+ * 
+ * FUNZIONALITÀ:
+ * - Elimina tutti i movimenti di magazzino collegati al documento
+ * - Elimina tutte le righe del documento
+ * - Elimina il documento stesso
+ * 
+ * NOTA: L'eliminazione è CASCADE - tutti i dati collegati vengono eliminati automaticamente.
+ * 
+ * @param id - ID del documento da eliminare
+ * @returns Result con successo o errore
+ */
+export async function deleteDocumentAction(
+  id: string
+): Promise<ActionResult<{ id: string; number: string }>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+
+    // 2. Recupera documento per verifica esistenza e accesso
+    const document = await prisma.document.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        number: true,
+        organizationId: true,
+        documentType: {
+          select: {
+            code: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    if (!document) {
+      return {
+        success: false,
+        error: 'Documento non trovato',
+      };
+    }
+
+    // 3. ✅ Verifica che appartenga all'organizzazione corrente
+    verifyOrganizationAccess(ctx, document);
+
+    // 4. Elimina documento e tutti i dati collegati in una transazione
+    // NOTA: Prisma elimina automaticamente le righe (DocumentLine) per CASCADE
+    // Ma dobbiamo eliminare manualmente i movimenti di magazzino
+    await prisma.$transaction(async (tx) => {
+      // 4a. Elimina tutti i movimenti di magazzino collegati al documento
+      await tx.stockMovement.deleteMany({
+        where: {
+          documentId: id,
+          organizationId: ctx.organizationId,
+        },
+      });
+
+      // 4b. Elimina tutte le righe del documento
+      await tx.documentLine.deleteMany({
+        where: {
+          documentId: id,
+        },
+      });
+
+      // 4c. Elimina il documento stesso
+      await tx.document.delete({
+        where: { id },
+      });
+    });
+
+    // 5. Revalida le pagine interessate
+    revalidatePath('/documents');
+    revalidatePath(`/documents/${id}`);
+
+    return {
+      success: true,
+      data: {
+        id: document.id,
+        number: document.number,
+      },
+    };
+  } catch (error) {
+    console.error('Errore eliminazione documento:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante l\'eliminazione del documento',
+    };
+  }
+}
+
+/**
  * Genera e scarica l'XML FatturaPA per un documento
  * 
  * FUNZIONALITÀ:
