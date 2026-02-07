@@ -9,6 +9,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { Navbar } from '@/components/common/Navbar';
 import { Sidebar } from '@/components/common/Sidebar';
+import { CopilotFab } from '@/components/features/copilot/CopilotFab';
 
 export default async function DashboardLayout({
   children,
@@ -84,6 +85,9 @@ export default async function DashboardLayout({
           {children}
         </div>
       </main>
+
+      {/* AI Copilot FAB */}
+      <CopilotFab />
     </div>
   );
 }

@@ -89,6 +89,11 @@ const navItems: NavItem[] = [
         href: '/settings/vat-rates',
         icon: Settings,
       },
+      {
+        title: 'Categorie Articoli',
+        href: '/settings/product-categories',
+        icon: Package,
+      },
     ],
   },
 ];
