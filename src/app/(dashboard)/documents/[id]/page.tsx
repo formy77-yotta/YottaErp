@@ -27,6 +27,7 @@ import {
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { DownloadXMLButton } from '@/components/features/DownloadXMLButton';
+import { VatNumberDisplay } from '@/components/features/VatNumberDisplay';
 
 interface DocumentDetailPageProps {
   params: Promise<{ id: string }>;
@@ -133,7 +134,7 @@ export default async function DocumentDetailPage({ params }: DocumentDetailPageP
                 <Label className="text-sm font-medium text-muted-foreground">Cliente/Fornitore</Label>
                 <p className="text-lg">{document.entity.businessName}</p>
                 {document.entity.vatNumber && (
-                  <p className="text-sm text-muted-foreground">P.IVA: {document.entity.vatNumber}</p>
+                  <VatNumberDisplay vatNumber={document.entity.vatNumber} />
                 )}
               </div>
             )}

@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, Plus } from 'lucide-react';
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
+import { VatNumberDisplay } from '@/components/features/VatNumberDisplay';
 
 /**
  * Componente principale della pagina
@@ -127,12 +128,7 @@ async function DocumentsTable() {
                       <div>
                         <div className="font-medium">{doc.entity.businessName}</div>
                         {doc.entity.vatNumber && (
-                          <div 
-                            className="text-sm text-muted-foreground"
-                            suppressHydrationWarning
-                          >
-                            P.IVA: {doc.entity.vatNumber}
-                          </div>
+                          <VatNumberDisplay vatNumber={doc.entity.vatNumber} />
                         )}
                       </div>
                     ) : (
