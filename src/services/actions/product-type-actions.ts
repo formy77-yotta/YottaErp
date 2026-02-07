@@ -1,5 +1,5 @@
 /**
- * Server Actions per gestione Categorie Articoli
+ * Server Actions per gestione Tipologie Articoli
  * 
  * MULTITENANT: Ogni operazione è isolata per organizationId
  * 
@@ -18,11 +18,11 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError } from '@/lib/auth';
 import { 
-  createProductCategorySchema, 
-  updateProductCategorySchema,
-  type CreateProductCategoryInput,
-  type UpdateProductCategoryInput
-} from '@/schemas/product-category-schema';
+  createProductTypeSchema, 
+  updateProductTypeSchema,
+  type CreateProductTypeInput,
+  type UpdateProductTypeInput
+} from '@/schemas/product-type-schema';
 
 /**
  * Tipo di ritorno standard per Server Actions
@@ -32,16 +32,17 @@ type ActionResult<T> =
   | { success: false; error: string };
 
 /**
- * Ottiene tutte le categorie articoli dell'organizzazione corrente
+ * Ottiene tutte le tipologie articoli dell'organizzazione corrente
  * 
  * MULTITENANT: Filtra automaticamente per organizationId
  * 
- * @returns Array di categorie articoli
+ * @returns Array di tipologie articoli
  */
-export async function getProductCategoriesAction(): Promise<ActionResult<Array<{
+export async function getProductTypesAction(): Promise<ActionResult<Array<{
   id: string;
   code: string;
   description: string;
+  manageStock: boolean;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -50,8 +51,8 @@ export async function getProductCategoriesAction(): Promise<ActionResult<Array<{
     // 1. ✅ Ottieni contesto autenticazione (include organizationId)
     const ctx = await getAuthContext();
 
-    // 2. Recupera categorie filtrate per organizzazione
-    const categories = await prisma.productCategory.findMany({
+    // 2. Recupera tipologie filtrate per organizzazione
+    const types = await prisma.productType.findMany({
       where: {
         organizationId: ctx.organizationId,
       },
@@ -62,6 +63,7 @@ export async function getProductCategoriesAction(): Promise<ActionResult<Array<{
         id: true,
         code: true,
         description: true,
+        manageStock: true,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -70,10 +72,10 @@ export async function getProductCategoriesAction(): Promise<ActionResult<Array<{
 
     return {
       success: true,
-      data: categories,
+      data: types,
     };
   } catch (error) {
-    console.error('Errore recupero categorie articoli:', error);
+    console.error('Errore recupero tipologie articoli:', error);
 
     if (error instanceof ForbiddenError) {
       return {
@@ -84,21 +86,21 @@ export async function getProductCategoriesAction(): Promise<ActionResult<Array<{
 
     return {
       success: false,
-      error: 'Errore durante il recupero delle categorie articoli',
+      error: 'Errore durante il recupero delle tipologie articoli',
     };
   }
 }
 
 /**
- * Crea una nuova categoria articolo
+ * Crea una nuova tipologia articolo
  * 
- * MULTITENANT: La categoria viene automaticamente associata all'organizzazione corrente
+ * MULTITENANT: La tipologia viene automaticamente associata all'organizzazione corrente
  * 
- * @param input - Dati categoria da creare
- * @returns Result con categoria creata o errore
+ * @param input - Dati tipologia da creare
+ * @returns Result con tipologia creata o errore
  */
-export async function createProductCategoryAction(
-  input: CreateProductCategoryInput
+export async function createProductTypeAction(
+  input: CreateProductTypeInput
 ): Promise<ActionResult<{ id: string }>> {
   try {
     // 1. ✅ Ottieni contesto autenticazione (include organizationId)
@@ -108,50 +110,51 @@ export async function createProductCategoryAction(
     if (!canWrite(ctx)) {
       return {
         success: false,
-        error: 'Non hai i permessi per creare categorie articoli',
+        error: 'Non hai i permessi per creare tipologie articoli',
       };
     }
 
     // 3. Validazione con Zod
-    const validatedData = createProductCategorySchema.parse(input);
+    const validatedData = createProductTypeSchema.parse(input);
 
     // 4. Normalizza codice (maiuscolo, trim)
     const normalizedCode = validatedData.code.trim().toUpperCase();
 
     // 5. Verifica unicità codice per organizzazione
-    const existingCategory = await prisma.productCategory.findFirst({
+    const existingType = await prisma.productType.findFirst({
       where: {
         organizationId: ctx.organizationId,
         code: normalizedCode,
       },
     });
 
-    if (existingCategory) {
+    if (existingType) {
       return {
         success: false,
-        error: 'Codice categoria già esistente per questa organizzazione',
+        error: 'Codice tipologia già esistente per questa organizzazione',
       };
     }
 
-    // 6. ✅ Creazione categoria con organizationId
-    const category = await prisma.productCategory.create({
+    // 6. ✅ Creazione tipologia con organizationId
+    const type = await prisma.productType.create({
       data: {
         organizationId: ctx.organizationId, // ✅ Associa automaticamente all'organizzazione
         code: normalizedCode,
         description: validatedData.description.trim(),
+        manageStock: validatedData.manageStock,
         active: validatedData.active,
       },
     });
 
     // 7. Revalidazione cache Next.js
-    revalidatePath('/settings/product-categories');
+    revalidatePath('/settings/product-types');
 
     return {
       success: true,
-      data: { id: category.id },
+      data: { id: type.id },
     };
   } catch (error) {
-    console.error('Errore creazione categoria articolo:', error);
+    console.error('Errore creazione tipologia articolo:', error);
 
     if (error instanceof ForbiddenError) {
       return {
@@ -166,7 +169,7 @@ export async function createProductCategoryAction(
       if (error.message.includes('organizationId_code') || error.message.includes('Unique constraint')) {
         return {
           success: false,
-          error: 'Codice categoria già esistente per questa organizzazione',
+          error: 'Codice tipologia già esistente per questa organizzazione',
         };
       }
       
@@ -178,21 +181,21 @@ export async function createProductCategoryAction(
 
     return {
       success: false,
-      error: 'Errore sconosciuto durante la creazione della categoria articolo',
+      error: 'Errore sconosciuto durante la creazione della tipologia articolo',
     };
   }
 }
 
 /**
- * Aggiorna una categoria articolo esistente
+ * Aggiorna una tipologia articolo esistente
  * 
- * MULTITENANT: Verifica che la categoria appartenga all'organizzazione corrente
+ * MULTITENANT: Verifica che la tipologia appartenga all'organizzazione corrente
  * 
- * @param input - Dati categoria da aggiornare (include id)
+ * @param input - Dati tipologia da aggiornare (include id)
  * @returns Result con successo o errore
  */
-export async function updateProductCategoryAction(
-  input: UpdateProductCategoryInput
+export async function updateProductTypeAction(
+  input: UpdateProductTypeInput
 ): Promise<ActionResult<{ id: string }>> {
   try {
     // 1. ✅ Ottieni contesto autenticazione
@@ -202,28 +205,28 @@ export async function updateProductCategoryAction(
     if (!canWrite(ctx)) {
       return {
         success: false,
-        error: 'Non hai i permessi per modificare categorie articoli',
+        error: 'Non hai i permessi per modificare tipologie articoli',
       };
     }
 
     // 3. Validazione con Zod
-    const validatedData = updateProductCategorySchema.parse(input);
+    const validatedData = updateProductTypeSchema.parse(input);
 
     // 4. ✅ Verifica esistenza E appartenenza all'organizzazione
-    const existingCategory = await prisma.productCategory.findUnique({
+    const existingType = await prisma.productType.findUnique({
       where: { id: validatedData.id },
       select: { id: true, organizationId: true, code: true },
     });
 
-    if (!existingCategory) {
+    if (!existingType) {
       return {
         success: false,
-        error: 'Categoria articolo non trovata',
+        error: 'Tipologia articolo non trovata',
       };
     }
     
     // ✅ Verifica che appartenga all'organizzazione corrente
-    verifyOrganizationAccess(ctx, existingCategory);
+    verifyOrganizationAccess(ctx, existingType);
 
     // 5. Normalizza codice se presente
     const normalizedCode = validatedData.code 
@@ -231,43 +234,44 @@ export async function updateProductCategoryAction(
       : undefined;
 
     // 6. Verifica unicità codice se è stato modificato
-    if (normalizedCode && normalizedCode !== existingCategory.code) {
-      const duplicateCategory = await prisma.productCategory.findFirst({
+    if (normalizedCode && normalizedCode !== existingType.code) {
+      const duplicateType = await prisma.productType.findFirst({
         where: {
           organizationId: ctx.organizationId,
           code: normalizedCode,
         },
       });
 
-      if (duplicateCategory && duplicateCategory.id !== validatedData.id) {
+      if (duplicateType && duplicateType.id !== validatedData.id) {
         return {
           success: false,
-          error: 'Codice categoria già esistente per questa organizzazione',
+          error: 'Codice tipologia già esistente per questa organizzazione',
         };
       }
     }
 
-    // 7. Aggiornamento categoria
-    const updatedCategory = await prisma.productCategory.update({
+    // 7. Aggiornamento tipologia
+    const updatedType = await prisma.productType.update({
       where: { id: validatedData.id },
       data: {
         ...(normalizedCode && { code: normalizedCode }),
         ...(validatedData.description !== undefined && { 
           description: validatedData.description.trim() 
         }),
+        ...(validatedData.manageStock !== undefined && { manageStock: validatedData.manageStock }),
         ...(validatedData.active !== undefined && { active: validatedData.active }),
       },
     });
 
     // 8. Revalidazione cache
-    revalidatePath('/settings/product-categories');
+    revalidatePath('/settings/product-types');
 
     return {
       success: true,
-      data: { id: updatedCategory.id },
+      data: { id: updatedType.id },
     };
   } catch (error) {
-    console.error('Errore aggiornamento categoria articolo:', error);
+    console.error('Errore aggiornamento tipologia articolo:', error);
 
     if (error instanceof ForbiddenError) {
       return {
@@ -281,7 +285,7 @@ export async function updateProductCategoryAction(
       if (error.message.includes('organizationId_code') || error.message.includes('Unique constraint')) {
         return {
           success: false,
-          error: 'Codice categoria già esistente per questa organizzazione',
+          error: 'Codice tipologia già esistente per questa organizzazione',
         };
       }
       
@@ -293,20 +297,20 @@ export async function updateProductCategoryAction(
 
     return {
       success: false,
-      error: 'Errore sconosciuto durante l\'aggiornamento della categoria articolo',
+      error: 'Errore sconosciuto durante l\'aggiornamento della tipologia articolo',
     };
   }
 }
 
 /**
- * Elimina una categoria articolo
+ * Elimina una tipologia articolo
  * 
- * MULTITENANT: Verifica che la categoria appartenga all'organizzazione corrente
+ * MULTITENANT: Verifica che la tipologia appartenga all'organizzazione corrente
  * 
- * @param id - ID categoria da eliminare
+ * @param id - ID tipologia da eliminare
  * @returns Result con successo o errore
  */
-export async function deleteProductCategoryAction(
+export async function deleteProductTypeAction(
   id: string
 ): Promise<ActionResult<{ id: string }>> {
   try {
@@ -317,54 +321,54 @@ export async function deleteProductCategoryAction(
     if (!canWrite(ctx)) {
       return {
         success: false,
-        error: 'Non hai i permessi per eliminare categorie articoli',
+        error: 'Non hai i permessi per eliminare tipologie articoli',
       };
     }
 
     // 3. ✅ Verifica esistenza E appartenenza all'organizzazione
-    const existingCategory = await prisma.productCategory.findUnique({
+    const existingType = await prisma.productType.findUnique({
       where: { id },
       select: { id: true, organizationId: true },
     });
 
-    if (!existingCategory) {
+    if (!existingType) {
       return {
         success: false,
-        error: 'Categoria articolo non trovata',
+        error: 'Tipologia articolo non trovata',
       };
     }
     
     // ✅ Verifica che appartenga all'organizzazione corrente
-    verifyOrganizationAccess(ctx, existingCategory);
+    verifyOrganizationAccess(ctx, existingType);
 
     // 4. Verifica che non ci siano prodotti associati
     const productsCount = await prisma.product.count({
       where: {
-        categoryId: id,
+        typeId: id,
       },
     });
 
     if (productsCount > 0) {
       return {
         success: false,
-        error: `Impossibile eliminare: ci sono ${productsCount} prodotto/i associati a questa categoria`,
+        error: `Impossibile eliminare: ci sono ${productsCount} prodotto/i associati a questa tipologia`,
       };
     }
 
-    // 5. Eliminazione categoria
-    await prisma.productCategory.delete({
+    // 5. Eliminazione tipologia
+    await prisma.productType.delete({
       where: { id },
     });
 
     // 6. Revalidazione cache
-    revalidatePath('/settings/product-categories');
+    revalidatePath('/settings/product-types');
 
     return {
       success: true,
       data: { id },
     };
   } catch (error) {
-    console.error('Errore eliminazione categoria articolo:', error);
+    console.error('Errore eliminazione tipologia articolo:', error);
 
     if (error instanceof ForbiddenError) {
       return {
@@ -375,7 +379,7 @@ export async function deleteProductCategoryAction(
 
     return {
       success: false,
-      error: 'Errore durante l\'eliminazione della categoria articolo',
+      error: 'Errore durante l\'eliminazione della tipologia articolo',
     };
   }
 }

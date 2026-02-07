@@ -1,5 +1,5 @@
 /**
- * Dialog per modificare una categoria articolo esistente
+ * Dialog per modificare un prodotto esistente
  */
 
 'use client';
@@ -14,19 +14,24 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ProductCategoryForm } from './ProductCategoryForm';
+import { ProductForm } from './ProductForm';
 import { Edit } from 'lucide-react';
 
-interface EditProductCategoryDialogProps {
-  category: {
+interface EditProductDialogProps {
+  product: {
     id: string;
     code: string;
-    description: string;
+    name: string;
+    description: string | null;
+    categoryId: string | null;
+    typeId: string | null;
+    price: string; // Decimal come stringa
+    vatRateId: string | null;
     active: boolean;
   };
 }
 
-export function EditProductCategoryDialog({ category }: EditProductCategoryDialogProps) {
+export function EditProductDialog({ product }: EditProductDialogProps) {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(0);
 
@@ -37,22 +42,26 @@ export function EditProductCategoryDialog({ category }: EditProductCategoryDialo
           <Edit className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Modifica Categoria Articolo</DialogTitle>
+          <DialogTitle>Modifica Prodotto</DialogTitle>
           <DialogDescription>
-            Modifica i dati della categoria articolo. Il codice deve essere univoco per organizzazione.
+            Modifica i dati del prodotto. Il codice non può essere modificato.
           </DialogDescription>
         </DialogHeader>
-        <ProductCategoryForm
+        <ProductForm
           key={key}
-          category={category}
+          product={product}
           onSuccess={() => {
             setOpen(false);
             setKey((k) => k + 1); // Reset form
+            // Ricarica la pagina per mostrare i nuovi dati
+            window.location.reload();
           }}
           onError={(error) => {
-            console.error('Errore aggiornamento categoria:', error);
+            console.error('Errore aggiornamento prodotto:', error);
+            // TODO: Mostrare toast di errore
+            alert(error);
           }}
         />
       </DialogContent>

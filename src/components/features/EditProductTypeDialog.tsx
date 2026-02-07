@@ -1,5 +1,5 @@
 /**
- * Dialog per modificare una categoria articolo esistente
+ * Dialog per modificare una tipologia articolo esistente
  */
 
 'use client';
@@ -14,19 +14,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ProductCategoryForm } from './ProductCategoryForm';
+import { ProductTypeForm } from './ProductTypeForm';
 import { Edit } from 'lucide-react';
 
-interface EditProductCategoryDialogProps {
-  category: {
+interface EditProductTypeDialogProps {
+  type: {
     id: string;
     code: string;
     description: string;
+    manageStock: boolean;
     active: boolean;
   };
 }
 
-export function EditProductCategoryDialog({ category }: EditProductCategoryDialogProps) {
+export function EditProductTypeDialog({ type }: EditProductTypeDialogProps) {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(0);
 
@@ -39,20 +40,20 @@ export function EditProductCategoryDialog({ category }: EditProductCategoryDialo
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Modifica Categoria Articolo</DialogTitle>
+          <DialogTitle>Modifica Tipologia Articolo</DialogTitle>
           <DialogDescription>
-            Modifica i dati della categoria articolo. Il codice deve essere univoco per organizzazione.
+            Modifica i dati della tipologia articolo. Il codice deve essere univoco per organizzazione.
           </DialogDescription>
         </DialogHeader>
-        <ProductCategoryForm
+        <ProductTypeForm
           key={key}
-          category={category}
+          type={type}
           onSuccess={() => {
             setOpen(false);
             setKey((k) => k + 1); // Reset form
           }}
           onError={(error) => {
-            console.error('Errore aggiornamento categoria:', error);
+            console.error('Errore aggiornamento tipologia:', error);
           }}
         />
       </DialogContent>

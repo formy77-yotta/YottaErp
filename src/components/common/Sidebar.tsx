@@ -96,6 +96,11 @@ const navItems: NavItem[] = [
         icon: Package,
       },
       {
+        title: 'Tipologie Articoli',
+        href: '/settings/product-types',
+        icon: Package,
+      },
+      {
         title: 'Unità di Misura',
         href: '/settings/unit-of-measure',
         icon: Ruler,

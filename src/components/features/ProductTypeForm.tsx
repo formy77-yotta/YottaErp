@@ -1,5 +1,5 @@
 /**
- * Form per creazione/editing categoria articolo
+ * Form per creazione/editing tipologia articolo
  */
 
 'use client';
@@ -9,15 +9,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { 
-  createProductCategorySchema, 
-  updateProductCategorySchema,
-  type CreateProductCategoryInput,
-  type UpdateProductCategoryInput
-} from '@/schemas/product-category-schema';
+  createProductTypeSchema, 
+  updateProductTypeSchema,
+  type CreateProductTypeInput,
+  type UpdateProductTypeInput
+} from '@/schemas/product-type-schema';
 import { 
-  createProductCategoryAction, 
-  updateProductCategoryAction
-} from '@/services/actions/product-category-actions';
+  createProductTypeAction, 
+  updateProductTypeAction
+} from '@/services/actions/product-type-actions';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -33,14 +33,15 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Loader2 } from 'lucide-react';
 
-interface ProductCategoryFormProps {
+interface ProductTypeFormProps {
   /**
-   * Categoria da modificare (undefined = creazione nuova)
+   * Tipologia da modificare (undefined = creazione nuova)
    */
-  category?: {
+  type?: {
     id: string;
     code: string;
     description: string;
+    manageStock: boolean;
     active: boolean;
   };
   
@@ -55,75 +56,80 @@ interface ProductCategoryFormProps {
   onError?: (error: string) => void;
 }
 
-type ProductCategoryFormInput = CreateProductCategoryInput | (UpdateProductCategoryInput & { id?: string });
+type ProductTypeFormInput = CreateProductTypeInput | (UpdateProductTypeInput & { id?: string });
 
-export function ProductCategoryForm({ 
-  category, 
+export function ProductTypeForm({ 
+  type, 
   onSuccess, 
   onError 
-}: ProductCategoryFormProps) {
+}: ProductTypeFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const isEditing = !!category;
+  const isEditing = !!type;
 
   // Setup form con validazione Zod
-  const form = useForm<ProductCategoryFormInput>({
-    resolver: zodResolver(isEditing ? updateProductCategorySchema : createProductCategorySchema) as any,
+  const form = useForm<ProductTypeFormInput>({
+    resolver: zodResolver(isEditing ? updateProductTypeSchema : createProductTypeSchema) as any,
     defaultValues: {
       code: '',
       description: '',
+      manageStock: true,
       active: true,
-      ...(isEditing && category ? { id: category.id } : {}),
+      ...(isEditing && type ? { id: type.id } : {}),
     },
   });
 
-  // Aggiorna i valori del form quando la categoria viene caricata
+  // Aggiorna i valori del form quando la tipologia viene caricata
   useEffect(() => {
-    if (category) {
+    if (type) {
       form.reset({
-        code: category.code,
-        description: category.description,
-        active: category.active,
-        ...(isEditing ? { id: category.id } : {}),
+        code: type.code,
+        description: type.description,
+        manageStock: type.manageStock,
+        active: type.active,
+        ...(isEditing ? { id: type.id } : {}),
       }, { keepDefaultValues: false });
     } else {
-      // Reset al form vuoto quando si crea una nuova categoria
+      // Reset al form vuoto quando si crea una nuova tipologia
       form.reset({
         code: '',
         description: '',
+        manageStock: true,
         active: true,
       }, { keepDefaultValues: false });
     }
-  }, [category, form, isEditing]);
+  }, [type, form, isEditing]);
 
   /**
    * Handler submit form
    */
-  async function onSubmit(data: ProductCategoryFormInput) {
+  async function onSubmit(data: ProductTypeFormInput) {
     setIsLoading(true);
 
     try {
       let result;
 
-      if (isEditing && category) {
-        // Aggiornamento categoria esistente
-        const updateData: UpdateProductCategoryInput = {
-          id: category.id,
+      if (isEditing && type) {
+        // Aggiornamento tipologia esistente
+        const updateData: UpdateProductTypeInput = {
+          id: type.id,
           code: data.code,
           description: data.description,
+          manageStock: data.manageStock,
           active: data.active,
         };
         
-        result = await updateProductCategoryAction(updateData);
+        result = await updateProductTypeAction(updateData);
       } else {
-        // Creazione nuova categoria
-        const createData: CreateProductCategoryInput = {
+        // Creazione nuova tipologia
+        const createData: CreateProductTypeInput = {
           code: data.code,
           description: data.description,
+          manageStock: data.manageStock,
           active: data.active,
         };
         
-        result = await createProductCategoryAction(createData);
+        result = await createProductTypeAction(createData);
       }
 
       if (result.success) {
@@ -173,7 +179,7 @@ export function ProductCategoryForm({
                 />
               </FormControl>
               <FormDescription>
-                Codice univoco della categoria (solo lettere maiuscole, numeri e underscore)
+                Codice univoco della tipologia (solo lettere maiuscole, numeri e underscore)
                 {isEditing && ' - Il codice non può essere modificato'}
               </FormDescription>
               <FormMessage />
@@ -195,33 +201,58 @@ export function ProductCategoryForm({
                 />
               </FormControl>
               <FormDescription>
-                Descrizione della categoria articolo
+                Descrizione della tipologia articolo
               </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="active"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-              <div className="space-y-0.5">
-                <FormLabel className="text-base">Attiva</FormLabel>
-                <FormDescription>
-                  Categoria disponibile per l'uso
-                </FormDescription>
-              </div>
-              <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Gestione Magazzino */}
+          <FormField
+            control={form.control}
+            name="manageStock"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Gestione Magazzino</FormLabel>
+                  <FormDescription>
+                    La tipologia è gestita a magazzino?
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          {/* Attiva */}
+          <FormField
+            control={form.control}
+            name="active"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Attiva</FormLabel>
+                  <FormDescription>
+                    Tipologia disponibile per l'uso
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
 
         {/* Pulsanti Azione */}
         <div className="flex justify-end space-x-4 pt-4">
@@ -230,7 +261,7 @@ export function ProductCategoryForm({
             disabled={isLoading}
           >
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEditing ? 'Aggiorna' : 'Crea'} Categoria
+            {isEditing ? 'Aggiorna' : 'Crea'} Tipologia
           </Button>
         </div>
       </form>

@@ -19,6 +19,7 @@ import {
 import { CreateUnitOfMeasureDialog } from '@/components/features/CreateUnitOfMeasureDialog';
 import { EditUnitOfMeasureDialog } from '@/components/features/EditUnitOfMeasureDialog';
 import { DeleteUnitOfMeasureButton } from '@/components/features/DeleteUnitOfMeasureButton';
+import { SeedDefaultUnitsOfMeasureButton } from '@/components/features/SeedDefaultUnitsOfMeasureButton';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 
@@ -37,6 +38,7 @@ export default function UnitOfMeasurePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <SeedDefaultUnitsOfMeasureButton />
           <CreateUnitOfMeasureDialog />
         </div>
       </div>

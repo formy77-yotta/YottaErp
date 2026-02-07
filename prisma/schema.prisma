@@ -121,6 +121,7 @@ model Organization {
   documents      Document[]
   vatRates       VatRate[]
   productCategories ProductCategory[]
+  productTypes     ProductType[]
   unitsOfMeasure UnitOfMeasure[]
   stockMovements StockMovement[]
 
@@ -262,6 +263,7 @@ model VatRate {
   // Relazioni
   documentLines DocumentLine[]
   entities      Entity[]
+  products      Product[]
 
   @@unique([organizationId, name]) // Nome aliquota unico per organizzazione
   @@index([organizationId])
@@ -288,9 +290,41 @@ model ProductCategory {
   code        String // Codice categoria (es. "MAT", "SER", "FIN")
   description String // Descrizione categoria
 
+  // Metadata
+  active Boolean @default(true)
+
+  // Timestamp
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relazioni
+  products Product[]
+
+  @@unique([organizationId, code]) // Codice categoria unico per organizzazione
+  @@index([organizationId])
+  @@index([organizationId, active])
+}
+
+/**
+ * ProductType: Tipologie articoli
+ * 
+ * Gestisce le tipologie di articoli (es. Materiali, Servizi, Finiture).
+ * Contiene il flag per la gestione magazzino.
+ * MULTITENANT: Ogni tipologia appartiene a un'organizzazione
+ */
+model ProductType {
+  id String @id @default(cuid())
+
+  // ✅ MULTITENANT: Ogni tipologia appartiene a un'organizzazione
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  code        String // Codice tipologia (es. "MAT", "SER", "FIN")
+  description String // Descrizione tipologia
+
   // Flag per gestione magazzino
-  // true = categoria gestita a magazzino (es. materiali)
-  // false = categoria non gestita a magazzino (es. servizi)
+  // true = tipologia gestita a magazzino (es. materiali)
+  // false = tipologia non gestita a magazzino (es. servizi)
   manageStock Boolean @default(true)
 
   // Metadata
@@ -303,7 +337,7 @@ model ProductCategory {
   // Relazioni
   products Product[]
 
-  @@unique([organizationId, code]) // Codice categoria unico per organizzazione
+  @@unique([organizationId, code]) // Codice tipologia unico per organizzazione
   @@index([organizationId])
   @@index([organizationId, active])
 }
@@ -367,11 +401,16 @@ model Product {
   categoryId String?
   category   ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
+  // Tipologia prodotto (opzionale)
+  typeId String?
+  type   ProductType? @relation(fields: [typeId], references: [id], onDelete: SetNull)
+
   // Prezzi e IVA (SEMPRE Decimal per valori monetari!)
   price Decimal @db.Decimal(12, 2) // Prezzo di listino
 
   // IVA predefinita per questo prodotto
   vatRateId String? // Aliquota IVA di default
+  vatRate   VatRate? @relation(fields: [vatRateId], references: [id], onDelete: SetNull)
 
   // Note: NESSUN campo 'stock' qui!
   // La giacenza è calcolata da StockMovement (Calculated Stock Rule)
@@ -391,6 +430,7 @@ model Product {
   @@index([organizationId])
   @@index([organizationId, name])
   @@index([categoryId])
+  @@index([typeId])
 }
 
 // ============================================================================

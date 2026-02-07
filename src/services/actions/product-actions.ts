@@ -1,0 +1,776 @@
+/**
+ * Server Actions per gestione Anagrafica Prodotti
+ * 
+ * MULTITENANT: Ogni operazione è isolata per organizationId
+ * 
+ * RESPONSABILITÀ:
+ * 1. Ottenere AuthContext (con organizationId)
+ * 2. Validazione input con Zod
+ * 3. Verificare permessi utente
+ * 4. Chiamata a business logic con filtro organizationId
+ * 5. Revalidazione cache Next.js
+ * 6. Gestione errori e return type-safe
+ * 
+ * REGOLE ERP:
+ * - Prezzo sempre come Decimal (MAI number)
+ * - Giacenza calcolata da StockMovement (non campo statico)
+ */
+
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { Decimal } from 'decimal.js';
+import { prisma } from '@/lib/prisma';
+import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError } from '@/lib/auth';
+import { 
+  createProductSchema, 
+  updateProductSchema,
+  type CreateProductInput,
+  type UpdateProductInput
+} from '@/schemas/product-schema';
+
+/**
+ * Tipo di ritorno standard per Server Actions
+ */
+type ActionResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+/**
+ * Ottiene tutti i prodotti dell'organizzazione corrente
+ * 
+ * MULTITENANT: Filtra automaticamente per organizationId
+ * 
+ * @param filters - Filtri opzionali (categoria, tipologia, attivo)
+ * @returns Array di prodotti con classificazioni
+ */
+export async function getProductsAction(filters?: {
+  categoryId?: string;
+  typeId?: string;
+  active?: boolean;
+}): Promise<ActionResult<Array<{
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  categoryId: string | null;
+  category: { id: string; code: string; description: string } | null;
+  typeId: string | null;
+  type: { id: string; code: string; description: string; manageStock: boolean } | null;
+  price: string; // Decimal come stringa per il frontend
+  vatRateId: string | null;
+  vatRate: { id: string; name: string; value: string } | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}>>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione (include organizationId)
+    const ctx = await getAuthContext();
+
+    // 2. Costruisci filtro where
+    const where: {
+      organizationId: string;
+      categoryId?: string | null;
+      typeId?: string | null;
+      active?: boolean;
+    } = {
+      organizationId: ctx.organizationId,
+    };
+
+    if (filters?.categoryId) {
+      where.categoryId = filters.categoryId;
+    }
+
+    if (filters?.typeId) {
+      where.typeId = filters.typeId;
+    }
+
+    if (filters?.active !== undefined) {
+      where.active = filters.active;
+    }
+
+    // 3. Recupera prodotti con classificazioni
+    const products = await prisma.product.findMany({
+      where,
+      orderBy: [
+        { code: 'asc' }, // Ordina per codice
+      ],
+      include: {
+        category: {
+          select: {
+            id: true,
+            code: true,
+            description: true,
+          },
+        },
+        type: {
+          select: {
+            id: true,
+            code: true,
+            description: true,
+            manageStock: true,
+          },
+        },
+        vatRate: {
+          select: {
+            id: true,
+            name: true,
+            value: true,
+          },
+        },
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        categoryId: true,
+        typeId: true,
+        price: true, // Decimal dal DB
+        vatRateId: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // 4. Mappa prodotti con aliquote IVA (già incluse nella query)
+    const mappedProducts = products.map((product) => ({
+      ...product,
+      price: product.price.toString(), // Decimal -> string
+      category: product.category,
+      type: product.type,
+      vatRate: product.vatRate ? {
+        id: product.vatRate.id,
+        name: product.vatRate.name,
+        value: product.vatRate.value.toString(), // Decimal -> string
+      } : null,
+    }));
+
+    return {
+      success: true,
+      data: mappedProducts,
+    };
+  } catch (error) {
+    console.error('Errore recupero prodotti:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante il recupero dei prodotti',
+    };
+  }
+}
+
+/**
+ * Ottiene un prodotto singolo per ID
+ * 
+ * MULTITENANT: Verifica che il prodotto appartenga all'organizzazione corrente
+ * 
+ * @param id - ID del prodotto
+ * @returns Prodotto o errore
+ */
+export async function getProductAction(
+  id: string
+): Promise<ActionResult<{
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  categoryId: string | null;
+  category: { id: string; code: string; description: string } | null;
+  typeId: string | null;
+  type: { id: string; code: string; description: string; manageStock: boolean } | null;
+  price: string; // Decimal come stringa
+  vatRateId: string | null;
+  vatRate: { id: string; name: string; value: string } | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+
+    // 2. Recupera prodotto con classificazioni
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        category: {
+          select: {
+            id: true,
+            code: true,
+            description: true,
+          },
+        },
+        type: {
+          select: {
+            id: true,
+            code: true,
+            description: true,
+            manageStock: true,
+          },
+        },
+        vatRate: {
+          select: {
+            id: true,
+            name: true,
+            value: true,
+          },
+        },
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        description: true,
+        categoryId: true,
+        typeId: true,
+        price: true,
+        vatRateId: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+        organizationId: true, // Per verifica multitenant
+      },
+    });
+
+    if (!product) {
+      return {
+        success: false,
+        error: 'Prodotto non trovato',
+      };
+    }
+
+    // 3. ✅ Verifica che appartenga all'organizzazione corrente
+    verifyOrganizationAccess(ctx, product);
+
+    // 4. Rimuovi organizationId dalla risposta
+    const { organizationId, ...productData } = product;
+
+    return {
+      success: true,
+      data: {
+        ...productData,
+        price: productData.price.toString(), // Decimal -> string
+        category: product.category,
+        type: product.type,
+        vatRate: product.vatRate ? {
+          id: product.vatRate.id,
+          name: product.vatRate.name,
+          value: product.vatRate.value.toString(), // Decimal -> string
+        } : null,
+      },
+    };
+  } catch (error) {
+    console.error('Errore recupero prodotto:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante il recupero del prodotto',
+    };
+  }
+}
+
+/**
+ * Crea un nuovo prodotto
+ * 
+ * MULTITENANT: Il prodotto viene automaticamente associato all'organizzazione corrente
+ * 
+ * REGOLE ERP:
+ * - Prezzo convertito a Decimal (MAI number)
+ * - Verifica unicità codice per organizzazione
+ * - Verifica che categoria/tipologia/vatRate appartengano all'organizzazione
+ * 
+ * @param input - Dati prodotto da creare
+ * @returns Result con prodotto creato o errore
+ */
+export async function createProductAction(
+  input: CreateProductInput
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione (include organizationId)
+    const ctx = await getAuthContext();
+    
+    // 2. ✅ Verifica permessi scrittura
+    if (!canWrite(ctx)) {
+      return {
+        success: false,
+        error: 'Non hai i permessi per creare prodotti',
+      };
+    }
+
+    // 3. Validazione con Zod
+    const validatedData = createProductSchema.parse(input);
+
+    // 4. Normalizza codice (già fatto da Zod transform)
+    const normalizedCode = validatedData.code;
+
+    // 5. Verifica unicità codice per organizzazione
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        code: normalizedCode,
+      },
+    });
+
+    if (existingProduct) {
+      return {
+        success: false,
+        error: 'Codice prodotto già esistente per questa organizzazione',
+      };
+    }
+
+    // 6. Verifica che categoria appartenga all'organizzazione (se presente)
+    if (validatedData.categoryId) {
+      const category = await prisma.productCategory.findUnique({
+        where: { id: validatedData.categoryId },
+        select: { organizationId: true },
+      });
+
+      if (!category) {
+        return {
+          success: false,
+          error: 'Categoria prodotto non trovata',
+        };
+      }
+
+      if (category.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Categoria prodotto non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    // 7. Verifica che tipologia appartenga all'organizzazione (se presente)
+    if (validatedData.typeId) {
+      const type = await prisma.productType.findUnique({
+        where: { id: validatedData.typeId },
+        select: { organizationId: true },
+      });
+
+      if (!type) {
+        return {
+          success: false,
+          error: 'Tipologia prodotto non trovata',
+        };
+      }
+
+      if (type.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Tipologia prodotto non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    // 8. Verifica che aliquota IVA appartenga all'organizzazione (se presente)
+    if (validatedData.vatRateId) {
+      const vatRate = await prisma.vatRate.findUnique({
+        where: { id: validatedData.vatRateId },
+        select: { organizationId: true },
+      });
+
+      if (!vatRate) {
+        return {
+          success: false,
+          error: 'Aliquota IVA non trovata',
+        };
+      }
+
+      if (vatRate.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Aliquota IVA non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    // 9. ✅ Converti prezzo a Decimal (MAI number!)
+    const priceDecimal = new Decimal(validatedData.price);
+
+    // 10. ✅ Creazione prodotto con organizationId
+    const product = await prisma.product.create({
+      data: {
+        organizationId: ctx.organizationId, // ✅ Associa automaticamente all'organizzazione
+        code: normalizedCode,
+        name: validatedData.name,
+        description: validatedData.description || null,
+        categoryId: validatedData.categoryId || null,
+        typeId: validatedData.typeId || null,
+        price: priceDecimal, // ✅ Decimal, non number!
+        vatRateId: validatedData.vatRateId || null,
+        active: validatedData.active,
+      },
+    });
+
+    // 11. Revalidazione cache Next.js
+    revalidatePath('/products');
+
+    return {
+      success: true,
+      data: { id: product.id },
+    };
+  } catch (error) {
+    console.error('Errore creazione prodotto:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    // Gestione errori Prisma (es. unique constraint violation)
+    if (error instanceof Error) {
+      // Se è un errore di unique constraint per codice
+      if (error.message.includes('organizationId_code') || error.message.includes('Unique constraint')) {
+        return {
+          success: false,
+          error: 'Codice prodotto già esistente per questa organizzazione',
+        };
+      }
+      
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore sconosciuto durante la creazione del prodotto',
+    };
+  }
+}
+
+/**
+ * Aggiorna un prodotto esistente
+ * 
+ * MULTITENANT: Verifica che il prodotto appartenga all'organizzazione corrente
+ * 
+ * @param input - Dati prodotto da aggiornare (include id)
+ * @returns Result con successo o errore
+ */
+export async function updateProductAction(
+  input: UpdateProductInput
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+    
+    // 2. ✅ Verifica permessi scrittura
+    if (!canWrite(ctx)) {
+      return {
+        success: false,
+        error: 'Non hai i permessi per modificare prodotti',
+      };
+    }
+
+    // 3. Validazione con Zod
+    const validatedData = updateProductSchema.parse(input);
+
+    // 4. ✅ Verifica esistenza E appartenenza all'organizzazione
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: validatedData.id },
+      select: { id: true, organizationId: true, code: true },
+    });
+
+    if (!existingProduct) {
+      return {
+        success: false,
+        error: 'Prodotto non trovato',
+      };
+    }
+    
+    // ✅ Verifica che appartenga all'organizzazione corrente
+    verifyOrganizationAccess(ctx, existingProduct);
+
+    // 5. Normalizza codice se presente
+    const normalizedCode = validatedData.code 
+      ? validatedData.code.trim().toUpperCase()
+      : undefined;
+
+    // 6. Verifica unicità codice se è stato modificato
+    if (normalizedCode && normalizedCode !== existingProduct.code) {
+      const duplicateProduct = await prisma.product.findFirst({
+        where: {
+          organizationId: ctx.organizationId,
+          code: normalizedCode,
+        },
+      });
+
+      if (duplicateProduct && duplicateProduct.id !== validatedData.id) {
+        return {
+          success: false,
+          error: 'Codice prodotto già esistente per questa organizzazione',
+        };
+      }
+    }
+
+    // 7. Verifica classificazioni se modificate
+    if (validatedData.categoryId !== undefined && validatedData.categoryId !== '') {
+      const category = await prisma.productCategory.findUnique({
+        where: { id: validatedData.categoryId },
+        select: { organizationId: true },
+      });
+
+      if (!category) {
+        return {
+          success: false,
+          error: 'Categoria prodotto non trovata',
+        };
+      }
+
+      if (category.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Categoria prodotto non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    if (validatedData.typeId !== undefined && validatedData.typeId !== '') {
+      const type = await prisma.productType.findUnique({
+        where: { id: validatedData.typeId },
+        select: { organizationId: true },
+      });
+
+      if (!type) {
+        return {
+          success: false,
+          error: 'Tipologia prodotto non trovata',
+        };
+      }
+
+      if (type.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Tipologia prodotto non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    if (validatedData.vatRateId !== undefined && validatedData.vatRateId !== '') {
+      const vatRate = await prisma.vatRate.findUnique({
+        where: { id: validatedData.vatRateId },
+        select: { organizationId: true },
+      });
+
+      if (!vatRate) {
+        return {
+          success: false,
+          error: 'Aliquota IVA non trovata',
+        };
+      }
+
+      if (vatRate.organizationId !== ctx.organizationId) {
+        return {
+          success: false,
+          error: 'Aliquota IVA non appartiene alla tua organizzazione',
+        };
+      }
+    }
+
+    // 8. Prepara dati aggiornamento
+    const updateData: {
+      code?: string;
+      name?: string;
+      description?: string | null;
+      categoryId?: string | null;
+      typeId?: string | null;
+      price?: Decimal;
+      vatRateId?: string | null;
+      active?: boolean;
+    } = {};
+
+    if (normalizedCode) {
+      updateData.code = normalizedCode;
+    }
+
+    if (validatedData.name !== undefined) {
+      updateData.name = validatedData.name.trim();
+    }
+
+    if (validatedData.description !== undefined) {
+      updateData.description = validatedData.description || null;
+    }
+
+    if (validatedData.categoryId !== undefined) {
+      updateData.categoryId = validatedData.categoryId || null;
+    }
+
+    if (validatedData.typeId !== undefined) {
+      updateData.typeId = validatedData.typeId || null;
+    }
+
+    if (validatedData.price !== undefined) {
+      // ✅ Converti prezzo a Decimal (MAI number!)
+      updateData.price = new Decimal(validatedData.price);
+    }
+
+    if (validatedData.vatRateId !== undefined) {
+      updateData.vatRateId = validatedData.vatRateId || null;
+    }
+
+    if (validatedData.active !== undefined) {
+      updateData.active = validatedData.active;
+    }
+
+    // 9. Aggiornamento prodotto
+    const updatedProduct = await prisma.product.update({
+      where: { id: validatedData.id },
+      data: updateData,
+    });
+
+    // 10. Revalidazione cache
+    revalidatePath('/products');
+
+    return {
+      success: true,
+      data: { id: updatedProduct.id },
+    };
+  } catch (error) {
+    console.error('Errore aggiornamento prodotto:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    if (error instanceof Error) {
+      // Se è un errore di unique constraint per codice
+      if (error.message.includes('organizationId_code') || error.message.includes('Unique constraint')) {
+        return {
+          success: false,
+          error: 'Codice prodotto già esistente per questa organizzazione',
+        };
+      }
+      
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore sconosciuto durante l\'aggiornamento del prodotto',
+    };
+  }
+}
+
+/**
+ * Elimina un prodotto
+ * 
+ * MULTITENANT: Verifica che il prodotto appartenga all'organizzazione corrente
+ * 
+ * NOTA: Verifica che non ci siano documenti o movimenti di magazzino associati
+ * 
+ * @param id - ID prodotto da eliminare
+ * @returns Result con successo o errore
+ */
+export async function deleteProductAction(
+  id: string
+): Promise<ActionResult<{ id: string }>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+    
+    // 2. ✅ Verifica permessi scrittura
+    if (!canWrite(ctx)) {
+      return {
+        success: false,
+        error: 'Non hai i permessi per eliminare prodotti',
+      };
+    }
+
+    // 3. ✅ Verifica esistenza E appartenenza all'organizzazione
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true },
+    });
+
+    if (!existingProduct) {
+      return {
+        success: false,
+        error: 'Prodotto non trovato',
+      };
+    }
+    
+    // ✅ Verifica che appartenga all'organizzazione corrente
+    verifyOrganizationAccess(ctx, existingProduct);
+
+    // 4. Verifica che non ci siano documenti associati
+    const documentsCount = await prisma.documentLine.count({
+      where: {
+        productId: id,
+      },
+    });
+
+    if (documentsCount > 0) {
+      return {
+        success: false,
+        error: `Impossibile eliminare: il prodotto è presente in ${documentsCount} documento/i`,
+      };
+    }
+
+    // 5. Verifica che non ci siano movimenti di magazzino associati
+    const stockMovementsCount = await prisma.stockMovement.count({
+      where: {
+        productId: id,
+      },
+    });
+
+    if (stockMovementsCount > 0) {
+      return {
+        success: false,
+        error: `Impossibile eliminare: ci sono ${stockMovementsCount} movimento/i di magazzino associati`,
+      };
+    }
+
+    // 6. Eliminazione prodotto
+    await prisma.product.delete({
+      where: { id },
+    });
+
+    // 7. Revalidazione cache
+    revalidatePath('/products');
+
+    return {
+      success: true,
+      data: { id },
+    };
+  } catch (error) {
+    console.error('Errore eliminazione prodotto:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante l\'eliminazione del prodotto',
+    };
+  }
+}

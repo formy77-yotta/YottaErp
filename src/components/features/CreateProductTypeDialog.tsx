@@ -1,5 +1,5 @@
 /**
- * Dialog per modificare una categoria articolo esistente
+ * Dialog per creare una nuova tipologia articolo
  */
 
 'use client';
@@ -14,45 +14,36 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ProductCategoryForm } from './ProductCategoryForm';
-import { Edit } from 'lucide-react';
+import { ProductTypeForm } from './ProductTypeForm';
+import { Plus } from 'lucide-react';
 
-interface EditProductCategoryDialogProps {
-  category: {
-    id: string;
-    code: string;
-    description: string;
-    active: boolean;
-  };
-}
-
-export function EditProductCategoryDialog({ category }: EditProductCategoryDialogProps) {
+export function CreateProductTypeDialog() {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(0);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <Edit className="h-4 w-4" />
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Nuova Tipologia
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Modifica Categoria Articolo</DialogTitle>
+          <DialogTitle>Nuova Tipologia Articolo</DialogTitle>
           <DialogDescription>
-            Modifica i dati della categoria articolo. Il codice deve essere univoco per organizzazione.
+            Inserisci i dati della tipologia articolo. Il codice deve essere univoco per organizzazione.
           </DialogDescription>
         </DialogHeader>
-        <ProductCategoryForm
+        <ProductTypeForm
           key={key}
-          category={category}
           onSuccess={() => {
             setOpen(false);
             setKey((k) => k + 1); // Reset form
           }}
           onError={(error) => {
-            console.error('Errore aggiornamento categoria:', error);
+            console.error('Errore creazione tipologia:', error);
           }}
         />
       </DialogContent>

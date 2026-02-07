@@ -1,12 +1,12 @@
 /**
- * Pagina gestione Categorie Articoli
+ * Pagina gestione Tipologie Articoli
  * 
- * Permette di visualizzare, creare e modificare le categorie articoli dell'organizzazione.
- * MULTITENANT: Tutte le categorie sono filtrate per organizationId
+ * Permette di visualizzare, creare e modificare le tipologie articoli dell'organizzazione.
+ * MULTITENANT: Tutte le tipologie sono filtrate per organizationId
  */
 
 import { Suspense } from 'react';
-import { getProductCategoriesAction } from '@/services/actions/product-category-actions';
+import { getProductTypesAction } from '@/services/actions/product-type-actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -16,44 +16,44 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { CreateProductCategoryDialog } from '@/components/features/CreateProductCategoryDialog';
-import { EditProductCategoryDialog } from '@/components/features/EditProductCategoryDialog';
-import { DeleteProductCategoryButton } from '@/components/features/DeleteProductCategoryButton';
+import { CreateProductTypeDialog } from '@/components/features/CreateProductTypeDialog';
+import { EditProductTypeDialog } from '@/components/features/EditProductTypeDialog';
+import { DeleteProductTypeButton } from '@/components/features/DeleteProductTypeButton';
 import { Badge } from '@/components/ui/badge';
 import { Package } from 'lucide-react';
 
 /**
  * Componente principale della pagina
  */
-export default function ProductCategoriesPage() {
+export default function ProductTypesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Categorie Articoli</h1>
+          <h1 className="text-3xl font-bold">Tipologie Articoli</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci le categorie articoli della tua organizzazione
+            Gestisci le tipologie articoli della tua organizzazione
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <CreateProductCategoryDialog />
+          <CreateProductTypeDialog />
         </div>
       </div>
 
-      {/* Tabella Categorie */}
-      <Suspense fallback={<ProductCategoriesTableSkeleton />}>
-        <ProductCategoriesTable />
+      {/* Tabella Tipologie */}
+      <Suspense fallback={<ProductTypesTableSkeleton />}>
+        <ProductTypesTable />
       </Suspense>
     </div>
   );
 }
 
 /**
- * Tabella categorie con dati dal server
+ * Tabella tipologie con dati dal server
  */
-async function ProductCategoriesTable() {
-  const result = await getProductCategoriesAction();
+async function ProductTypesTable() {
+  const result = await getProductTypesAction();
 
   if (!result.success) {
     return (
@@ -63,16 +63,16 @@ async function ProductCategoriesTable() {
     );
   }
 
-  const categories = result.data;
+  const types = result.data;
 
-  if (categories.length === 0) {
+  if (types.length === 0) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
           <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Nessuna categoria articolo configurata</p>
+          <p className="text-muted-foreground">Nessuna tipologia articolo configurata</p>
           <p className="text-sm text-muted-foreground mt-2">
-            Crea la tua prima categoria articolo
+            Crea la tua prima tipologia articolo
           </p>
         </CardContent>
       </Card>
@@ -82,9 +82,9 @@ async function ProductCategoriesTable() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Categorie Configurate</CardTitle>
+        <CardTitle>Tipologie Configurate</CardTitle>
         <CardDescription>
-          {categories.length} categoria{categories.length !== 1 ? 'e' : ''} configurata{categories.length !== 1 ? 'e' : ''}
+          {types.length} tipologia{types.length !== 1 ? 'e' : ''} configurata{types.length !== 1 ? 'e' : ''}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -94,13 +94,14 @@ async function ProductCategoriesTable() {
               <TableRow>
                 <TableHead>Codice</TableHead>
                 <TableHead>Descrizione</TableHead>
+                <TableHead>Gestione Magazzino</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {categories.map((category) => (
-                <ProductCategoryRow key={category.id} category={category} />
+              {types.map((type) => (
+                <ProductTypeRow key={type.id} type={type} />
               ))}
             </TableBody>
           </Table>
@@ -113,29 +114,35 @@ async function ProductCategoriesTable() {
 /**
  * Riga singola della tabella
  */
-function ProductCategoryRow({ category }: { category: {
+function ProductTypeRow({ type }: { type: {
   id: string;
   code: string;
   description: string;
+  manageStock: boolean;
   active: boolean;
 } }) {
   return (
     <TableRow>
       <TableCell className="font-medium font-mono">
-        {category.code}
+        {type.code}
       </TableCell>
       <TableCell>
-        {category.description}
+        {type.description}
       </TableCell>
       <TableCell>
-        <Badge variant={category.active ? 'default' : 'secondary'}>
-          {category.active ? 'Attiva' : 'Disattiva'}
+        <Badge variant={type.manageStock ? 'default' : 'secondary'}>
+          {type.manageStock ? 'Sì' : 'No'}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant={type.active ? 'default' : 'secondary'}>
+          {type.active ? 'Attiva' : 'Disattiva'}
         </Badge>
       </TableCell>
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-2">
-          <EditProductCategoryDialog category={category} />
-          <DeleteProductCategoryButton categoryId={category.id} />
+          <EditProductTypeDialog type={type} />
+          <DeleteProductTypeButton typeId={type.id} />
         </div>
       </TableCell>
     </TableRow>
@@ -145,11 +152,11 @@ function ProductCategoryRow({ category }: { category: {
 /**
  * Skeleton per caricamento tabella
  */
-function ProductCategoriesTableSkeleton() {
+function ProductTypesTableSkeleton() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Categorie Configurate</CardTitle>
+        <CardTitle>Tipologie Configurate</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="rounded-lg border">
@@ -158,6 +165,7 @@ function ProductCategoriesTableSkeleton() {
               <TableRow>
                 <TableHead>Codice</TableHead>
                 <TableHead>Descrizione</TableHead>
+                <TableHead>Gestione Magazzino</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -170,6 +178,9 @@ function ProductCategoriesTableSkeleton() {
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-40 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-16 bg-muted animate-pulse rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-16 bg-muted animate-pulse rounded" />

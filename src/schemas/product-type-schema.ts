@@ -1,15 +1,15 @@
 /**
- * Schemi Zod per Categorie Articoli
+ * Schemi Zod per Tipologie Articoli
  * 
- * Validazione per creazione e aggiornamento categorie prodotti
+ * Validazione per creazione e aggiornamento tipologie prodotti
  */
 
 import { z } from 'zod';
 
 /**
- * Schema per creazione categoria articolo
+ * Schema per creazione tipologia articolo
  */
-export const createProductCategorySchema = z.object({
+export const createProductTypeSchema = z.object({
   code: z
     .string()
     .min(2, 'Codice deve contenere almeno 2 caratteri')
@@ -19,15 +19,16 @@ export const createProductCategorySchema = z.object({
     .string()
     .min(2, 'Descrizione deve contenere almeno 2 caratteri')
     .max(200, 'Descrizione troppo lunga'),
+  manageStock: z.boolean().default(true),
   active: z.boolean().default(true),
 });
 
-export type CreateProductCategoryInput = z.infer<typeof createProductCategorySchema>;
+export type CreateProductTypeInput = z.infer<typeof createProductTypeSchema>;
 
 /**
- * Schema per aggiornamento categoria articolo
+ * Schema per aggiornamento tipologia articolo
  */
-export const updateProductCategorySchema = z.object({
+export const updateProductTypeSchema = z.object({
   id: z.string().cuid(),
   code: z
     .string()
@@ -40,7 +41,8 @@ export const updateProductCategorySchema = z.object({
     .min(2, 'Descrizione deve contenere almeno 2 caratteri')
     .max(200, 'Descrizione troppo lunga')
     .optional(),
+  manageStock: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 
-export type UpdateProductCategoryInput = z.infer<typeof updateProductCategorySchema>;
+export type UpdateProductTypeInput = z.infer<typeof updateProductTypeSchema>;

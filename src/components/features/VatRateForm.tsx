@@ -101,17 +101,27 @@ export function VatRateForm({
 
   // Aggiorna i valori del form quando l'aliquota viene caricata
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:103',message:'useEffect - form reset triggered',data:{hasRate:!!rate,rateNature:rate?.nature,rateNatureType:rate?.nature ? typeof rate.nature : 'N/A',isEditing},timestamp:Date.now(),runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     if (rate) {
-      form.reset({
+      const resetData = {
         name: rate.name,
         value: valueToPercentage(rate.value), // Converte 0.2200 -> 22
         nature: rate.nature || undefined,
         description: rate.description || '',
         isDefault: rate.isDefault,
         active: rate.active,
-      }, { keepDefaultValues: false });
+      };
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:110',message:'useEffect - resetting form with rate data',data:{resetNature:resetData.nature,resetNatureType:typeof resetData.nature},timestamp:Date.now(),runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      form.reset(resetData, { keepDefaultValues: false });
     } else {
       // Reset al form vuoto quando si crea una nuova aliquota
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:120',message:'useEffect - resetting form to empty (new rate)',data:{natureValue:undefined},timestamp:Date.now(),runId:'initial',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       form.reset({
         name: '',
         value: '',
@@ -238,35 +248,55 @@ export function VatRateForm({
           <FormField
             control={form.control}
             name="nature"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Natura (SDI)</FormLabel>
-                <Select 
-                  onValueChange={field.onChange} 
-                  value={field.value || ''}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona natura" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="">Nessuna</SelectItem>
-                    <SelectItem value="N1">N1 - Esclusa art. 15</SelectItem>
-                    <SelectItem value="N2">N2 - Non soggetta</SelectItem>
-                    <SelectItem value="N3">N3 - Non imponibile</SelectItem>
-                    <SelectItem value="N4">N4 - Esente</SelectItem>
-                    <SelectItem value="N5">N5 - Regime del margine</SelectItem>
-                    <SelectItem value="N6">N6 - Reverse charge</SelectItem>
-                    <SelectItem value="N7">N7 - IVA assolta in altro stato UE</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  Codice natura per fatturazione elettronica
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:241',message:'Nature field render - field value check',data:{fieldValue:field.value,fieldValueType:typeof field.value,convertedValue:field.value || '',isUndefined:field.value === undefined,isNull:field.value === null,isEmptyString:field.value === ''},timestamp:Date.now(),runId:'initial',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
+              const selectValue = field.value || '';
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:244',message:'Nature field - selectValue calculated',data:{selectValue,selectValueType:typeof selectValue,isEmptyString:selectValue === ''},timestamp:Date.now(),runId:'initial',hypothesisId:'B'})}).catch(()=>{});
+              // #endregion
+              return (
+                <FormItem>
+                  <FormLabel>Natura (SDI)</FormLabel>
+                  <Select 
+                    onValueChange={(value) => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:250',message:'Select onValueChange called',data:{newValue:value,newValueType:typeof value,isEmptyString:value === ''},timestamp:Date.now(),runId:'initial',hypothesisId:'A'})}).catch(()=>{});
+                      // #endregion
+                      field.onChange(value === '' ? undefined : value);
+                    }} 
+                    value={selectValue}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona natura" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {/* #region agent log */}
+                      {(() => {
+                        fetch('http://127.0.0.1:7242/ingest/96985e5f-b98b-4622-8e18-baf91c50b762',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VatRateForm.tsx:260',message:'SelectContent rendering - checking SelectItem with empty value',data:{hasEmptyValueItem:true},timestamp:Date.now(),runId:'initial',hypothesisId:'A'})}).catch(()=>{});
+                        return null;
+                      })()}
+                      {/* #endregion */}
+                      <SelectItem value="">Nessuna</SelectItem>
+                      <SelectItem value="N1">N1 - Esclusa art. 15</SelectItem>
+                      <SelectItem value="N2">N2 - Non soggetta</SelectItem>
+                      <SelectItem value="N3">N3 - Non imponibile</SelectItem>
+                      <SelectItem value="N4">N4 - Esente</SelectItem>
+                      <SelectItem value="N5">N5 - Regime del margine</SelectItem>
+                      <SelectItem value="N6">N6 - Reverse charge</SelectItem>
+                      <SelectItem value="N7">N7 - IVA assolta in altro stato UE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Codice natura per fatturazione elettronica
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
         </div>
 
