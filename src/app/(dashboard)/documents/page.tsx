@@ -127,7 +127,10 @@ async function DocumentsTable() {
                       <div>
                         <div className="font-medium">{doc.entity.businessName}</div>
                         {doc.entity.vatNumber && (
-                          <div className="text-sm text-muted-foreground">
+                          <div 
+                            className="text-sm text-muted-foreground"
+                            suppressHydrationWarning
+                          >
                             P.IVA: {doc.entity.vatNumber}
                           </div>
                         )}
