@@ -89,14 +89,33 @@ npm run type-check:watch
 
 ### Errore: "Cannot read properties of null (reading 'useContext')" durante il build
 
-**Problema**: Questo errore si verifica quando Next.js cerca di pre-renderizzare `global-error.tsx` durante il build.
+**Problema**: Questo errore si verifica quando Next.js cerca di pre-renderizzare `global-error.tsx` durante il build e il componente usa hooks o context.
 
 **Soluzione**:
-1. Rimuovi `src/app/global-error.tsx` se non è strettamente necessario (è opzionale in Next.js)
-2. Se devi tenerlo, assicurati che non usi hooks che dipendono da context durante il pre-rendering
-3. Usa `export const dynamic = 'force-dynamic'` nel layout principale (ma questo non risolve completamente il problema durante il build)
+1. **Opzione 1 (Raccomandata)**: Rimuovi `src/app/global-error.tsx` se non è strettamente necessario (è opzionale in Next.js)
+2. **Opzione 2**: Se devi tenerlo, assicurati che:
+   - Non usi React hooks (`useState`, `useEffect`, `useContext`, ecc.)
+   - Non dipenda da provider o context esterni
+   - Usi solo `window.location` invece di `router` per la navigazione
+   - Aggiungi `export const dynamic = 'force-dynamic'` nel file stesso
+   - Prefissa parametri non usati con `_` (es. `reset: _reset`)
 
-**Nota**: `global-error.tsx` viene sempre pre-renderizzato durante il build da Vercel, anche se è un client component.
+**Esempio di `global-error.tsx` corretto**:
+```typescript
+'use client';
+export const dynamic = 'force-dynamic';
+
+export default function GlobalError({ error, reset: _reset }: { ... }) {
+  const handleReset = () => {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/'; // Non usare router!
+    }
+  };
+  // ... render statico senza hooks
+}
+```
+
+**Nota**: `global-error.tsx` viene sempre pre-renderizzato durante il build da Vercel, anche se è un client component. Deve essere completamente statico.
 
 ### Build funziona in locale ma fallisce su Vercel
 
