@@ -172,6 +172,7 @@ export async function getDocumentAction(
   grossTotal: string;
   notes: string | null;
   paymentTerms: string | null;
+  mainWarehouseId: string | null;
   createdAt: Date;
   updatedAt: Date;
   lines: Array<{
@@ -185,6 +186,7 @@ export async function getDocumentAction(
     netAmount: string;
     vatAmount: string;
     grossAmount: string;
+    warehouseId: string | null;
   }>;
 }>> {
   try {
@@ -194,7 +196,11 @@ export async function getDocumentAction(
     // 2. Recupera documento con righe e relazioni
     const document = await prisma.document.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        number: true,
+        date: true,
+        category: true,
         documentType: {
           select: {
             id: true,
@@ -209,6 +215,24 @@ export async function getDocumentAction(
             vatNumber: true,
           },
         },
+        customerNameSnapshot: true,
+        customerVatSnapshot: true,
+        customerFiscalCodeSnapshot: true,
+        customerAddressSnapshot: true,
+        customerSdiSnapshot: true,
+        customerCity: true,
+        customerProvince: true,
+        customerZip: true,
+        customerCountry: true,
+        netTotal: true,
+        vatTotal: true,
+        grossTotal: true,
+        notes: true,
+        paymentTerms: true,
+        mainWarehouseId: true,
+        createdAt: true,
+        updatedAt: true,
+        organizationId: true, // Per verifica multitenant
         lines: {
           orderBy: {
             createdAt: 'asc', // Ordina righe per ordine di creazione
@@ -224,6 +248,7 @@ export async function getDocumentAction(
             netAmount: true,
             vatAmount: true,
             grossAmount: true,
+            warehouseId: true,
           },
         },
       },
@@ -263,6 +288,7 @@ export async function getDocumentAction(
         grossTotal: document.grossTotal.toString(),
         notes: document.notes,
         paymentTerms: document.paymentTerms,
+        mainWarehouseId: document.mainWarehouseId,
         createdAt: document.createdAt,
         updatedAt: document.updatedAt,
         lines: document.lines.map((line) => ({
@@ -276,6 +302,7 @@ export async function getDocumentAction(
           netAmount: line.netAmount.toString(),
           vatAmount: line.vatAmount.toString(),
           grossAmount: line.grossAmount.toString(),
+          warehouseId: line.warehouseId,
           warehouseId: line.warehouseId,
         })),
       },

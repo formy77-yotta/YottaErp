@@ -194,7 +194,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           form.reset({
             entityId: doc.entity?.id || '',
             date: new Date(doc.date).toISOString().split('T')[0],
-            mainWarehouseId: '', // Non disponibile nel documento, lasciare vuoto
+            mainWarehouseId: doc.mainWarehouseId || '',
             lines: doc.lines.map(line => ({
               productId: line.productId || '',
               productCode: line.productCode,
@@ -202,7 +202,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               unitPrice: line.unitPrice,
               quantity: line.quantity,
               vatRate: line.vatRate,
-              warehouseId: '', // Non disponibile nelle righe, lasciare vuoto
+              warehouseId: line.warehouseId || '',
             })),
             notes: doc.notes || '',
             paymentTerms: doc.paymentTerms || '',
@@ -309,14 +309,28 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     try {
       if (isEditing && documentId) {
         // Aggiornamento documento esistente
+        // Converti stringhe vuote in undefined per lo schema Zod
         const updateData: UpdateDocumentInput = {
           id: documentId,
-          ...(data.entityId !== undefined && { entityId: data.entityId || '' }),
+          ...(data.entityId !== undefined && { 
+            entityId: (data.entityId && (data.entityId as string).trim()) ? (data.entityId as string).trim() : undefined
+          }),
           ...(data.date && { date: new Date(data.date as string) }),
-          ...(data.mainWarehouseId && { mainWarehouseId: data.mainWarehouseId }),
-          ...(data.lines && { lines: data.lines }),
-          ...(data.notes !== undefined && { notes: data.notes || '' }),
-          ...(data.paymentTerms !== undefined && { paymentTerms: data.paymentTerms || '' }),
+          ...(data.mainWarehouseId !== undefined && { 
+            mainWarehouseId: (data.mainWarehouseId && (data.mainWarehouseId as string).trim()) ? (data.mainWarehouseId as string).trim() : undefined
+          }),
+          // Le righe sono sempre obbligatorie in update
+          lines: (data.lines as any[]).map(line => ({
+            productId: line.productId?.trim() || undefined,
+            productCode: line.productCode.trim(),
+            description: line.description.trim(),
+            unitPrice: line.unitPrice,
+            quantity: line.quantity,
+            vatRate: line.vatRate,
+            warehouseId: (line.warehouseId && line.warehouseId.trim()) ? line.warehouseId.trim() : undefined,
+          })),
+          ...(data.notes !== undefined && { notes: (data.notes as string)?.trim() || undefined }),
+          ...(data.paymentTerms !== undefined && { paymentTerms: (data.paymentTerms as string)?.trim() || undefined }),
         };
 
         const result = await updateDocumentAction(updateData);
