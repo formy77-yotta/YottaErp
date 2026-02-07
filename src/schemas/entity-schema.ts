@@ -304,6 +304,34 @@ const entityBaseSchema = z.object({
         message: 'Email non valida',
       }
     ),
+  // PEC: opzionale, ma se presente deve essere una email valida
+  pec: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return z.string().email().safeParse(val).success;
+      },
+      {
+        message: 'PEC non valida (deve essere un indirizzo email valido)',
+      }
+    ),
+  // Codice SDI: opzionale, ma se presente deve essere 7 caratteri
+  sdiCode: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .refine(
+      (val) => {
+        if (!val || val.trim() === '') return true;
+        return val.length === 7;
+      },
+      {
+        message: 'Codice SDI deve essere esattamente 7 caratteri',
+      }
+    ),
 });
 
 /**
@@ -343,6 +371,13 @@ export const updateEntitySchema = z.object({
     .optional(),
   zipCode: z.string().regex(/^\d{5}$/, 'CAP deve contenere esattamente 5 cifre').optional(),
   email: z.string().email('Email non valida').optional().or(z.literal('')).optional(),
+  pec: z.string().email('PEC non valida').optional().or(z.literal('')).optional(),
+  sdiCode: z
+    .string()
+    .length(7, 'Codice SDI deve essere 7 caratteri')
+    .optional()
+    .or(z.literal(''))
+    .optional(),
 });
 
 export type UpdateEntityInput = z.infer<typeof updateEntitySchema>;

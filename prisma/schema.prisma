@@ -335,6 +335,7 @@ model StockMovement {
 ///  * - Impatto su costi/ricavi (valuationImpact)
 ///  * - Segno operazione (operationSign: +1 incremento, -1 decremento)
 ///  * - Numerazione separata (numeratorCode)
+///  * - Direzione documento (documentDirection: PURCHASE, SALE, INTERNAL)
 ///  * 
 ///  * MULTITENANT: Ogni configurazione appartiene a un'organizzazione
 model DocumentTypeConfig {
@@ -345,6 +346,7 @@ model DocumentTypeConfig {
   numeratorCode          String
   inventoryMovement      Boolean         @default(false)
   valuationImpact        Boolean         @default(false)
+  documentDirection      String          @default("SALE") // PURCHASE, SALE, INTERNAL
   active                 Boolean         @default(true)
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
@@ -358,6 +360,7 @@ model DocumentTypeConfig {
   @@index([organizationId])
   @@index([organizationId, active])
   @@index([organizationId, numeratorCode])
+  @@index([organizationId, documentDirection])
 }
 
 /// *
@@ -455,6 +458,31 @@ enum MovementType {
   RESO_FORNITORE
   TRASFERIMENTO_USCITA
   TRASFERIMENTO_ENTRATA
+}
+
+/// *
+///  * StandardConfig: Configurazioni standard (Super Admin)
+///  * 
+///  * Gestisce le configurazioni standard che vengono caricate quando
+///  * un'organizzazione usa i pulsanti "Carica Standard":
+///  * - Aliquote IVA standard (VAT_RATES)
+///  * - Unità di misura standard (UNITS_OF_MEASURE)
+///  * - Tipi documento standard (DOCUMENT_TYPES)
+///  * 
+///  * NOTA: Queste configurazioni sono GLOBALI (non multitenant) e gestite solo dal Super Admin
+model StandardConfig {
+  id          String            @id @default(cuid())
+  type        String            // 'VAT_RATES' | 'UNITS_OF_MEASURE' | 'DOCUMENT_TYPES'
+  data        Json              // Dati della configurazione (JSON)
+  version     Int               @default(1)
+  description String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([type])
+  @@index([type, active])
+  @@index([type, version])
 }
 
 /// *

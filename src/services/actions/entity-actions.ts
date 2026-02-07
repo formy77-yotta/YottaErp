@@ -91,6 +91,8 @@ export async function getEntitiesAction(
   province: string | null;
   zipCode: string | null;
   email: string | null;
+  pec: string | null;
+  sdiCode: string | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -151,6 +153,8 @@ export async function getEntitiesAction(
         province: true,
         zipCode: true,
         email: true,
+        pec: true,
+        sdiCode: true,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -206,6 +210,8 @@ export async function getEntityAction(
   province: string | null;
   zipCode: string | null;
   email: string | null;
+  pec: string | null;
+  sdiCode: string | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -229,6 +235,8 @@ export async function getEntityAction(
         province: true,
         zipCode: true,
         email: true,
+        pec: true,
+        sdiCode: true,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -416,6 +424,12 @@ export async function createEntityAction(
         email: validatedData.email && validatedData.email.trim() !== '' 
           ? validatedData.email 
           : null,
+        pec: validatedData.pec && validatedData.pec.trim() !== '' 
+          ? validatedData.pec 
+          : null,
+        sdiCode: validatedData.sdiCode && validatedData.sdiCode.trim() !== '' 
+          ? validatedData.sdiCode 
+          : null,
         active: true,
       },
     });
@@ -564,6 +578,16 @@ export async function updateEntityAction(
         ...(validatedData.email !== undefined && { 
           email: validatedData.email && validatedData.email.trim() !== '' 
             ? validatedData.email 
+            : null 
+        }),
+        ...(validatedData.pec !== undefined && { 
+          pec: validatedData.pec && validatedData.pec.trim() !== '' 
+            ? validatedData.pec 
+            : null 
+        }),
+        ...(validatedData.sdiCode !== undefined && { 
+          sdiCode: validatedData.sdiCode && validatedData.sdiCode.trim() !== '' 
+            ? validatedData.sdiCode 
             : null 
         }),
       },

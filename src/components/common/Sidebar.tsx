@@ -22,7 +22,7 @@ import {
   Ruler,
   Activity,
 } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -256,11 +256,30 @@ function DesktopSidebar() {
  * Sidebar mobile (Sheet)
  * 
  * Mostrato nella Navbar su mobile
+ * 
+ * NOTA: Renderizzato solo sul client per evitare errori di hydration
+ * causati da ID casuali generati da Radix UI
  */
 export function MobileSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Renderizza solo sul client per evitare mismatch di hydration
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) {
+    // Renderizza un placeholder durante SSR
+    return (
+      <Button variant="ghost" size="icon" className="lg:hidden" disabled>
+        <Menu className="h-5 w-5" />
+        <span className="sr-only">Apri menu</span>
+      </Button>
+    );
+  }
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>

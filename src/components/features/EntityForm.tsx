@@ -59,6 +59,8 @@ interface EntityFormProps {
     province: string;
     zipCode: string;
     email?: string | null;
+    pec?: string | null;
+    sdiCode?: string | null;
   };
   
   /**
@@ -102,6 +104,8 @@ export function EntityForm({
       province: '',
       zipCode: '',
       email: '',
+      pec: '',
+      sdiCode: '',
     },
   });
 
@@ -118,6 +122,8 @@ export function EntityForm({
         province: entity.province || '',
         zipCode: entity.zipCode || '',
         email: entity.email ?? '',
+        pec: entity.pec ?? '',
+        sdiCode: entity.sdiCode ?? '',
       }, { keepDefaultValues: false });
     } else {
       // Reset al form vuoto quando si crea una nuova entità
@@ -131,6 +137,8 @@ export function EntityForm({
         province: '',
         zipCode: '',
         email: '',
+        pec: '',
+        sdiCode: '',
       }, { keepDefaultValues: false });
     }
   }, [entity, form]);
@@ -157,6 +165,8 @@ export function EntityForm({
           province: data.province && data.province.trim() !== '' ? data.province : undefined,
           zipCode: data.zipCode && data.zipCode.trim() !== '' ? data.zipCode : undefined,
           email: data.email && data.email.trim() !== '' ? data.email : undefined,
+          pec: data.pec && data.pec.trim() !== '' ? data.pec : undefined,
+          sdiCode: data.sdiCode && data.sdiCode.trim() !== '' ? data.sdiCode : undefined,
         };
         
         result = await updateEntityAction(updateData);
@@ -172,6 +182,8 @@ export function EntityForm({
           province: data.province && data.province.trim() !== '' ? data.province : undefined,
           zipCode: data.zipCode && data.zipCode.trim() !== '' ? data.zipCode : undefined,
           email: data.email && data.email.trim() !== '' ? data.email : undefined,
+          pec: data.pec && data.pec.trim() !== '' ? data.pec : undefined,
+          sdiCode: data.sdiCode && data.sdiCode.trim() !== '' ? data.sdiCode : undefined,
         };
         
         result = await createEntityAction(createData);
@@ -382,6 +394,55 @@ export function EntityForm({
             </FormItem>
           )}
         />
+
+        {/* PEC e Codice SDI */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* PEC */}
+          <FormField
+            control={form.control}
+            name="pec"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>PEC</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="email" 
+                    placeholder="pec@azienda.it" 
+                    {...field} 
+                    value={field.value ?? ''}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Posta Elettronica Certificata per fatturazione elettronica
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Codice SDI */}
+          <FormField
+            control={form.control}
+            name="sdiCode"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Codice SDI</FormLabel>
+                <FormControl>
+                  <Input 
+                    placeholder="XXXXXXX" 
+                    maxLength={7}
+                    {...field} 
+                    value={field.value ?? ''}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Codice Destinatario Sistema di Interscambio (7 caratteri)
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         {/* Pulsanti Azione */}
         <div className="flex justify-end space-x-4 pt-4">
