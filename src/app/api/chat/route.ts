@@ -29,7 +29,15 @@ const createLeadTool = tool({
     province: z.string().optional(),
     zipCode: z.string().optional(),
   }),
-  execute: async ({ businessName, email, phone, address, city, province, zipCode }) => {
+  execute: async ({ businessName, email, phone, address, city, province, zipCode }: {
+    businessName: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+    province?: string;
+    zipCode?: string;
+  }) => {
     try {
       // Validazione esplicita: businessName è obbligatorio
       if (!businessName || businessName.trim() === '') {
@@ -87,7 +95,13 @@ const createOpportunityTool = tool({
     email: z.string().email('Email non valida').optional(),
     phone: z.string().optional(),
   }),
-  execute: async ({ customerName, description, expectedValue, email, phone }) => {
+  execute: async ({ customerName, description, expectedValue, email, phone }: {
+    customerName: string;
+    description: string;
+    expectedValue?: number;
+    email?: string;
+    phone?: string;
+  }) => {
     try {
       // Validazione esplicita: customerName è obbligatorio
       if (!customerName || customerName.trim() === '') {
