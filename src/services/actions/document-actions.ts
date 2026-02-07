@@ -172,7 +172,6 @@ export async function getDocumentAction(
   grossTotal: string;
   notes: string | null;
   paymentTerms: string | null;
-  mainWarehouseId: string | null;
   createdAt: Date;
   updatedAt: Date;
   lines: Array<{
@@ -186,7 +185,6 @@ export async function getDocumentAction(
     netAmount: string;
     vatAmount: string;
     grossAmount: string;
-    warehouseId: string | null;
   }>;
 }>> {
   try {
@@ -229,7 +227,6 @@ export async function getDocumentAction(
         grossTotal: true,
         notes: true,
         paymentTerms: true,
-        mainWarehouseId: true,
         createdAt: true,
         updatedAt: true,
         organizationId: true, // Per verifica multitenant
@@ -248,7 +245,6 @@ export async function getDocumentAction(
             netAmount: true,
             vatAmount: true,
             grossAmount: true,
-            warehouseId: true,
           },
         },
       },
@@ -288,7 +284,6 @@ export async function getDocumentAction(
         grossTotal: document.grossTotal.toString(),
         notes: document.notes,
         paymentTerms: document.paymentTerms,
-        mainWarehouseId: document.mainWarehouseId,
         createdAt: document.createdAt,
         updatedAt: document.updatedAt,
         lines: document.lines.map((line) => ({
@@ -302,8 +297,6 @@ export async function getDocumentAction(
           netAmount: line.netAmount.toString(),
           vatAmount: line.vatAmount.toString(),
           grossAmount: line.grossAmount.toString(),
-          warehouseId: line.warehouseId,
-          warehouseId: line.warehouseId,
         })),
       },
     };
