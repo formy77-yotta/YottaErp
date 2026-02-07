@@ -172,8 +172,16 @@ export async function generateInvoiceXML(
     );
   }
 
-  // 8. Genera XML
-  return buildFatturaPAXML(document, codiceDestinatario || undefined);
+  // 8. ✅ Determina se destinatario è PA basandosi sul CodiceDestinatario
+  // - 6 cifre numeriche = PA (FPA12)
+  // - 7 caratteri = Privato (FPR12)
+  // - PEC = generalmente PA (FPA12)
+  const isPA = codiceDestinatario 
+    ? /^\d{6}$/.test(codiceDestinatario) // 6 cifre = PA
+    : true; // Se c'è solo PEC, assumiamo PA
+
+  // 9. Genera XML
+  return buildFatturaPAXML(document, codiceDestinatario || undefined, isPA);
 }
 
 /**
@@ -184,13 +192,16 @@ export async function generateInvoiceXML(
  */
 function buildFatturaPAXML(
   document: DocumentForXML,
-  codiceDestinatario?: string
+  codiceDestinatario?: string,
+  isPA: boolean = false
 ): string {
   // ✅ Namespace corretto secondo specifiche SdI e Technical Rules v2.6
   // Usiamo namespace di default (xmlns) e aggiungiamo xmlns="" ai nodi figli come richiesto
   // ✅ SistemaEmittente: attributo opzionale ma suggerito per fini statistici/pubblicitari
+  // ✅ Formato trasmissione: FPA12 = PA, FPR12 = Privati
+  const formatoTrasmissione = isPA ? 'FPA12' : 'FPR12';
   const rootAttrs: Record<string, string> = {
-    versione: 'FPA12',
+    versione: formatoTrasmissione,
     xmlns: 'http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2',
     'xmlns:ds': 'http://www.w3.org/2000/09/xmldsig#',
     'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',
@@ -239,16 +250,24 @@ function buildFatturaPAXML(
   // 4. CodiceDestinatario / PECDestinatario
   // 5. ContattiTrasmittente (opzionale)
 
-  // Formato trasmissione: FPA12 = FatturaPA 1.2
-  datiTrasmissione.ele('FormatoTrasmissione').txt('FPA12');
+  // Formato trasmissione: FPA12 = PA, FPR12 = Privati
+  datiTrasmissione.ele('FormatoTrasmissione').txt(formatoTrasmissione);
 
   // Codice Destinatario o PEC (DOPO FormatoTrasmissione)
   if (codiceDestinatario) {
-    // ✅ Per FPA12, CodiceDestinatario deve essere di 6 cifre (non 7)
-    const codiceDest = codiceDestinatario.length > 6 
-      ? codiceDestinatario.substring(0, 6) 
-      : codiceDestinatario.padStart(6, '0');
-    datiTrasmissione.ele('CodiceDestinatario').txt(codiceDest);
+    if (isPA) {
+      // ✅ Per FPA12 (PA), CodiceDestinatario deve essere di 6 cifre
+      const codiceDest = codiceDestinatario.length > 6 
+        ? codiceDestinatario.substring(0, 6) 
+        : codiceDestinatario.padStart(6, '0');
+      datiTrasmissione.ele('CodiceDestinatario').txt(codiceDest);
+    } else {
+      // ✅ Per FPR12 (Privati), CodiceDestinatario è di 7 caratteri
+      const codiceDest = codiceDestinatario.length > 7 
+        ? codiceDestinatario.substring(0, 7) 
+        : codiceDestinatario.padStart(7, '0');
+      datiTrasmissione.ele('CodiceDestinatario').txt(codiceDest);
+    }
   } else if (document.organization.pec) {
     // Se PEC, CodiceDestinatario deve essere "0000000" (7 caratteri per PEC)
     datiTrasmissione.ele('CodiceDestinatario').txt('0000000');
@@ -306,7 +325,7 @@ function buildFatturaPAXML(
   }
 
   // ✅ IscrizioneREA (opzionale ma obbligatorio per società iscritte al Registro Imprese - art. 2250 CC)
-  // Inseriamo il nodo se almeno uno dei campi REA è presente
+  // ✅ StatoLiquidazione è OBBLIGATORIO quando è presente IscrizioneREA
   if (document.organization.reaUfficio || document.organization.reaNumero) {
     const iscrizioneREA = cedente.ele('IscrizioneREA');
     
@@ -324,6 +343,11 @@ function buildFatturaPAXML(
         formatDecimal(document.organization.reaCapitaleSociale, 2)
       );
     }
+    
+    // ✅ StatoLiquidazione OBBLIGATORIO quando c'è IscrizioneREA (FeX Id: 141)
+    // Valori possibili: "LS" (In Liquidazione), "LN" (Non in Liquidazione)
+    // Default: "LN" (Non in Liquidazione)
+    iscrizioneREA.ele('StatoLiquidazione').txt('LN');
   }
 
   // ✅ Contatti Cedente (opzionale ma suggerito dalle Technical Rules)
@@ -416,8 +440,17 @@ function buildFatturaPAXML(
     datiGeneraliDocumento.ele('Causale').txt(document.notes);
   }
 
-  // ✅ DatiOrdineAcquisto (opzionale ma obbligatorio per fatture verso PA)
-  // Per fatture verso PA, è necessario CodiceCIG o CodiceCUP
+  // ✅ DatiOrdineAcquisto (obbligatorio per fatture verso PA - FeX Id: 192)
+  // Se il documento è verso PA, CodiceCIG o CodiceCUP devono essere presenti
+  if (isPA && (document.codiceCIG || document.codiceCUP)) {
+    const datiOrdineAcquisto = datiGenerali.ele('DatiOrdineAcquisto');
+    if (document.codiceCIG) {
+      datiOrdineAcquisto.ele('CodiceCIG').txt(document.codiceCIG);
+    }
+    if (document.codiceCUP) {
+      datiOrdineAcquisto.ele('CodiceCUP').txt(document.codiceCUP);
+    }
+  }
   // Inseriamo il nodo se almeno uno dei codici è presente
   if (document.codiceCIG || document.codiceCUP) {
     const datiOrdineAcquisto = datiGenerali.ele('DatiOrdineAcquisto');

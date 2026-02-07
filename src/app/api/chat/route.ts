@@ -18,26 +18,21 @@ import { createEntityAction } from '@/services/actions/entity-actions';
  * Tool: createLead
  * Crea un nuovo lead (entità di tipo LEAD)
  */
+const createLeadSchema = z.object({
+  businessName: z.string().min(2, 'Ragione sociale deve contenere almeno 2 caratteri').describe('Ragione sociale o nome del contatto (OBBLIGATORIO)'),
+  email: z.string().email('Email non valida').optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  province: z.string().optional(),
+  zipCode: z.string().optional(),
+});
+
 const createLeadTool = tool({
   description: 'Crea un nuovo lead (contatto potenziale). Usa questo quando l\'utente vuole salvare un nuovo contatto o lead. PARAMETRI OBBLIGATORI: businessName (ragione sociale o nome del contatto). PARAMETRI OPZIONALI: email, phone, address, city, province, zipCode.',
-  parameters: z.object({
-    businessName: z.string().min(2, 'Ragione sociale deve contenere almeno 2 caratteri').describe('Ragione sociale o nome del contatto (OBBLIGATORIO)'),
-    email: z.string().email('Email non valida').optional(),
-    phone: z.string().optional(),
-    address: z.string().optional(),
-    city: z.string().optional(),
-    province: z.string().optional(),
-    zipCode: z.string().optional(),
-  }),
-  execute: async ({ businessName, email, phone, address, city, province, zipCode }: {
-    businessName: string;
-    email?: string;
-    phone?: string;
-    address?: string;
-    city?: string;
-    province?: string;
-    zipCode?: string;
-  }) => {
+  parameters: createLeadSchema,
+  execute: async (params: z.infer<typeof createLeadSchema>) => {
+    const { businessName, email, phone, address, city, province, zipCode } = params;
     try {
       // Validazione esplicita: businessName è obbligatorio
       if (!businessName || businessName.trim() === '') {
@@ -86,22 +81,19 @@ const createLeadTool = tool({
  * NOTA: Per ora creiamo solo un'entità LEAD associata.
  * In futuro si potrà estendere con una Server Action dedicata per i documenti.
  */
+const createOpportunitySchema = z.object({
+  customerName: z.string().min(2, 'Nome cliente deve contenere almeno 2 caratteri').describe('Nome del cliente (OBBLIGATORIO)'),
+  description: z.string().min(5, 'Descrizione deve contenere almeno 5 caratteri'),
+  expectedValue: z.number().positive('Il valore atteso deve essere positivo').optional(),
+  email: z.string().email('Email non valida').optional(),
+  phone: z.string().optional(),
+});
+
 const createOpportunityTool = tool({
   description: 'Crea una nuova opportunità di vendita (preventivo/quote). Usa questo quando l\'utente vuole creare un preventivo o un\'opportunità commerciale. PARAMETRI OBBLIGATORI: customerName (nome del cliente), description (descrizione dell\'opportunità). PARAMETRI OPZIONALI: expectedValue (valore atteso in euro), email, phone.',
-  parameters: z.object({
-    customerName: z.string().min(2, 'Nome cliente deve contenere almeno 2 caratteri').describe('Nome del cliente (OBBLIGATORIO)'),
-    description: z.string().min(5, 'Descrizione deve contenere almeno 5 caratteri'),
-    expectedValue: z.number().positive('Il valore atteso deve essere positivo').optional(),
-    email: z.string().email('Email non valida').optional(),
-    phone: z.string().optional(),
-  }),
-  execute: async ({ customerName, description, expectedValue, email, phone }: {
-    customerName: string;
-    description: string;
-    expectedValue?: number;
-    email?: string;
-    phone?: string;
-  }) => {
+  parameters: createOpportunitySchema,
+  execute: async (params: z.infer<typeof createOpportunitySchema>) => {
+    const { customerName, description, expectedValue, email, phone } = params;
     try {
       // Validazione esplicita: customerName è obbligatorio
       if (!customerName || customerName.trim() === '') {
