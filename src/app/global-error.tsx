@@ -3,11 +3,12 @@
  * 
  * Gestisce errori globali che non possono essere catturati da error.tsx
  * Questo componente DEVE essere un client component e DEVE includere <html> e <body>
+ * 
+ * IMPORTANTE: Non può essere pre-renderizzato, quindi non usa React hooks
+ * che richiedono context durante il rendering iniziale.
  */
 
 'use client';
-
-import { useEffect } from 'react';
 
 interface GlobalErrorProps {
   error: Error & { digest?: string };
@@ -15,12 +16,8 @@ interface GlobalErrorProps {
 }
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
-  useEffect(() => {
-    // Log error to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Global error:', error);
-    }
-  }, [error]);
+  // Non usare useEffect o altri hooks che richiedono React context
+  // durante il rendering iniziale per evitare problemi di pre-rendering
 
   return (
     <html lang="it">
@@ -40,8 +37,16 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           <p style={{ marginBottom: '2rem', color: '#666' }}>
             Si è verificato un errore imprevisto. Riprova più tardi.
           </p>
+          {error?.digest && (
+            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: '#999' }}>
+              Error ID: {error.digest}
+            </p>
+          )}
           <button
-            onClick={reset}
+            onClick={() => {
+              // Reset error boundary
+              reset();
+            }}
             style={{
               padding: '0.75rem 1.5rem',
               backgroundColor: '#0070f3',
