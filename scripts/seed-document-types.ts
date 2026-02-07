@@ -30,7 +30,20 @@ async function main() {
     console.log(`✅ Organizzazione trovata: ${organization.businessName} (ID: ${organization.id})\n`);
 
     // 2. Configurazioni tipi documento standard
+    // 
+    // NOTA: Il campo 'category' (enum DocumentCategory) è presente solo nel Document,
+    // non in DocumentTypeConfig. Quando si crea un Document, mappare il code come segue:
+    // - PRO, ORD -> ORDER (per ordini cliente)
+    // - OF -> ORDER (per ordini fornitore)
+    // - DDT, CAF -> DELIVERY_NOTE
+    // - FAI, FAD, FAC -> INVOICE
+    // - NDC, NCF -> CREDIT_NOTE
+    // - PRO (preventivo) -> QUOTE
+    //
     const defaultTypes = [
+      // ============================================================================
+      // CICLO ATTIVO (VENDITA)
+      // ============================================================================
       {
         code: 'PRO',
         description: 'Preventivo',
@@ -40,16 +53,18 @@ async function main() {
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
         active: true,
+        // category: QUOTE (quando si crea Document)
       },
       {
         code: 'ORD',
-        description: 'Ordine',
+        description: 'Ordine Cliente',
         numeratorCode: 'ORD',
         inventoryMovement: false,
         valuationImpact: false,
         operationSignStock: null as number | null,
         operationSignValuation: null as number | null,
         active: true,
+        // category: ORDER (quando si crea Document)
       },
       {
         code: 'DDT',
@@ -60,6 +75,7 @@ async function main() {
         operationSignStock: -1, // Scarico magazzino
         operationSignValuation: null as number | null,
         active: true,
+        // category: DELIVERY_NOTE (quando si crea Document)
       },
       {
         code: 'FAI',
@@ -70,6 +86,7 @@ async function main() {
         operationSignStock: -1, // Scarico magazzino
         operationSignValuation: 1, // Incremento ricavi
         active: true,
+        // category: INVOICE (quando si crea Document)
       },
       {
         code: 'FAD',
@@ -80,6 +97,7 @@ async function main() {
         operationSignStock: null as number | null,
         operationSignValuation: 1, // Incremento ricavi
         active: true,
+        // category: INVOICE (quando si crea Document)
       },
       {
         code: 'NDC',
@@ -90,6 +108,55 @@ async function main() {
         operationSignStock: 1, // Carico magazzino (reso)
         operationSignValuation: -1, // Decremento ricavi
         active: true,
+        // category: CREDIT_NOTE (quando si crea Document)
+      },
+      
+      // ============================================================================
+      // CICLO PASSIVO (ACQUISTO)
+      // ============================================================================
+      {
+        code: 'OF',
+        description: 'Ordine Fornitore',
+        numeratorCode: 'OF',
+        inventoryMovement: false,
+        valuationImpact: false,
+        operationSignStock: null as number | null,
+        operationSignValuation: null as number | null,
+        active: true,
+        // category: ORDER (quando si crea Document)
+      },
+      {
+        code: 'CAF',
+        description: 'Carico Fornitore',
+        numeratorCode: 'CAF',
+        inventoryMovement: true,
+        valuationImpact: false,
+        operationSignStock: 1, // Carico magazzino
+        operationSignValuation: null as number | null,
+        active: true,
+        // category: DELIVERY_NOTE (quando si crea Document)
+      },
+      {
+        code: 'FAC',
+        description: 'Fattura Acquisto',
+        numeratorCode: 'FAC',
+        inventoryMovement: true,
+        valuationImpact: true,
+        operationSignStock: 1, // Carico magazzino (se non già fatto da CAF)
+        operationSignValuation: 1, // Incremento costi
+        active: true,
+        // category: INVOICE (quando si crea Document)
+      },
+      {
+        code: 'NCF',
+        description: 'Nota Credito Fornitore',
+        numeratorCode: 'FAC',
+        inventoryMovement: true,
+        valuationImpact: true,
+        operationSignStock: -1, // Scarico magazzino (reso)
+        operationSignValuation: -1, // Decremento costi
+        active: true,
+        // category: CREDIT_NOTE (quando si crea Document)
       },
     ];
 
@@ -98,50 +165,47 @@ async function main() {
     let updatedCount = 0;
 
     for (const type of defaultTypes) {
-      const existing = await prisma.documentTypeConfig.findUnique({
+      // Usa upsert per evitare duplicati
+      const result = await prisma.documentTypeConfig.upsert({
         where: {
           organizationId_code: {
             organizationId: organization.id,
             code: type.code,
           },
         },
+        update: {
+          // Se esiste già, aggiorna tutti i campi
+          description: type.description,
+          numeratorCode: type.numeratorCode,
+          inventoryMovement: type.inventoryMovement,
+          valuationImpact: type.valuationImpact,
+          operationSignStock: type.operationSignStock,
+          operationSignValuation: type.operationSignValuation,
+          active: type.active,
+        },
+        create: {
+          // Crea nuova configurazione
+          organizationId: organization.id,
+          code: type.code,
+          description: type.description,
+          numeratorCode: type.numeratorCode,
+          inventoryMovement: type.inventoryMovement,
+          valuationImpact: type.valuationImpact,
+          operationSignStock: type.operationSignStock,
+          operationSignValuation: type.operationSignValuation,
+          active: type.active,
+        },
       });
 
-      if (existing) {
-        // Aggiorna se esiste già
-        await prisma.documentTypeConfig.update({
-          where: {
-            id: existing.id,
-          },
-          data: {
-            description: type.description,
-            numeratorCode: type.numeratorCode,
-            inventoryMovement: type.inventoryMovement,
-            valuationImpact: type.valuationImpact,
-            operationSignStock: type.operationSignStock,
-            operationSignValuation: type.operationSignValuation,
-            active: type.active,
-          },
-        });
-        console.log(`🔄 Configurazione "${type.code}" - ${type.description} aggiornata`);
-        updatedCount++;
-      } else {
-        // Crea nuova configurazione
-        await prisma.documentTypeConfig.create({
-          data: {
-            organizationId: organization.id,
-            code: type.code,
-            description: type.description,
-            numeratorCode: type.numeratorCode,
-            inventoryMovement: type.inventoryMovement,
-            valuationImpact: type.valuationImpact,
-            operationSignStock: type.operationSignStock,
-            operationSignValuation: type.operationSignValuation,
-            active: type.active,
-          },
-        });
+      // Verifica se è stato creato o aggiornato controllando la data di creazione
+      const isNew = result.createdAt.getTime() === result.updatedAt.getTime();
+      
+      if (isNew) {
         console.log(`✅ Configurazione "${type.code}" - ${type.description} creata`);
         createdCount++;
+      } else {
+        console.log(`🔄 Configurazione "${type.code}" - ${type.description} aggiornata`);
+        updatedCount++;
       }
     }
 

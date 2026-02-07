@@ -19,6 +19,7 @@ import {
 import { CreateDocumentTypeDialog } from '@/components/features/CreateDocumentTypeDialog';
 import { EditDocumentTypeDialog } from '@/components/features/EditDocumentTypeDialog';
 import { DeleteDocumentTypeButton } from '@/components/features/DeleteDocumentTypeButton';
+import { SeedDefaultDocumentTypesButton } from '@/components/features/SeedDefaultDocumentTypesButton';
 import { Badge } from '@/components/ui/badge';
 import { FileText } from 'lucide-react';
 
@@ -37,6 +38,7 @@ export default function DocumentTypesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <SeedDefaultDocumentTypesButton />
           <CreateDocumentTypeDialog />
         </div>
       </div>
@@ -97,7 +99,8 @@ async function DocumentTypesTable() {
                 <TableHead>Numerazione</TableHead>
                 <TableHead>Movimenta Stock</TableHead>
                 <TableHead>Impatto Valutazione</TableHead>
-                <TableHead>Segno</TableHead>
+                <TableHead>Segno Magazzino</TableHead>
+                <TableHead>Segno Valorizzazione</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -213,7 +216,8 @@ function DocumentTypesTableSkeleton() {
                 <TableHead>Numerazione</TableHead>
                 <TableHead>Movimenta Stock</TableHead>
                 <TableHead>Impatto Valutazione</TableHead>
-                <TableHead>Segno</TableHead>
+                <TableHead>Segno Magazzino</TableHead>
+                <TableHead>Segno Valorizzazione</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -229,6 +233,9 @@ function DocumentTypesTableSkeleton() {
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-12 bg-muted animate-pulse rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-12 bg-muted animate-pulse rounded" />

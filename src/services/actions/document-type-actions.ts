@@ -447,7 +447,19 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
     }
 
     // 3. Configurazioni tipi documento standard
+    // 
+    // NOTA: Il campo 'category' (enum DocumentCategory) è presente solo nel Document,
+    // non in DocumentTypeConfig. Quando si crea un Document, mappare il code come segue:
+    // - PRO (preventivo) -> QUOTE
+    // - ORD, OF -> ORDER
+    // - DDT, CAF -> DELIVERY_NOTE
+    // - FAI, FAD, FAC -> INVOICE
+    // - NDC, NCF -> CREDIT_NOTE
+    //
     const defaultTypes = [
+      // ============================================================================
+      // CICLO ATTIVO (VENDITA)
+      // ============================================================================
       {
         code: 'PRO',
         description: 'Preventivo',
@@ -460,7 +472,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
       },
       {
         code: 'ORD',
-        description: 'Ordine',
+        description: 'Ordine Cliente',
         numeratorCode: 'ORD',
         inventoryMovement: false,
         valuationImpact: false,
@@ -508,10 +520,55 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         operationSignValuation: -1, // Decremento ricavi
         active: true,
       },
+      
+      // ============================================================================
+      // CICLO PASSIVO (ACQUISTO)
+      // ============================================================================
+      {
+        code: 'OF',
+        description: 'Ordine Fornitore',
+        numeratorCode: 'OF',
+        inventoryMovement: false,
+        valuationImpact: false,
+        operationSignStock: null as number | null,
+        operationSignValuation: null as number | null,
+        active: true,
+      },
+      {
+        code: 'CAF',
+        description: 'Carico Fornitore',
+        numeratorCode: 'CAF',
+        inventoryMovement: true,
+        valuationImpact: false,
+        operationSignStock: 1, // Carico magazzino
+        operationSignValuation: null as number | null,
+        active: true,
+      },
+      {
+        code: 'FAC',
+        description: 'Fattura Acquisto',
+        numeratorCode: 'FAC',
+        inventoryMovement: true,
+        valuationImpact: true,
+        operationSignStock: 1, // Carico magazzino (se non già fatto da CAF)
+        operationSignValuation: 1, // Incremento costi
+        active: true,
+      },
+      {
+        code: 'NCF',
+        description: 'Nota Credito Fornitore',
+        numeratorCode: 'FAC',
+        inventoryMovement: true,
+        valuationImpact: true,
+        operationSignStock: -1, // Scarico magazzino (reso)
+        operationSignValuation: -1, // Decremento costi
+        active: true,
+      },
     ];
 
     // 4. Crea tutte le configurazioni usando upsert per evitare duplicati
     let createdCount = 0;
+    let updatedCount = 0;
     
     for (const type of defaultTypes) {
       const result = await prisma.documentTypeConfig.upsert({
@@ -522,7 +579,7 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
           },
         },
         update: {
-          // Se esiste già, aggiorna solo se necessario
+          // Se esiste già, aggiorna tutti i campi
           description: type.description,
           numeratorCode: type.numeratorCode,
           inventoryMovement: type.inventoryMovement,
@@ -544,16 +601,29 @@ export async function seedDefaultDocumentTypesAction(): Promise<ActionResult<{ c
         },
       });
       
-      console.log(`✅ Configurazione tipo documento "${type.code}" - ${type.description} creata/aggiornata`);
-      createdCount++;
+      // Verifica se è stato creato o aggiornato controllando la data di creazione
+      const isNew = result.createdAt.getTime() === result.updatedAt.getTime();
+      
+      if (isNew) {
+        console.log(`✅ Configurazione tipo documento "${type.code}" - ${type.description} creata`);
+        createdCount++;
+      } else {
+        console.log(`🔄 Configurazione tipo documento "${type.code}" - ${type.description} aggiornata`);
+        updatedCount++;
+      }
     }
 
     // 5. Revalidazione cache
     revalidatePath('/settings/document-types');
 
+    console.log(`\n📊 Riepilogo:`);
+    console.log(`   - Configurazioni create: ${createdCount}`);
+    console.log(`   - Configurazioni aggiornate: ${updatedCount}`);
+    console.log(`   - Totale: ${defaultTypes.length}`);
+
     return {
       success: true,
-      data: { count: createdCount },
+      data: { count: createdCount + updatedCount },
     };
   } catch (error) {
     console.error('Errore caricamento configurazioni tipi documento standard:', error);
