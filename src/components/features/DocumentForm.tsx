@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -106,11 +106,20 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     name: string;
   }>>([]);
 
+  // Crea resolver dinamicamente basato su isEditing
+  // NOTA: useMemo assicura che il resolver venga ricreato quando isEditing cambia
+  const resolver = useMemo(() => {
+    const schema = isEditing ? updateDocumentSchema : createDocumentSchema;
+    console.log('Creating resolver with schema:', isEditing ? 'updateDocumentSchema' : 'createDocumentSchema'); // Debug
+    return zodResolver(schema);
+  }, [isEditing]);
+
   // Setup form con validazione Zod (usa schema appropriato)
   // NOTA: In modifica, usiamo UpdateDocumentInput che non ha documentTypeId e number
   const form = useForm<CreateDocumentInput | UpdateDocumentInput>({
-    resolver: zodResolver(isEditing ? updateDocumentSchema : createDocumentSchema) as any,
-    mode: 'onChange', // Valida durante la digitazione per mostrare errori prima
+    resolver: resolver as any,
+    mode: 'onBlur', // Valida quando si perde il focus per migliorare UX
+    shouldUnregister: true, // Rimuove campi non presenti nei valori quando vengono rimossi
     defaultValues: isEditing ? {
       // In modifica, solo campi presenti in UpdateDocumentInput
       entityId: '',
@@ -464,6 +473,20 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             console.error('Form validation errors:', errors); // Debug
             console.error('Form values:', form.getValues()); // Debug
             console.error('Form errors object keys:', Object.keys(errors)); // Debug
+            console.error('Form state errors:', form.formState.errors); // Debug
+            console.error('Is editing:', isEditing); // Debug
+            console.error('Current schema:', isEditing ? 'updateDocumentSchema' : 'createDocumentSchema'); // Debug
+            
+            // Se l'oggetto errori è vuoto ma formState.errors ha errori, usali
+            const formStateErrors = form.formState.errors;
+            if (Object.keys(errors).length === 0 && Object.keys(formStateErrors).length > 0) {
+              const firstErrorKey = Object.keys(formStateErrors)[0];
+              const firstError = formStateErrors[firstErrorKey as keyof typeof formStateErrors];
+              if (firstError && 'message' in firstError) {
+                setError(`Errore di validazione in ${firstErrorKey}: ${firstError.message}`);
+                return;
+              }
+            }
             
             // Mostra il primo errore trovato
             const errorKeys = Object.keys(errors);
@@ -479,7 +502,18 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               }
             } else {
               // Se l'oggetto errori è vuoto, potrebbe essere un problema con il resolver
-              setError('Errore di validazione. Verifica che tutti i campi obbligatori siano compilati correttamente.');
+              // Prova a validare manualmente per vedere se ci sono errori
+              form.trigger().then((isValid) => {
+                if (!isValid) {
+                  const stateErrors = form.formState.errors;
+                  const errorMessages = Object.entries(stateErrors)
+                    .map(([key, error]) => `${key}: ${error?.message || 'errore'}`)
+                    .join(', ');
+                  setError(`Errori di validazione: ${errorMessages || 'Errore sconosciuto'}`);
+                } else {
+                  setError('Errore di validazione. Verifica che tutti i campi obbligatori siano compilati correttamente.');
+                }
+              });
             }
           }
         )} 
