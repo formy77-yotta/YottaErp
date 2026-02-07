@@ -19,6 +19,7 @@ import 'server-only';
 
 import { cookies } from 'next/headers';
 import { prisma } from './prisma';
+import { UnauthorizedError, ForbiddenError } from './errors';
 
 /**
  * Ruoli utente in un'organizzazione
@@ -36,8 +37,8 @@ export interface AuthContext {
   role: UserRole;           // Ruolo utente in questa organizzazione
 }
 
-// Import error classes from separate file
-export { UnauthorizedError, ForbiddenError } from './errors';
+// Re-export error classes for convenience
+export { UnauthorizedError, ForbiddenError };
 
 /**
  * Ottiene il contesto di autenticazione corrente

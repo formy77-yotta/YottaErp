@@ -857,3 +857,207 @@ export async function deletePaymentConditionAction(
     };
   }
 }
+
+/**
+ * Carica tipi di pagamento standard SDI/SEPA per una nuova organizzazione
+ * 
+ * MULTITENANT: I tipi vengono associati all'organizzazione corrente
+ * 
+ * @returns Result con numero di tipi creati
+ */
+export async function seedDefaultPaymentTypesAction(): Promise<ActionResult<{ count: number }>> {
+  try {
+    // 1. ✅ Ottieni contesto autenticazione
+    const ctx = await getAuthContext();
+    
+    // 2. ✅ Verifica permessi scrittura
+    if (!canWrite(ctx)) {
+      return {
+        success: false,
+        error: 'Non hai i permessi per creare tipi di pagamento',
+      };
+    }
+
+    // 3. Verifica se esistono già tipi di pagamento per questa organizzazione
+    const existingCount = await prisma.paymentType.count({
+      where: {
+        organizationId: ctx.organizationId,
+      },
+    });
+
+    if (existingCount > 0) {
+      return {
+        success: false,
+        error: 'Tipi di pagamento già presenti per questa organizzazione',
+      };
+    }
+
+    // 4. Tipi di pagamento standard SDI/SEPA
+    const defaultPaymentTypes = [
+      {
+        name: 'Contanti',
+        sdiCode: 'MP01',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Assegno',
+        sdiCode: 'MP02',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Assegno Circolare',
+        sdiCode: 'MP03',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Contanti presso Tesoreria',
+        sdiCode: 'MP04',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Bonifico',
+        sdiCode: 'MP05',
+        sepaCode: 'TRF', // SEPA Credit Transfer
+        active: true,
+      },
+      {
+        name: 'Vaglia Cambiario',
+        sdiCode: 'MP06',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Bollettino Bancario',
+        sdiCode: 'MP07',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Carta di Pagamento',
+        sdiCode: 'MP08',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'RID',
+        sdiCode: 'MP09',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'RID Utenze',
+        sdiCode: 'MP10',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'RiBa',
+        sdiCode: 'MP12',
+        sepaCode: 'OXI', // SEPA Credit Transfer (RiBa)
+        active: true,
+      },
+      {
+        name: 'MAV',
+        sdiCode: 'MP13',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Giroconto su Conti di Contabilità Speciale',
+        sdiCode: 'MP15',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Domiciliazione Bancaria',
+        sdiCode: 'MP16',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Domiciliazione Postale',
+        sdiCode: 'MP17',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'Bollettino di C/C Postale',
+        sdiCode: 'MP18',
+        sepaCode: null,
+        active: true,
+      },
+      {
+        name: 'SEPA Direct Debit Core',
+        sdiCode: 'MP19',
+        sepaCode: 'DD', // SEPA Direct Debit Core
+        active: true,
+      },
+      {
+        name: 'SEPA Direct Debit B2B',
+        sdiCode: 'MP20',
+        sepaCode: 'DD', // SEPA Direct Debit B2B
+        active: true,
+      },
+      {
+        name: 'SEPA Direct Debit',
+        sdiCode: 'MP21',
+        sepaCode: 'DD', // SEPA Direct Debit
+        active: true,
+      },
+      {
+        name: 'PagoPA',
+        sdiCode: 'MP23',
+        sepaCode: null,
+        active: true,
+      },
+    ];
+
+    // 5. Crea tutti i tipi in transazione
+    await prisma.$transaction(
+      defaultPaymentTypes.map((type) =>
+        prisma.paymentType.create({
+          data: {
+            organizationId: ctx.organizationId,
+            name: type.name,
+            sdiCode: type.sdiCode,
+            sepaCode: type.sepaCode,
+            active: type.active,
+          },
+        })
+      )
+    );
+
+    // 6. Revalidazione cache
+    revalidatePath('/settings/payments');
+
+    return {
+      success: true,
+      data: { count: defaultPaymentTypes.length },
+    };
+  } catch (error) {
+    console.error('Errore caricamento tipi di pagamento standard:', error);
+
+    if (error instanceof ForbiddenError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    if (error instanceof Error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore sconosciuto durante il caricamento dei tipi di pagamento standard',
+    };
+  }
+}

@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CreatePaymentTypeDialog } from '@/components/features/CreatePaymentTypeDialog';
 import { CreatePaymentConditionDialog } from '@/components/features/CreatePaymentConditionDialog';
+import { SeedDefaultPaymentTypesButton } from '@/components/features/SeedDefaultPaymentTypesButton';
 import { PaymentTypesTable } from './PaymentTypesTable';
 import { PaymentConditionsTable } from './PaymentConditionsTable';
 
@@ -60,7 +61,10 @@ export function PaymentsTabs({ paymentTypes, paymentConditions }: PaymentsTabsPr
               Metodi di pagamento conformi SDI (MP01-MP23) e SEPA
             </p>
           </div>
-          <CreatePaymentTypeDialog />
+          <div className="flex items-center gap-2">
+            <SeedDefaultPaymentTypesButton />
+            <CreatePaymentTypeDialog />
+          </div>
         </div>
 
         <PaymentTypesTable paymentTypes={paymentTypes} />
