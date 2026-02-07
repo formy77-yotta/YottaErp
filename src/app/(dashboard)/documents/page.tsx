@@ -1,14 +1,13 @@
 /**
  * Pagina gestione Documenti
- * 
- * Mostra una tabella con tutti i documenti dell'organizzazione corrente.
- * MULTITENANT: Tutti i documenti sono filtrati per organizationId
+ *
+ * DataTable con ricerca e ordinamento server-side; parametri nell'URL
+ * (page, perPage, sort, q). MULTITENANT: documenti filtrati per organizationId.
  */
 
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { getDocumentsAction } from '@/services/actions/document-actions';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -18,23 +17,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { FileText, Plus } from 'lucide-react';
-import { formatCurrency } from '@/lib/decimal-utils';
-import { Decimal } from 'decimal.js';
-import { VatNumberDisplay } from '@/components/features/VatNumberDisplay';
-import { DownloadXMLIconButton } from '@/components/features/DownloadXMLIconButton';
+import { FileText, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { parseSearchParams } from '@/lib/validations/search-params';
+import { DocumentsDataTableHeader } from '@/components/features/documents/DocumentsDataTableHeader';
+import { DocumentsTableBody } from '@/components/features/documents/DocumentsTableBody';
 
-// Forza rendering dinamico perché usa cookies per autenticazione
 export const dynamic = 'force-dynamic';
 
-/**
- * Componente principale della pagina
- */
-export default function DocumentsPage() {
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const searchParamsRaw = await searchParams;
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Documenti</h1>
@@ -50,184 +47,176 @@ export default function DocumentsPage() {
         </Link>
       </div>
 
-      {/* Tabella Documenti */}
       <Suspense fallback={<DocumentsTableSkeleton />}>
-        <DocumentsTable />
+        <DocumentsTable searchParamsRaw={searchParamsRaw} />
       </Suspense>
     </div>
   );
 }
 
-/**
- * Tabella documenti con dati dal server
- */
-async function DocumentsTable() {
-  const result = await getDocumentsAction();
+async function DocumentsTable({
+  searchParamsRaw,
+}: {
+  searchParamsRaw: Record<string, string | string[] | undefined>;
+}) {
+  const result = await getDocumentsAction(undefined, searchParamsRaw);
 
   if (!result.success) {
     return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <p className="text-destructive">Errore: {result.error}</p>
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border p-8 text-center">
+        <p className="text-destructive">Errore: {result.error}</p>
+      </div>
     );
   }
 
-  const documents = result.data;
+  const { data: documents, count } = result.data;
+  const searchParams = parseSearchParams(searchParamsRaw);
+  const { page, perPage } = searchParams;
+  const totalPages = Math.max(1, Math.ceil(count / perPage));
+  const isEmpty = documents.length === 0;
 
-  if (documents.length === 0) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Nessun documento presente</p>
-          <p className="text-sm text-muted-foreground mt-2">
-            Crea il tuo primo documento utilizzando il pulsante "Nuovo Documento"
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const baseQuery = new URLSearchParams();
+  if (searchParams.q) baseQuery.set('q', searchParams.q);
+  if (searchParams.sort) baseQuery.set('sort', searchParams.sort);
+  baseQuery.set('perPage', String(perPage));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Documenti</CardTitle>
-        <CardDescription>
-          {documents.length} documento{documents.length !== 1 ? 'i' : ''} presente{documents.length !== 1 ? 'i' : ''}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Numero</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Cliente/Fornitore</TableHead>
-                <TableHead className="text-right">Imponibile</TableHead>
-                <TableHead className="text-right">IVA</TableHead>
-                <TableHead className="text-right">Totale</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
+    <div className="space-y-4">
+      <div className="rounded-lg border">
+        <Table>
+          <DocumentsDataTableHeader />
+          {isEmpty ? (
             <TableBody>
-              {documents.map((doc) => (
-                <TableRow key={doc.id}>
-                  <TableCell className="font-medium">{doc.number}</TableCell>
-                  <TableCell>
-                    {new Date(doc.date).toLocaleDateString('it-IT', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{doc.documentType.description}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {doc.entity ? (
-                      <div>
-                        <div className="font-medium">{doc.entity.businessName}</div>
-                        {doc.entity.vatNumber && (
-                          <VatNumberDisplay vatNumber={doc.entity.vatNumber} />
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(new Decimal(doc.netTotal))}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(new Decimal(doc.vatTotal))}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(new Decimal(doc.grossTotal))}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {(doc.category === 'INVOICE' || doc.category === 'CREDIT_NOTE') && (
-                        <DownloadXMLIconButton documentId={doc.id} />
-                      )}
-                      <Link href={`/documents/${doc.id}`}>
-                        <Button variant="ghost" size="sm">
-                          Dettagli
-                        </Button>
-                      </Link>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              <TableRow>
+                <TableCell colSpan={9} className="h-32 text-center">
+                  <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Nessun documento presente</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {searchParams.q
+                      ? 'Prova a modificare o cancellare la ricerca per vedere tutti i risultati.'
+                      : 'Crea il tuo primo documento utilizzando il pulsante "Nuovo Documento".'}
+                  </p>
+                </TableCell>
+              </TableRow>
             </TableBody>
-          </Table>
+          ) : (
+            <DocumentsTableBody documents={documents} />
+          )}
+        </Table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Pagina {page} di {totalPages} · {count} documenti in totale
+          </p>
+          <div className="flex gap-2">
+            <PaginationLink
+              disabled={page <= 1}
+              page={page - 1}
+              baseQuery={baseQuery}
+              label="Precedente"
+              icon={<ChevronLeft className="h-4 w-4" />}
+            />
+            <PaginationLink
+              disabled={page >= totalPages}
+              page={page + 1}
+              baseQuery={baseQuery}
+              label="Successiva"
+              icon={<ChevronRight className="h-4 w-4" />}
+            />
+          </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
-/**
- * Skeleton per caricamento tabella
- */
+function PaginationLink({
+  page,
+  baseQuery,
+  label,
+  icon,
+  disabled,
+}: {
+  page: number;
+  baseQuery: URLSearchParams;
+  label: string;
+  icon: React.ReactNode;
+  disabled: boolean;
+}) {
+  const q = new URLSearchParams(baseQuery);
+  q.set('page', String(page));
+  const href = `/documents?${q.toString()}`;
+  if (disabled) {
+    return (
+      <Button variant="outline" size="sm" disabled>
+        {icon}
+        <span className="ml-1">{label}</span>
+      </Button>
+    );
+  }
+  return (
+    <Button variant="outline" size="sm" asChild>
+      <Link href={href}>
+        {icon}
+        <span className="ml-1">{label}</span>
+      </Link>
+    </Button>
+  );
+}
+
 function DocumentsTableSkeleton() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Documenti</CardTitle>
-        <CardDescription>Caricamento...</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Numero</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Cliente/Fornitore</TableHead>
-                <TableHead className="text-right">Imponibile</TableHead>
-                <TableHead className="text-right">IVA</TableHead>
-                <TableHead className="text-right">Totale</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <div className="h-4 w-20 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-5 w-24 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell>
-                    <div className="h-4 w-32 bg-muted animate-pulse rounded" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="h-4 w-20 bg-muted animate-pulse rounded ml-auto" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="h-4 w-24 bg-muted animate-pulse rounded ml-auto" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="h-8 w-16 bg-muted animate-pulse rounded ml-auto" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Numero</TableHead>
+            <TableHead>Data</TableHead>
+            <TableHead>Tipo</TableHead>
+            <TableHead>Cliente/Fornitore</TableHead>
+            <TableHead className="text-right">Imponibile</TableHead>
+            <TableHead className="text-right">IVA</TableHead>
+            <TableHead className="text-right">Totale</TableHead>
+            <TableHead className="text-right" />
+            <TableHead className="text-right">Azioni</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <TableRow key={i}>
+              <TableCell>
+                <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-24 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-5 w-24 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-32 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="h-4 w-20 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="h-4 w-24 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="h-8 w-24 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="h-8 w-16 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

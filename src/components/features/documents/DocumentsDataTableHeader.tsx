@@ -1,5 +1,5 @@
 /**
- * Intestazione DataTable Entities: colonne ordinabili e ricerca con debounce.
+ * Intestazione DataTable Documenti: colonne ordinabili e ricerca con debounce.
  * Aggiorna l'URL (sort, q) tramite useSearchParams/usePathname/useRouter.
  */
 
@@ -20,14 +20,15 @@ import { cn } from '@/lib/utils';
 
 const DEBOUNCE_MS = 500;
 
-/** Colonne ordinabili: id header -> campo per sort */
+/** Colonne ordinabili: label -> campo per sort (backend) */
 const SORTABLE_COLUMNS: { label: string; field: string }[] = [
-  { label: 'Tipo', field: 'type' },
-  { label: 'Ragione Sociale', field: 'businessName' },
-  { label: 'P.IVA / CF', field: 'vatNumber' },
-  { label: 'Indirizzo', field: 'address' },
-  { label: 'Email', field: 'email' },
-  { label: 'Stato', field: 'active' },
+  { label: 'Numero', field: 'number' },
+  { label: 'Data', field: 'date' },
+  { label: 'Tipo', field: 'documentTypeDescription' },
+  { label: 'Cliente/Fornitore', field: 'customerNameSnapshot' },
+  { label: 'Imponibile', field: 'netTotal' },
+  { label: 'IVA', field: 'vatTotal' },
+  { label: 'Totale', field: 'grossTotal' },
 ];
 
 function parseSort(sortParam: string | null): { field: string; order: 'asc' | 'desc' } | null {
@@ -37,7 +38,7 @@ function parseSort(sortParam: string | null): { field: string; order: 'asc' | 'd
   return null;
 }
 
-export function EntitiesDataTableHeader() {
+export function DocumentsDataTableHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -48,14 +49,10 @@ export function EntitiesDataTableHeader() {
   const [searchInput, setSearchInput] = useState(qParam);
   const debouncedSearch = useDebounce(searchInput, DEBOUNCE_MS);
 
-  // Sincronizza input con URL solo quando l'URL è cambiato dall'esterno (es. pulsante indietro):
-  // input già uguale al valore debounced (abbiamo già pushato) ma diverso da qParam.
-  // Così non si sovrascrive nulla mentre l'utente sta digitando.
   useEffect(() => {
     if (qParam !== searchInput && searchInput === debouncedSearch) setSearchInput(qParam);
   }, [qParam, searchInput, debouncedSearch]);
 
-  // Aggiorna URL quando il valore debounced della ricerca cambia
   useEffect(() => {
     const next = debouncedSearch.trim() || undefined;
     const current = qParam.trim() || undefined;
@@ -92,7 +89,7 @@ export function EntitiesDataTableHeader() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="-ml-3 h-8 font-medium"
+                className={field === 'netTotal' || field === 'vatTotal' || field === 'grossTotal' ? '-ml-3 h-8 font-medium justify-end' : '-ml-3 h-8 font-medium'}
                 onClick={() => updateSort(field)}
               >
                 {label}
@@ -120,6 +117,7 @@ export function EntitiesDataTableHeader() {
             />
           </div>
         </TableHead>
+        <TableHead className="text-right w-[120px]">Azioni</TableHead>
       </TableRow>
     </TableHeader>
   );

@@ -10,6 +10,11 @@ import { processDocumentLineStock } from '@/services/business/stock-service';
 import { generateInvoiceXML, InvoiceXMLError } from '@/services/business/invoice-xml-service';
 import { calculateDeadlines } from '@/lib/utils/payment-calculator';
 import type { Prisma } from '@prisma/client';
+import {
+  parseSearchParams,
+  parseSortParam,
+  type SearchParams,
+} from '@/lib/validations/search-params';
 
 /**
  * Tipo risultato standard per Server Actions
@@ -19,9 +24,9 @@ type ActionResult<T> =
   | { success: false; error: string };
 
 /**
- * Tipo output documento con relazioni
+ * Tipo output documento con relazioni (lista)
  */
-type DocumentOutput = {
+export type DocumentRow = {
   id: string;
   number: string;
   date: Date;
@@ -42,65 +47,113 @@ type DocumentOutput = {
   createdAt: Date;
 };
 
+/** Campi ordinabili per Document (whitelist). documentTypeDescription ordina per documentType.description */
+const DOCUMENT_SORT_FIELDS = [
+  'number',
+  'date',
+  'category',
+  'documentTypeDescription',
+  'customerNameSnapshot',
+  'netTotal',
+  'vatTotal',
+  'grossTotal',
+  'createdAt',
+] as const;
+
 /**
- * Ottiene tutti i documenti dell'organizzazione corrente
- * 
- * MULTITENANT: Filtra automaticamente per organizationId
- * 
- * @param filters - Filtri opzionali (tipo documento, entità, data)
- * @returns Array di documenti con relazioni
+ * Ottiene i documenti dell'organizzazione con ricerca, ordinamento e paginazione server-side.
+ *
+ * MULTITENANT: Filtra automaticamente per organizationId.
+ *
+ * @param filters - Filtri opzionali (tipo documento, entità, date)
+ * @param searchParamsRaw - Parametri URL (page, perPage, sort, q) da validare
+ * @returns { data, count } per la DataTable
  */
-export async function getDocumentsAction(filters?: {
-  documentTypeId?: string;
-  entityId?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
-}): Promise<ActionResult<DocumentOutput[]>> {
+export async function getDocumentsAction(
+  filters?: {
+    documentTypeId?: string;
+    entityId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  },
+  searchParamsRaw?: Record<string, string | string[] | undefined>
+): Promise<ActionResult<{ data: DocumentRow[]; count: number }>> {
   try {
-    // 1. ✅ Ottieni contesto autenticazione
     const ctx = await getAuthContext();
 
-    // 2. Costruisci filtro Prisma
-    const where: Prisma.DocumentWhereInput = {
+    const searchParams: SearchParams = searchParamsRaw
+      ? parseSearchParams(searchParamsRaw)
+      : { page: 1, perPage: 10, sort: undefined, q: undefined };
+
+    const { page, perPage, sort: sortParam, q } = searchParams;
+    const skip = (page - 1) * perPage;
+
+    const baseWhere: Prisma.DocumentWhereInput = {
       organizationId: ctx.organizationId,
       ...(filters?.documentTypeId && { documentTypeId: filters.documentTypeId }),
       ...(filters?.entityId && { entityId: filters.entityId }),
-      ...(filters?.dateFrom || filters?.dateTo) && {
-        date: {
-          ...(filters.dateFrom && { gte: filters.dateFrom }),
-          ...(filters.dateTo && { lte: filters.dateTo }),
-        },
-      },
+      ...(filters?.dateFrom || filters?.dateTo
+        ? {
+            date: {
+              ...(filters.dateFrom && { gte: filters.dateFrom }),
+              ...(filters.dateTo && { lte: filters.dateTo }),
+            },
+          }
+        : {}),
     };
 
-    // 3. Recupera documenti con relazioni
-    const documents = await prisma.document.findMany({
-      where,
-      orderBy: [
-        { date: 'desc' }, // Più recenti prima
-        { number: 'desc' },
-      ],
-      include: {
-        documentType: {
-          select: {
-            id: true,
-            code: true,
-            description: true,
-          },
-        },
-        entity: {
-          select: {
-            id: true,
-            businessName: true,
-            vatNumber: true,
-          },
-        },
-      },
-      take: 1000, // Limite ragionevole per performance
-    });
+    // Ricerca testuale: number, customerNameSnapshot, customerVatSnapshot (case insensitive)
+    const searchFilter =
+      q && q.length > 0
+        ? {
+            OR: [
+              { number: { contains: q, mode: 'insensitive' as const } },
+              { customerNameSnapshot: { contains: q, mode: 'insensitive' as const } },
+              { customerVatSnapshot: { contains: q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {};
 
-    // 4. Converti Decimal a stringa per serializzazione
-    const documentsOutput: DocumentOutput[] = documents.map((doc) => ({
+    const where = { ...baseWhere, ...searchFilter };
+
+    // Ordinamento dinamico (documentTypeDescription -> documentType.description)
+    const parsedSort = parseSortParam(sortParam);
+    let orderBy: Prisma.DocumentOrderByWithRelationInput = { date: 'desc', number: 'desc' };
+    if (parsedSort && DOCUMENT_SORT_FIELDS.includes(parsedSort.field as (typeof DOCUMENT_SORT_FIELDS)[number])) {
+      if (parsedSort.field === 'documentTypeDescription') {
+        orderBy = { documentType: { description: parsedSort.order } };
+      } else {
+        orderBy = { [parsedSort.field]: parsedSort.order };
+      }
+    }
+
+    const [documents, count] = await Promise.all([
+      prisma.document.findMany({
+        where,
+        orderBy,
+        skip,
+        take: perPage,
+        include: {
+          documentType: {
+            select: {
+              id: true,
+              code: true,
+              description: true,
+            },
+          },
+          entity: {
+            select: {
+              id: true,
+              businessName: true,
+              vatNumber: true,
+            },
+          },
+        },
+      }),
+      prisma.document.count({ where }),
+    ]);
+
+    const documentsOutput: DocumentRow[] = documents.map((doc) => ({
       id: doc.id,
       number: doc.number,
       date: doc.date,
@@ -115,18 +168,13 @@ export async function getDocumentsAction(filters?: {
 
     return {
       success: true,
-      data: documentsOutput,
+      data: { data: documentsOutput, count },
     };
   } catch (error) {
     console.error('Errore recupero documenti:', error);
-
     if (error instanceof ForbiddenError) {
-      return {
-        success: false,
-        error: error.message,
-      };
+      return { success: false, error: error.message };
     }
-
     return {
       success: false,
       error: 'Errore durante il recupero dei documenti',
