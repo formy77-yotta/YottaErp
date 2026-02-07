@@ -374,10 +374,28 @@ export async function createEntityAction(
       };
     }
 
-    // 3. Validazione con Zod
+    // 3. ✅ SECURITY: Verifica che l'organizationId passato (se presente) appartenga all'utente
+    // Nota: In createEntityAction, l'organizationId viene preso dal contesto, non dall'input
+    // Questo garantisce che l'utente possa creare entità solo nella propria organizzazione
+    // Verifica esplicita che l'utente appartenga all'organizzazione corrente
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+      },
+    });
+
+    if (!userOrg) {
+      return {
+        success: false,
+        error: 'Accesso negato: organizzazione non valida',
+      };
+    }
+
+    // 4. Validazione con Zod
     const validatedData = createEntitySchema.parse(input);
 
-    // 4. Verifica unicità P.IVA per organizzazione (se presente)
+    // 5. Verifica unicità P.IVA per organizzazione (se presente)
     if (validatedData.vatNumber && validatedData.vatNumber.trim() !== '') {
       const existingEntity = await prisma.entity.findFirst({
         where: {
@@ -394,7 +412,7 @@ export async function createEntityAction(
       }
     }
 
-    // 5. ✅ Creazione entità con organizationId
+    // 6. ✅ Creazione entità con organizationId
     // Gestione campi opzionali: converti stringhe vuote in null
     const entity = await prisma.entity.create({
       data: {
@@ -434,7 +452,7 @@ export async function createEntityAction(
       },
     });
 
-    // 6. Revalidazione cache Next.js
+    // 7. Revalidazione cache Next.js
     revalidatePath('/entities');
 
     return {
@@ -497,10 +515,25 @@ export async function updateEntityAction(
       };
     }
 
-    // 3. Validazione con Zod
+    // 3. ✅ SECURITY: Verifica che l'utente appartenga all'organizzazione corrente
+    const userOrg = await prisma.userOrganization.findFirst({
+      where: {
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+      },
+    });
+
+    if (!userOrg) {
+      return {
+        success: false,
+        error: 'Accesso negato: organizzazione non valida',
+      };
+    }
+
+    // 4. Validazione con Zod
     const validatedData = updateEntitySchema.parse(input);
 
-    // 4. ✅ Verifica esistenza E appartenenza all'organizzazione
+    // 5. ✅ Verifica esistenza E appartenenza all'organizzazione
     const existingEntity = await prisma.entity.findUnique({
       where: { id: validatedData.id },
       select: { id: true, organizationId: true, vatNumber: true },
@@ -516,7 +549,7 @@ export async function updateEntityAction(
     // ✅ Verifica che appartenga all'organizzazione corrente
     verifyOrganizationAccess(ctx, existingEntity);
 
-    // 5. Verifica unicità P.IVA se è stata modificata
+    // 6. Verifica unicità P.IVA se è stata modificata
     if (validatedData.vatNumber && validatedData.vatNumber.trim() !== '') {
       if (existingEntity.vatNumber !== validatedData.vatNumber) {
         const duplicateEntity = await prisma.entity.findFirst({
@@ -535,7 +568,7 @@ export async function updateEntityAction(
       }
     }
 
-    // 6. Aggiornamento entità
+    // 7. Aggiornamento entità
     // Gestione campi opzionali: converti stringhe vuote in null
     const updatedEntity = await prisma.entity.update({
       where: { id: validatedData.id },
