@@ -123,6 +123,38 @@ export const organizationSchema = z
     // Logo (URL opzionale)
     logoUrl: z.string().url('URL logo non valido').optional().or(z.literal('')),
 
+    // ✅ Iscrizione REA (Registro Imprese) - Obbligatorio per società iscritte (art. 2250 CC)
+    reaUfficio: z
+      .union([
+        z.string().length(2, 'Ufficio REA deve essere di 2 caratteri (es. RM)').regex(/^[A-Z]{2}$/, 'Ufficio REA deve contenere solo lettere maiuscole'),
+        z.literal('')
+      ])
+      .nullish(),
+    reaNumero: z
+      .union([
+        z.string().min(1, 'Numero REA obbligatorio').max(20, 'Numero REA troppo lungo'),
+        z.literal('')
+      ])
+      .nullish(),
+    reaCapitaleSociale: z
+      .union([
+        z.string().regex(/^\d+(\.\d{1,2})?$/, 'Capitale sociale deve essere un numero (es. 10000 o 10000.00)'),
+        z.literal('')
+      ])
+      .nullish()
+      .transform((val) => {
+        if (!val || val === '') return null;
+        return val;
+      }),
+
+    // ✅ Regime Fiscale (obbligatorio per fatturazione elettronica)
+    // Valori: RF01=Ordinario, RF02=Contribuenti minimi, RF04=Agricoltura, etc.
+    regimeFiscale: z
+      .enum(['RF01', 'RF02', 'RF04', 'RF05', 'RF06', 'RF07', 'RF08', 'RF09', 'RF10', 'RF11', 'RF12', 'RF13', 'RF14', 'RF15', 'RF16', 'RF17', 'RF18', 'RF19'], {
+        errorMap: () => ({ message: 'Regime fiscale non valido' }),
+      })
+      .default('RF01'),
+
     // Subscription e limiti
     plan: organizationPlanSchema.default('FREE'),
     maxUsers: z.number().int().min(1, 'Minimo 1 utente').max(1000).default(5),
@@ -199,6 +231,10 @@ export const updateOrganizationSchema = z.object({
   phone: z.string().max(50).optional().or(z.literal('')),
   sdiCode: z.string().regex(/^[A-Z0-9]{7}$/).optional().or(z.literal('')),
   logoUrl: z.string().url().optional().or(z.literal('')),
+  reaUfficio: z.string().length(2).regex(/^[A-Z]{2}$/).optional().or(z.literal('')),
+  reaNumero: z.string().min(1).max(20).optional().or(z.literal('')),
+  reaCapitaleSociale: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  regimeFiscale: z.enum(['RF01', 'RF02', 'RF04', 'RF05', 'RF06', 'RF07', 'RF08', 'RF09', 'RF10', 'RF11', 'RF12', 'RF13', 'RF14', 'RF15', 'RF16', 'RF17', 'RF18', 'RF19']).optional(),
   plan: organizationPlanSchema.optional(),
   maxUsers: z.number().int().min(1).max(1000).optional(),
   maxInvoicesPerYear: z.number().int().min(1).max(1000000).optional(),

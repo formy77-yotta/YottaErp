@@ -77,6 +77,18 @@ export const createDocumentSchema = z.object({
   // Note e termini pagamento (opzionali)
   notes: z.string().optional(),
   paymentTerms: z.string().optional(),
+
+  // ✅ Codici per fatture verso PA (opzionali ma obbligatori per FatturaPA)
+  codiceCIG: z
+    .string()
+    .regex(/^[A-Z0-9]{15}$/, 'Codice CIG deve contenere esattamente 15 caratteri alfanumerici')
+    .optional()
+    .or(z.literal('')),
+  codiceCUP: z
+    .string()
+    .regex(/^[A-Z0-9]{15}$/, 'Codice CUP deve contenere esattamente 15 caratteri alfanumerici')
+    .optional()
+    .or(z.literal('')),
 });
 
 export type CreateDocumentInput = z.infer<typeof createDocumentSchema>;
@@ -120,6 +132,18 @@ export const updateDocumentSchema = z.object({
   // Note e termini pagamento (modificabili)
   notes: z.string().optional(),
   paymentTerms: z.string().optional(),
+
+  // ✅ Codici per fatture verso PA (modificabili)
+  codiceCIG: z
+    .string()
+    .regex(/^[A-Z0-9]{15}$/, 'Codice CIG deve contenere esattamente 15 caratteri alfanumerici')
+    .optional()
+    .or(z.literal('')),
+  codiceCUP: z
+    .string()
+    .regex(/^[A-Z0-9]{15}$/, 'Codice CUP deve contenere esattamente 15 caratteri alfanumerici')
+    .optional()
+    .or(z.literal('')),
 });
 
 export type UpdateDocumentInput = z.infer<typeof updateDocumentSchema>;

@@ -45,6 +45,11 @@ const navItems: NavItem[] = [
     icon: Users,
     children: [
       {
+        title: 'Organizzazione',
+        href: '/settings/organization',
+        icon: Users,
+      },
+      {
         title: 'Lead',
         href: '/entities?type=LEAD',
         icon: Users,

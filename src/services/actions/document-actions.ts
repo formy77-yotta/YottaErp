@@ -551,6 +551,12 @@ export async function updateDocumentAction(
             ...(validatedData.paymentTerms !== undefined && {
               paymentTerms: validatedData.paymentTerms || null,
             }),
+            ...(validatedData.codiceCIG !== undefined && {
+              codiceCIG: validatedData.codiceCIG || null,
+            }),
+            ...(validatedData.codiceCUP !== undefined && {
+              codiceCUP: validatedData.codiceCUP || null,
+            }),
             netTotal: netTotal.toDecimalPlaces(2),
             vatTotal: vatTotal.toDecimalPlaces(2),
             grossTotal: grossTotal.toDecimalPlaces(2),
@@ -575,6 +581,12 @@ export async function updateDocumentAction(
             }),
             ...(validatedData.paymentTerms !== undefined && {
               paymentTerms: validatedData.paymentTerms || null,
+            }),
+            ...(validatedData.codiceCIG !== undefined && {
+              codiceCIG: validatedData.codiceCIG || null,
+            }),
+            ...(validatedData.codiceCUP !== undefined && {
+              codiceCUP: validatedData.codiceCUP || null,
             }),
           },
         });
@@ -1065,6 +1077,9 @@ export async function createDocumentAction(
           grossTotal: grossTotal.toDecimalPlaces(2),
           notes: validatedData.notes || null,
           paymentTerms: validatedData.paymentTerms || null,
+          // ✅ Codici per fatture verso PA
+          codiceCIG: validatedData.codiceCIG || null,
+          codiceCUP: validatedData.codiceCUP || null,
         },
       });
 

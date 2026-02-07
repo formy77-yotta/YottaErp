@@ -828,6 +828,211 @@ export async function toggleOrganizationStatus(id: string, active: boolean) {
 }
 
 /**
+ * Ottiene i dati dell'organizzazione corrente
+ * 
+ * MULTITENANT: Restituisce solo l'organizzazione dell'utente autenticato
+ * PERMESSI: Qualsiasi utente membro dell'organizzazione
+ * 
+ * @returns Dati organizzazione corrente
+ */
+export async function getCurrentOrganizationAction() {
+  try {
+    const ctx = await getAuthContext();
+
+    const organization = await prisma.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: {
+        id: true,
+        businessName: true,
+        vatNumber: true,
+        fiscalCode: true,
+        address: true,
+        city: true,
+        province: true,
+        zipCode: true,
+        country: true,
+        email: true,
+        pec: true,
+        phone: true,
+        sdiCode: true,
+        logoUrl: true,
+        reaUfficio: true,
+        reaNumero: true,
+        reaCapitaleSociale: true,
+        regimeFiscale: true,
+        plan: true,
+        maxUsers: true,
+        maxInvoicesPerYear: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!organization) {
+      return {
+        success: false,
+        error: 'Organizzazione non trovata',
+      };
+    }
+
+    return {
+      success: true,
+      organization: {
+        ...organization,
+        reaCapitaleSociale: organization.reaCapitaleSociale?.toString() || null,
+      },
+    };
+  } catch (error) {
+    console.error('Errore recupero organizzazione corrente:', error);
+
+    if (error instanceof ForbiddenError || error instanceof UnauthorizedError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante il recupero dell\'organizzazione',
+    };
+  }
+}
+
+/**
+ * Aggiorna i dati dell'organizzazione corrente
+ * 
+ * MULTITENANT: Aggiorna solo l'organizzazione dell'utente autenticato
+ * PERMESSI: Solo OWNER e ADMIN possono modificare
+ * 
+ * @param input - Dati organizzazione da aggiornare
+ * @returns Organizzazione aggiornata
+ */
+export async function updateCurrentOrganizationAction(
+  input: {
+    businessName?: string;
+    vatNumber?: string | null;
+    fiscalCode?: string | null;
+    address?: string | null;
+    city?: string | null;
+    province?: string | null;
+    zipCode?: string | null;
+    country?: string;
+    email?: string | null;
+    pec?: string | null;
+    phone?: string | null;
+    sdiCode?: string | null;
+    logoUrl?: string | null;
+    reaUfficio?: string | null;
+    reaNumero?: string | null;
+    reaCapitaleSociale?: string | null;
+    regimeFiscale?: string;
+  }
+) {
+  try {
+    const ctx = await getAuthContext();
+
+    // Solo OWNER e ADMIN possono modificare
+    requireRole(ctx, ['OWNER', 'ADMIN']);
+
+    // Prepara dati per update (converte stringhe in Decimal dove necessario)
+    const updateData: {
+      businessName?: string;
+      vatNumber?: string | null;
+      fiscalCode?: string | null;
+      address?: string | null;
+      city?: string | null;
+      province?: string | null;
+      zipCode?: string | null;
+      country?: string;
+      email?: string | null;
+      pec?: string | null;
+      phone?: string | null;
+      sdiCode?: string | null;
+      logoUrl?: string | null;
+      reaUfficio?: string | null;
+      reaNumero?: string | null;
+      reaCapitaleSociale?: any;
+      regimeFiscale?: string;
+    } = {};
+
+    if (input.businessName !== undefined) updateData.businessName = input.businessName;
+    if (input.vatNumber !== undefined) updateData.vatNumber = input.vatNumber || null;
+    if (input.fiscalCode !== undefined) updateData.fiscalCode = input.fiscalCode || null;
+    if (input.address !== undefined) updateData.address = input.address || null;
+    if (input.city !== undefined) updateData.city = input.city || null;
+    if (input.province !== undefined) updateData.province = input.province || null;
+    if (input.zipCode !== undefined) updateData.zipCode = input.zipCode || null;
+    if (input.country !== undefined) updateData.country = input.country;
+    if (input.email !== undefined) updateData.email = input.email || null;
+    if (input.pec !== undefined) updateData.pec = input.pec || null;
+    if (input.phone !== undefined) updateData.phone = input.phone || null;
+    if (input.sdiCode !== undefined) updateData.sdiCode = input.sdiCode || null;
+    if (input.logoUrl !== undefined) updateData.logoUrl = input.logoUrl || null;
+    if (input.reaUfficio !== undefined) updateData.reaUfficio = input.reaUfficio || null;
+    if (input.reaNumero !== undefined) updateData.reaNumero = input.reaNumero || null;
+    if (input.reaCapitaleSociale !== undefined) {
+      updateData.reaCapitaleSociale = input.reaCapitaleSociale
+        ? new (await import('decimal.js')).Decimal(input.reaCapitaleSociale)
+        : null;
+    }
+    if (input.regimeFiscale !== undefined) updateData.regimeFiscale = input.regimeFiscale;
+
+    const updated = await prisma.organization.update({
+      where: { id: ctx.organizationId },
+      data: updateData,
+      select: {
+        id: true,
+        businessName: true,
+        vatNumber: true,
+        fiscalCode: true,
+        address: true,
+        city: true,
+        province: true,
+        zipCode: true,
+        country: true,
+        email: true,
+        pec: true,
+        phone: true,
+        sdiCode: true,
+        logoUrl: true,
+        reaUfficio: true,
+        reaNumero: true,
+        reaCapitaleSociale: true,
+        regimeFiscale: true,
+        updatedAt: true,
+      },
+    });
+
+    revalidatePath('/settings/organization');
+    revalidatePath('/', 'layout'); // Invalida anche layout per aggiornare logo
+
+    return {
+      success: true,
+      organization: {
+        ...updated,
+        reaCapitaleSociale: updated.reaCapitaleSociale?.toString() || null,
+      },
+    };
+  } catch (error) {
+    console.error('Errore aggiornamento organizzazione:', error);
+
+    if (error instanceof ForbiddenError || error instanceof UnauthorizedError) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: false,
+      error: 'Errore durante l\'aggiornamento dell\'organizzazione',
+    };
+  }
+}
+
+/**
  * Elimina un'organizzazione (Super Admin)
  * 
  * PERMESSI: Solo Super Admin

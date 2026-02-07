@@ -18,7 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Activity, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
+import { Activity, ArrowUp, ArrowDown } from 'lucide-react';
 import { Decimal } from 'decimal.js';
 import type { MovementType } from '@prisma/client';
 

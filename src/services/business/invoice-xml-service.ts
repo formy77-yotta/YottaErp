@@ -282,9 +282,7 @@ function buildFatturaPAXML(
   // ✅ RegimeFiscale obbligatorio
   // Valori possibili secondo Technical Rules v2.6 (Appendix 5.5):
   // RF01 = Ordinario, RF02 = Contribuenti minimi, RF04 = Agricoltura, etc.
-  // Per ora usiamo RF01 (Ordinario) come default
-  // TODO: Aggiungere campo regimeFiscale al modello Organization
-  const regimeFiscale = 'RF01'; // Default: Ordinario
+  const regimeFiscale = document.organization.regimeFiscale || 'RF01'; // Default: Ordinario
   datiAnagraficiCedente.ele('RegimeFiscale').txt(regimeFiscale);
 
   // Sede Cedente
@@ -308,13 +306,25 @@ function buildFatturaPAXML(
   }
 
   // ✅ IscrizioneREA (opzionale ma obbligatorio per società iscritte al Registro Imprese - art. 2250 CC)
-  // TODO: Aggiungere campi reaUfficio, reaNumero, reaCapitaleSociale al modello Organization
-  // Per ora non inseriamo il nodo se i dati non sono disponibili
-  // Esempio struttura quando disponibile:
-  // const iscrizioneREA = cedente.ele('IscrizioneREA');
-  // iscrizioneREA.ele('Ufficio').txt(reaUfficio); // Es. "RM"
-  // iscrizioneREA.ele('NumeroREA').txt(reaNumero); // Es. "123456"
-  // iscrizioneREA.ele('CapitaleSociale').txt(formatDecimal(reaCapitaleSociale, 2)); // Es. "10000.00"
+  // Inseriamo il nodo se almeno uno dei campi REA è presente
+  if (document.organization.reaUfficio || document.organization.reaNumero) {
+    const iscrizioneREA = cedente.ele('IscrizioneREA');
+    
+    if (document.organization.reaUfficio) {
+      iscrizioneREA.ele('Ufficio').txt(document.organization.reaUfficio);
+    }
+    
+    if (document.organization.reaNumero) {
+      iscrizioneREA.ele('NumeroREA').txt(document.organization.reaNumero);
+    }
+    
+    // CapitaleSociale obbligatorio per società di capitali
+    if (document.organization.reaCapitaleSociale) {
+      iscrizioneREA.ele('CapitaleSociale').txt(
+        formatDecimal(document.organization.reaCapitaleSociale, 2)
+      );
+    }
+  }
 
   // ✅ Contatti Cedente (opzionale ma suggerito dalle Technical Rules)
   // ✅ Ordine corretto secondo schema XSD: Telefono PRIMA di Email
@@ -408,15 +418,18 @@ function buildFatturaPAXML(
 
   // ✅ DatiOrdineAcquisto (opzionale ma obbligatorio per fatture verso PA)
   // Per fatture verso PA, è necessario CodiceCIG o CodiceCUP
-  // TODO: Aggiungere campi codiceCIG e codiceCUP al modello Document
-  // Per ora non inseriamo il nodo se i dati non sono disponibili
-  // Esempio struttura quando disponibile:
-  // const datiOrdineAcquisto = datiGenerali.ele('DatiOrdineAcquisto');
-  // if (codiceCIG) {
-  //   datiOrdineAcquisto.ele('CodiceCIG').txt(codiceCIG);
-  // } else if (codiceCUP) {
-  //   datiOrdineAcquisto.ele('CodiceCUP').txt(codiceCUP);
-  // }
+  // Inseriamo il nodo se almeno uno dei codici è presente
+  if (document.codiceCIG || document.codiceCUP) {
+    const datiOrdineAcquisto = datiGenerali.ele('DatiOrdineAcquisto');
+    
+    if (document.codiceCIG) {
+      datiOrdineAcquisto.ele('CodiceCIG').txt(document.codiceCIG);
+    }
+    
+    if (document.codiceCUP) {
+      datiOrdineAcquisto.ele('CodiceCUP').txt(document.codiceCUP);
+    }
+  }
 
   // DatiBeniServizi
   const datiBeniServizi = body.ele('DatiBeniServizi');
