@@ -22,6 +22,7 @@ import {
   Ruler,
   Activity,
   CreditCard,
+  CalendarClock,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -71,6 +72,11 @@ const navItems: NavItem[] = [
     title: 'Documenti',
     href: '/documents',
     icon: FileText,
+  },
+  {
+    title: 'Scadenze',
+    href: '/scadenze',
+    icon: CalendarClock,
   },
   {
     title: 'Magazzino',

@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { updateCurrentOrganizationAction } from '@/services/actions/organization-actions';
+import { updateCurrentOrganizationAction, uploadOrganizationLogoAction } from '@/services/actions/organization-actions';
 import { updateOrganizationSchema, type UpdateOrganizationInput } from '@/schemas/organization-schema';
 
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Building2, FileText, Mail, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Building2, FileText, Mail, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface OrganizationProfileFormProps {
@@ -104,6 +104,8 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
+  const [removeLogo, setRemoveLogo] = useState(false);
 
   // Setup form con validazione Zod
   const form = useForm<UpdateOrganizationInput>({
@@ -139,7 +141,21 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
     setErrorMessage(null);
 
     try {
-      // Converti dati per l'action (rimuovi id e gestisci valori vuoti)
+      let logoUrl: string | null = organization.logoUrl || null;
+      if (removeLogo) {
+        logoUrl = null;
+      } else if (pendingLogoFile) {
+        const formData = new FormData();
+        formData.append('logo', pendingLogoFile);
+        const uploadResult = await uploadOrganizationLogoAction(formData);
+        if (!uploadResult.success) {
+          setErrorMessage(uploadResult.error);
+          setIsLoading(false);
+          return;
+        }
+        logoUrl = uploadResult.url;
+      }
+
       const updateData = {
         businessName: data.businessName,
         vatNumber: data.vatNumber || null,
@@ -153,7 +169,7 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
         pec: data.pec || null,
         phone: data.phone || null,
         sdiCode: data.sdiCode || null,
-        logoUrl: data.logoUrl || null,
+        logoUrl,
         reaUfficio: data.reaUfficio || null,
         reaNumero: data.reaNumero || null,
         reaCapitaleSociale: data.reaCapitaleSociale || null,
@@ -164,6 +180,8 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
 
       if (result.success) {
         setSuccessMessage('Anagrafica organizzazione aggiornata con successo');
+        setPendingLogoFile(null);
+        setRemoveLogo(false);
         router.refresh(); // Ricarica dati dal server
       } else {
         setErrorMessage(result.error || 'Errore durante l\'aggiornamento');
@@ -504,7 +522,7 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
           </CardContent>
         </Card>
 
-        {/* Sezione: Logo */}
+        {/* Sezione: Logo (upload file) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -512,12 +530,13 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
               Logo Aziendale
             </CardTitle>
             <CardDescription>
-              Logo da utilizzare nelle stampe dei documenti (fatture, preventivi, ecc.)
+              Carica un'immagine da utilizzare nelle stampe dei documenti (fatture, preventivi, ecc.). Formati: PNG, JPEG, WebP. Max 2 MB.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {organization.logoUrl && (
-              <div className="flex items-center gap-4">
+            {/* Anteprima: logo attuale o file selezionato */}
+            {(organization.logoUrl && !removeLogo && !pendingLogoFile) && (
+              <div className="flex items-center gap-4 flex-wrap">
                 <img
                   src={organization.logoUrl}
                   alt="Logo organizzazione"
@@ -528,23 +547,57 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
                 </div>
               </div>
             )}
+            {pendingLogoFile && (
+              <div className="flex items-center gap-4 flex-wrap">
+                <img
+                  src={URL.createObjectURL(pendingLogoFile)}
+                  alt="Nuovo logo"
+                  className="h-20 w-auto object-contain border rounded p-2"
+                />
+                <div className="text-sm text-muted-foreground">
+                  Nuovo logo (salva le modifiche per applicare)
+                </div>
+              </div>
+            )}
 
-            <FormField
-              control={form.control}
-              name="logoUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>URL Logo</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="url" placeholder="https://example.com/logo.png" />
-                  </FormControl>
-                  <FormDescription>
-                    URL pubblico del logo (es. da CDN o storage)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      setPendingLogoFile(f);
+                      setRemoveLogo(false);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                <Button type="button" variant="outline" asChild>
+                  <span className="flex items-center gap-2">
+                    <Upload className="h-4 w-4" />
+                    {organization.logoUrl || pendingLogoFile ? 'Sostituisci logo' : 'Carica logo'}
+                  </span>
+                </Button>
+              </label>
+              {(organization.logoUrl || pendingLogoFile) && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    setRemoveLogo(true);
+                    setPendingLogoFile(null);
+                  }}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Rimuovi logo
+                </Button>
               )}
-            />
+            </div>
           </CardContent>
         </Card>
 

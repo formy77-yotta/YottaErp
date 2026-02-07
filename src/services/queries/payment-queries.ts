@@ -95,3 +95,93 @@ export async function getPaymentConditions(
 
   return conditions;
 }
+
+/**
+ * Parametri opzionali per filtrare le scadenze
+ */
+export interface GetPaymentDeadlinesParams {
+  dateFrom?: Date;
+  dateTo?: Date;
+  status?: 'PENDING' | 'PAID' | 'PARTIAL';
+}
+
+/**
+ * Ottiene le scadenze di pagamento dell'organizzazione corrente
+ *
+ * MULTITENANT: Filtra tramite document.organizationId
+ *
+ * @param params - Filtri opzionali (intervallo date, stato)
+ * @returns Array di scadenze con documento e cliente
+ */
+export async function getPaymentDeadlines(
+  params?: GetPaymentDeadlinesParams
+): Promise<
+  Array<{
+    id: string;
+    documentId: string;
+    dueDate: Date;
+    amount: string;
+    status: string;
+    paidAmount: string;
+    document: {
+      id: string;
+      number: string;
+      date: Date;
+      customerNameSnapshot: string;
+      grossTotal: string;
+      category: string;
+    };
+  }>
+> {
+  const ctx = await getAuthContext();
+
+  const deadlines = await prisma.paymentDeadline.findMany({
+    where: {
+      document: {
+        organizationId: ctx.organizationId,
+      },
+      ...(params?.dateFrom &&
+        params?.dateTo && {
+          dueDate: {
+            gte: params.dateFrom,
+            lte: params.dateTo,
+          },
+        }),
+      ...(params?.dateFrom && !params?.dateTo && { dueDate: { gte: params.dateFrom } }),
+      ...(params?.dateTo && !params?.dateFrom && { dueDate: { lte: params.dateTo } }),
+      ...(params?.status && { status: params.status }),
+    },
+    include: {
+      document: {
+        select: {
+          id: true,
+          number: true,
+          date: true,
+          customerNameSnapshot: true,
+          grossTotal: true,
+          category: true,
+        },
+      },
+    },
+    orderBy: {
+      dueDate: 'asc',
+    },
+  });
+
+  return deadlines.map((d) => ({
+    id: d.id,
+    documentId: d.documentId,
+    dueDate: d.dueDate,
+    amount: d.amount.toString(),
+    status: d.status,
+    paidAmount: d.paidAmount.toString(),
+    document: {
+      id: d.document.id,
+      number: d.document.number,
+      date: d.document.date,
+      customerNameSnapshot: d.document.customerNameSnapshot,
+      grossTotal: d.document.grossTotal.toString(),
+      category: d.document.category,
+    },
+  }));
+}

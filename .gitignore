@@ -37,6 +37,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# uploads (logo aziendale e altri file caricati dagli utenti)
+/public/uploads
+
 # prisma
 # NOTA: Le migrations DEVONO essere committate (contengono lo schema DB)
 # Solo il client generato è ignorato

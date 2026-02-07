@@ -12,8 +12,13 @@
 
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { mkdir, writeFile } from 'fs/promises';
+import path from 'path';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, UnauthorizedError, ForbiddenError, requireRole } from '@/lib/auth';
+
+const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 /**
  * Cambia l'organizzazione corrente dell'utente
@@ -1028,6 +1033,64 @@ export async function updateCurrentOrganizationAction(
     return {
       success: false,
       error: 'Errore durante l\'aggiornamento dell\'organizzazione',
+    };
+  }
+}
+
+/**
+ * Upload logo aziendale per l'organizzazione corrente.
+ * Salva il file in public/uploads/organization-logos/{organizationId}.{ext}
+ * e restituisce l'URL pubblico da salvare in logoUrl.
+ *
+ * PERMESSI: Solo OWNER e ADMIN
+ * Tipi ammessi: PNG, JPEG, WebP. Dimensione max: 2 MB.
+ */
+export async function uploadOrganizationLogoAction(
+  formData: FormData
+): Promise<{ success: true; url: string } | { success: false; error: string }> {
+  try {
+    const ctx = await getAuthContext();
+    requireRole(ctx, ['OWNER', 'ADMIN']);
+
+    const file = formData.get('logo') as File | null;
+    if (!file || !(file instanceof File) || file.size === 0) {
+      return { success: false, error: 'Seleziona un file immagine per il logo' };
+    }
+
+    const mime = file.type.split(';')[0].trim().toLowerCase();
+    if (!ALLOWED_LOGO_TYPES.includes(mime as (typeof ALLOWED_LOGO_TYPES)[number])) {
+      return {
+        success: false,
+        error: 'Formato non supportato. Usa PNG, JPEG o WebP.',
+      };
+    }
+    if (file.size > MAX_LOGO_SIZE_BYTES) {
+      return {
+        success: false,
+        error: 'File troppo grande. Dimensione massima: 2 MB.',
+      };
+    }
+
+    const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/png' ? 'png' : 'webp';
+    const fileName = `${ctx.organizationId}.${ext}`;
+    const dir = path.join(process.cwd(), 'public', 'uploads', 'organization-logos');
+    await mkdir(dir, { recursive: true });
+    const filePath = path.join(dir, fileName);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await writeFile(filePath, buffer);
+
+    const url = `/uploads/organization-logos/${fileName}`;
+    revalidatePath('/settings/organization');
+    revalidatePath('/', 'layout');
+    return { success: true, url };
+  } catch (error) {
+    if (error instanceof ForbiddenError || error instanceof UnauthorizedError) {
+      return { success: false, error: error.message };
+    }
+    console.error('Errore upload logo organizzazione:', error);
+    return {
+      success: false,
+      error: "Errore durante l'upload del logo. Riprova.",
     };
   }
 }

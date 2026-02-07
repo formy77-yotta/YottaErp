@@ -230,7 +230,14 @@ export const updateOrganizationSchema = z.object({
   pec: z.string().email().optional().or(z.literal('')),
   phone: z.string().max(50).optional().or(z.literal('')),
   sdiCode: z.string().regex(/^[A-Z0-9]{7}$/).optional().or(z.literal('')),
-  logoUrl: z.string().url().optional().or(z.literal('')),
+  // Logo: URL esterno o path upload (es. /uploads/organization-logos/xxx.png)
+  logoUrl: z
+    .union([
+      z.string().url(),
+      z.string().min(1).refine((s) => s.startsWith('/'), 'Path logo non valido'),
+    ])
+    .optional()
+    .or(z.literal('')),
   reaUfficio: z.string().length(2).regex(/^[A-Z]{2}$/).optional().or(z.literal('')),
   reaNumero: z.string().min(1).max(20).optional().or(z.literal('')),
   reaCapitaleSociale: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
