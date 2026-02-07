@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Building2, FileText, Mail, Image as ImageIcon, Upload, X } from 'lucide-react';
+import { Loader2, Building2, FileText, Mail, Image as ImageIcon, Upload, X, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface OrganizationProfileFormProps {
@@ -130,6 +130,7 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
       reaNumero: organization.reaNumero || '',
       reaCapitaleSociale: organization.reaCapitaleSociale || '',
       regimeFiscale: validateRegimeFiscale(organization.regimeFiscale),
+      fiscalYear: organization.fiscalYear ?? new Date().getFullYear(),
     },
   });
 
@@ -175,6 +176,7 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
         reaNumero: data.reaNumero || null,
         reaCapitaleSociale: data.reaCapitaleSociale || null,
         regimeFiscale: data.regimeFiscale,
+        fiscalYear: data.fiscalYear ?? null,
       };
 
       const result = await updateCurrentOrganizationAction(updateData);
@@ -599,6 +601,51 @@ export function OrganizationProfileForm({ organization }: OrganizationProfileFor
                 </Button>
               )}
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Sezione: Parametri */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Parametri
+            </CardTitle>
+            <CardDescription>
+              Impostazioni generali dell&apos;organizzazione (anno contabile, ecc.)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <FormField
+              control={form.control}
+              name="fiscalYear"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Anno contabile</FormLabel>
+                  <Select
+                    onValueChange={(v) => field.onChange(parseInt(v, 10))}
+                    value={field.value?.toString() ?? ''}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona anno" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Array.from({ length: 15 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Anno di riferimento per documenti e numerazioni (es. fatture, preventivi).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
         </Card>
 
