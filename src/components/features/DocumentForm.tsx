@@ -107,9 +107,30 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
   }>>([]);
 
   // Setup form con validazione Zod (usa schema appropriato)
+  // NOTA: In modifica, usiamo UpdateDocumentInput che non ha documentTypeId e number
   const form = useForm<CreateDocumentInput | UpdateDocumentInput>({
     resolver: zodResolver(isEditing ? updateDocumentSchema : createDocumentSchema) as any,
-    defaultValues: {
+    mode: 'onChange', // Valida durante la digitazione per mostrare errori prima
+    defaultValues: isEditing ? {
+      // In modifica, solo campi presenti in UpdateDocumentInput
+      entityId: '',
+      date: new Date().toISOString().split('T')[0],
+      mainWarehouseId: '',
+      lines: [
+        {
+          productId: '',
+          productCode: '',
+          description: '',
+          unitPrice: '0.00',
+          quantity: '1.0000',
+          vatRate: '0.2200',
+          warehouseId: '',
+        },
+      ],
+      notes: '',
+      paymentTerms: '',
+    } : {
+      // In creazione, tutti i campi
       documentTypeId: '',
       number: '',
       entityId: '',
@@ -309,8 +330,16 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
    */
   async function onSubmit(data: CreateDocumentInput | UpdateDocumentInput) {
     console.log('onSubmit called with data:', data); // Debug
+    console.log('isEditing:', isEditing); // Debug
     setIsLoading(true);
     setError(null);
+    
+    // Verifica che i dati siano validi prima di procedere
+    if (isEditing && !('id' in data)) {
+      setError('ID documento mancante');
+      setIsLoading(false);
+      return;
+    }
 
     try {
       if (isEditing && documentId) {
@@ -422,7 +451,19 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           onSubmit,
           (errors) => {
             console.error('Form validation errors:', errors); // Debug
-            setError('Errore di validazione. Controlla i campi del form.');
+            // Mostra il primo errore trovato
+            const errorKeys = Object.keys(errors);
+            if (errorKeys.length > 0) {
+              const firstErrorKey = errorKeys[0];
+              const firstError = errors[firstErrorKey as keyof typeof errors];
+              if (firstError && 'message' in firstError) {
+                setError(`Errore di validazione in ${firstErrorKey}: ${firstError.message}`);
+              } else {
+                setError(`Errore di validazione nel campo ${firstErrorKey}`);
+              }
+            } else {
+              setError('Errore di validazione. Controlla i campi del form.');
+            }
           }
         )} 
         className="space-y-6"

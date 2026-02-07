@@ -40,7 +40,6 @@ export default async function DashboardLayout({
   }
 
   // Se non c'è organizationId ma l'utente ha organizzazioni, imposta la prima
-  let finalOrganizationId = organizationId;
   if (!organizationId) {
     const userWithOrgs = await prisma.user.findUnique({
       where: { id: userId },
@@ -64,7 +63,6 @@ export default async function DashboardLayout({
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7,
       });
-      finalOrganizationId = firstOrg.id;
     } else {
       // Utente senza organizzazioni, reindirizza alla home
       redirect('/');
