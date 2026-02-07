@@ -36,25 +36,8 @@ export interface AuthContext {
   role: UserRole;           // Ruolo utente in questa organizzazione
 }
 
-/**
- * Errore personalizzato per accesso non autorizzato
- */
-export class UnauthorizedError extends Error {
-  constructor(message: string = 'Non autenticato') {
-    super(message);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-/**
- * Errore personalizzato per accesso negato
- */
-export class ForbiddenError extends Error {
-  constructor(message: string = 'Accesso negato') {
-    super(message);
-    this.name = 'ForbiddenError';
-  }
-}
+// Import error classes from separate file
+export { UnauthorizedError, ForbiddenError } from './errors';
 
 /**
  * Ottiene il contesto di autenticazione corrente

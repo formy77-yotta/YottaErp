@@ -10,7 +10,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
-import { getAuthContext, ForbiddenError } from '@/lib/auth';
+import { getAuthContext } from '@/lib/auth';
 
 /**
  * Ottiene tutti i tipi di pagamento dell'organizzazione corrente
