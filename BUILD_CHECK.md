@@ -89,33 +89,25 @@ npm run type-check:watch
 
 ### Errore: "Cannot read properties of null (reading 'useContext')" durante il build
 
-**Problema**: Questo errore si verifica quando Next.js cerca di pre-renderizzare `global-error.tsx` durante il build e il componente usa hooks o context.
+**Problema**: Questo errore si verifica quando Next.js cerca di pre-renderizzare `global-error.tsx` durante il build. Anche se il componente è statico, Next.js cerca comunque di pre-renderizzarlo e questo può causare problemi con il context di React.
 
-**Soluzione**:
-1. **Opzione 1 (Raccomandata)**: Rimuovi `src/app/global-error.tsx` se non è strettamente necessario (è opzionale in Next.js)
-2. **Opzione 2**: Se devi tenerlo, assicurati che:
-   - Non usi React hooks (`useState`, `useEffect`, `useContext`, ecc.)
-   - Non dipenda da provider o context esterni
-   - Usi solo `window.location` invece di `router` per la navigazione
-   - Aggiungi `export const dynamic = 'force-dynamic'` nel file stesso
-   - Prefissa parametri non usati con `_` (es. `reset: _reset`)
+**Soluzione (Raccomandata)**: 
+**Rimuovi completamente `src/app/global-error.tsx`** - è opzionale in Next.js e non è necessario per il funzionamento dell'applicazione. Gli errori possono essere gestiti con `error.tsx` nelle route specifiche.
 
-**Esempio di `global-error.tsx` corretto**:
-```typescript
-'use client';
-export const dynamic = 'force-dynamic';
+**Perché rimuoverlo?**
+- È opzionale in Next.js
+- Viene sempre pre-renderizzato durante il build, anche se è un client component
+- Può causare problemi con il context di React durante il pre-rendering
+- `error.tsx` nelle route è sufficiente per gestire gli errori
 
-export default function GlobalError({ error, reset: _reset }: { ... }) {
-  const handleReset = () => {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/'; // Non usare router!
-    }
-  };
-  // ... render statico senza hooks
-}
-```
+**Se proprio devi tenerlo** (non raccomandato):
+1. Assicurati che non usi React hooks (`useState`, `useEffect`, `useContext`, ecc.)
+2. Non dipenda da provider o context esterni
+3. Usa solo `window.location` invece di `router` per la navigazione
+4. Aggiungi `export const dynamic = 'force-dynamic'` nel file stesso
+5. Prefissa parametri non usati con `_` (es. `reset: _reset`)
 
-**Nota**: `global-error.tsx` viene sempre pre-renderizzato durante il build da Vercel, anche se è un client component. Deve essere completamente statico.
+**Nota**: Anche con queste precauzioni, `global-error.tsx` può ancora causare problemi durante il pre-rendering su Vercel. La soluzione migliore è rimuoverlo completamente.
 
 ### Build funziona in locale ma fallisce su Vercel
 
