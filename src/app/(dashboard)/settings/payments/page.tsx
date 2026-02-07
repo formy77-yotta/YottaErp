@@ -8,13 +8,8 @@
  * MULTITENANT: Tutti i dati sono filtrati per organizationId
  */
 
-import { Suspense } from 'react';
 import { PaymentsTabs } from '@/components/features/PaymentsTabs';
 import { getPaymentTypes, getPaymentConditions } from '@/services/queries/payment-queries';
-import { PaymentTypesTable } from '@/components/features/PaymentTypesTable';
-import { PaymentConditionsTable } from '@/components/features/PaymentConditionsTable';
-import { PaymentTypesTableSkeleton } from '@/components/features/PaymentTypesTableSkeleton';
-import { PaymentConditionsTableSkeleton } from '@/components/features/PaymentConditionsTableSkeleton';
 
 // Forza rendering dinamico perché usa cookies per autenticazione
 export const dynamic = 'force-dynamic';

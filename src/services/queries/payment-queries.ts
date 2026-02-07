@@ -1,12 +1,13 @@
 /**
  * Query functions per Server Components
  * 
- * Queste funzioni NON sono Server Actions ('use server')
- * ma funzioni normali che possono essere chiamate direttamente
- * nei Server Components async.
- * 
  * MULTITENANT: Ogni query filtra automaticamente per organizationId
+ * 
+ * IMPORTANTE: Questo file è server-only e non può essere importato
+ * in client components. Usa Server Actions per interazioni dal client.
  */
+
+import 'server-only';
 
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, ForbiddenError } from '@/lib/auth';

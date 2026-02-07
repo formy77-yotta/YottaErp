@@ -3,6 +3,9 @@
  * 
  * MULTITENANT: Gestisce autenticazione e isolamento tra organizzazioni
  * 
+ * IMPORTANTE: Questo file è server-only e non può essere importato
+ * in client components. Usa Server Actions per interazioni dal client.
+ * 
  * UTILIZZO:
  * ```typescript
  * const ctx = await getAuthContext();
@@ -11,6 +14,8 @@
  * });
  * ```
  */
+
+import 'server-only';
 
 import { cookies } from 'next/headers';
 import { prisma } from './prisma';
