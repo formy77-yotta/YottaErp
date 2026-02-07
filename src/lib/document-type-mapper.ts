@@ -9,7 +9,18 @@
  * @returns DocumentCategory corrispondente
  */
 
-import { DocumentCategory } from '@prisma/client';
+/**
+ * Enum DocumentCategory - Categoria documento per logiche di sistema
+ * 
+ * Mantenuto come enum per compatibilità con logiche di sistema che richiedono
+ * un enum fisso. La configurazione completa è in DocumentTypeConfig.
+ */
+export type DocumentCategory = 
+  | 'QUOTE'
+  | 'ORDER'
+  | 'DELIVERY_NOTE'
+  | 'INVOICE'
+  | 'CREDIT_NOTE';
 
 /**
  * Mappa il code di DocumentTypeConfig al DocumentCategory enum
