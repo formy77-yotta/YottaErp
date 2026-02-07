@@ -549,12 +549,22 @@ export async function seedDefaultUnitsOfMeasureAction(): Promise<ActionResult<{ 
     ];
 
     // 5. Crea tutte le unità di misura in transazione
-    await prisma.unitOfMeasure.createMany({
-      data: defaultUnits.map((unit) => ({
-        organizationId: ctx.organizationId,
-        ...unit,
-      })),
-    });
+    // Usiamo una transazione per creare i record uno alla volta
+    // Questo evita problemi di serializzazione Decimal con createMany
+    await prisma.$transaction(
+      defaultUnits.map((unit) =>
+        prisma.unitOfMeasure.create({
+          data: {
+            organizationId: ctx.organizationId,
+            code: unit.code,
+            name: unit.name,
+            measureClass: unit.measureClass,
+            baseFactor: unit.baseFactor, // Prisma accetta Decimal direttamente
+            active: unit.active,
+          },
+        })
+      )
+    );
 
     // 6. Revalidazione cache
     revalidatePath('/settings/unit-of-measure');
@@ -573,9 +583,32 @@ export async function seedDefaultUnitsOfMeasureAction(): Promise<ActionResult<{ 
       };
     }
 
+    // Gestione errori Prisma (es. unique constraint violation)
+    if (error instanceof Error) {
+      // Se è un errore di unique constraint per codice
+      if (error.message.includes('organizationId_code') || error.message.includes('Unique constraint')) {
+        return {
+          success: false,
+          error: 'Una o più unità di misura hanno codici già esistenti per questa organizzazione',
+        };
+      }
+      
+      // Log dell'errore completo per debug
+      console.error('Dettagli errore:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      });
+      
+      return {
+        success: false,
+        error: error.message || 'Errore durante il caricamento delle unità di misura standard',
+      };
+    }
+
     return {
       success: false,
-      error: 'Errore durante il caricamento delle unità di misura standard',
+      error: 'Errore sconosciuto durante il caricamento delle unità di misura standard',
     };
   }
 }

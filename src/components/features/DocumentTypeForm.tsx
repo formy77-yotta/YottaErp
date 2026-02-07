@@ -1,0 +1,359 @@
+/**
+ * Form per creazione/editing configurazione tipo documento
+ * 
+ * CARATTERISTICHE:
+ * - Validazione con Zod
+ * - Supporto creazione e modifica
+ * - Gestione flag comportamentali (inventoryMovement, valuationImpact, operationSign)
+ * - Gestione errori da server
+ */
+
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { 
+  createDocumentTypeSchema, 
+  updateDocumentTypeSchema,
+  type CreateDocumentTypeInput,
+  type UpdateDocumentTypeInput
+} from '@/schemas/document-type-schema';
+import { 
+  createDocumentTypeAction, 
+  updateDocumentTypeAction
+} from '@/services/actions/document-type-actions';
+
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Loader2 } from 'lucide-react';
+
+interface DocumentTypeFormProps {
+  /**
+   * Configurazione tipo documento da modificare (undefined = creazione nuova)
+   */
+  documentType?: {
+    id: string;
+    code: string;
+    description: string;
+    numeratorCode: string;
+    inventoryMovement: boolean;
+    valuationImpact: boolean;
+    operationSign: number;
+    active: boolean;
+  };
+  
+  /**
+   * Callback chiamato dopo salvataggio con successo
+   */
+  onSuccess?: () => void;
+  
+  /**
+   * Callback chiamato in caso di errore
+   */
+  onError?: (error: string) => void;
+}
+
+type DocumentTypeFormInput = CreateDocumentTypeInput | (UpdateDocumentTypeInput & { id?: string });
+
+export function DocumentTypeForm({ 
+  documentType, 
+  onSuccess, 
+  onError 
+}: DocumentTypeFormProps) {
+  const [isLoading, setIsLoading] = useState(false);
+  const isEditing = !!documentType;
+
+  // Setup form con validazione Zod
+  const form = useForm<DocumentTypeFormInput>({
+    resolver: zodResolver(isEditing ? updateDocumentTypeSchema : createDocumentTypeSchema) as any,
+    defaultValues: {
+      code: '',
+      description: '',
+      numeratorCode: '',
+      inventoryMovement: false,
+      valuationImpact: false,
+      operationSign: 1,
+      active: true,
+      ...(isEditing && documentType ? { id: documentType.id } : {}),
+    },
+  });
+
+  // Aggiorna i valori del form quando la configurazione viene caricata
+  useEffect(() => {
+    if (documentType) {
+      form.reset({
+        code: documentType.code,
+        description: documentType.description,
+        numeratorCode: documentType.numeratorCode,
+        inventoryMovement: documentType.inventoryMovement,
+        valuationImpact: documentType.valuationImpact,
+        operationSign: documentType.operationSign,
+        active: documentType.active,
+        ...(isEditing ? { id: documentType.id } : {}),
+      }, { keepDefaultValues: false });
+    } else {
+      // Reset al form vuoto quando si crea una nuova configurazione
+      form.reset({
+        code: '',
+        description: '',
+        numeratorCode: '',
+        inventoryMovement: false,
+        valuationImpact: false,
+        operationSign: 1,
+        active: true,
+      }, { keepDefaultValues: false });
+    }
+  }, [documentType, form, isEditing]);
+
+  /**
+   * Handler submit form
+   */
+  async function onSubmit(data: DocumentTypeFormInput) {
+    setIsLoading(true);
+
+    try {
+      let result;
+
+      if (isEditing && documentType) {
+        // Aggiornamento configurazione esistente
+        const updateData: UpdateDocumentTypeInput = {
+          id: documentType.id,
+          ...data,
+        };
+
+        result = await updateDocumentTypeAction(updateData);
+      } else {
+        // Creazione nuova configurazione
+        result = await createDocumentTypeAction(data as CreateDocumentTypeInput);
+      }
+
+      if (result.success) {
+        // Successo: chiama callback e resetta form
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          // Se non c'è callback, resetta il form
+          form.reset();
+        }
+      } else {
+        // Errore: mostra messaggio
+        if (onError) {
+          onError(result.error);
+        } else {
+          console.error('Errore:', result.error);
+        }
+      }
+    } catch (error) {
+      console.error('Errore submit form:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Errore sconosciuto';
+      if (onError) {
+        onError(errorMessage);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Codice tipo documento */}
+        <FormField
+          control={form.control}
+          name="code"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Codice Tipo Documento *</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="DDT" 
+                  {...field}
+                  disabled={isLoading || isEditing} // Codice non modificabile in editing
+                />
+              </FormControl>
+              <FormDescription>
+                Codice univoco del tipo documento (solo lettere maiuscole, numeri e underscore)
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Descrizione */}
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Descrizione *</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="Documento di Trasporto" 
+                  {...field}
+                  disabled={isLoading}
+                />
+              </FormControl>
+              <FormDescription>
+                Descrizione del tipo documento
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Codice numerazione */}
+        <FormField
+          control={form.control}
+          name="numeratorCode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Codice Numerazione *</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="DDT" 
+                  {...field}
+                  disabled={isLoading}
+                />
+              </FormControl>
+              <FormDescription>
+                Codice per raggruppare tipi documento con stessa serie numerica (es. "FATTURE", "DDT")
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Flag comportamentali in riga */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Movimenta Stock */}
+          <FormField
+            control={form.control}
+            name="inventoryMovement"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Movimenta Stock</FormLabel>
+                  <FormDescription>
+                    Se attivo, il documento genera movimenti di magazzino
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          {/* Impatto Valorizzazione */}
+          <FormField
+            control={form.control}
+            name="valuationImpact"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel className="text-base">Impatto Valorizzazione</FormLabel>
+                  <FormDescription>
+                    Se attivo, il documento impatta costi/ricavi (contabilità)
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Segno operazione */}
+        <FormField
+          control={form.control}
+          name="operationSign"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Segno Operazione *</FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(parseInt(value))}
+                value={field.value.toString()}
+                disabled={isLoading}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona segno operazione" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="1">+1 (Incremento)</SelectItem>
+                  <SelectItem value="-1">-1 (Decremento)</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                +1 per incrementi (fattura vendita), -1 per decrementi (nota credito)
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Attivo */}
+        <FormField
+          control={form.control}
+          name="active"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <FormLabel className="text-base">Configurazione Attiva</FormLabel>
+                <FormDescription>
+                  Le configurazioni non attive non sono disponibili per nuovi documenti
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={isLoading}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        {/* Pulsanti */}
+        <div className="flex justify-end gap-4">
+          <Button
+            type="submit"
+            disabled={isLoading}
+          >
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isEditing ? 'Aggiorna Configurazione' : 'Crea Configurazione'}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+}

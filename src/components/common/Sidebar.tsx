@@ -105,6 +105,11 @@ const navItems: NavItem[] = [
         href: '/settings/unit-of-measure',
         icon: Ruler,
       },
+      {
+        title: 'Tipi Documento',
+        href: '/settings/document-types',
+        icon: FileText,
+      },
     ],
   },
 ];

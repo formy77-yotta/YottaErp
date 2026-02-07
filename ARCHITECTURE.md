@@ -349,16 +349,35 @@ Toast Notification + Table Refresh
 └────────────────┘   │
                      │
                      │ N
-        ┌────────────┼────────────┬──────────────┬────────────┐
-        │            │            │              │            │
-        ▼            ▼            ▼              ▼            ▼
-┌───────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-│UserOrganization│ │ Entity   │ │ Product  │ │Warehouse │ │ Document     │
-│               │ │          │ │          │ │          │ │              │
-│• userId       │ │• type    │ │• code    │ │• code    │ │• number      │
-│• role         │ │• name    │ │• name    │ │• name    │ │• type        │
-│               │ │• vatNumber│ │• price   │ │          │ │• grossTotal  │
-└───────────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────────┘
+        ┌────────────┼────────────┬──────────────┬────────────┬──────────────┐
+        │            │            │              │            │              │
+        ▼            ▼            ▼              ▼            ▼              ▼
+┌───────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐ ┌──────────────┐
+│UserOrganization│ │ Entity   │ │ Product  │ │Warehouse │ │DocumentType  │ │ Document     │
+│               │ │          │ │          │ │          │ │Config        │ │              │
+│• userId       │ │• type    │ │• code    │ │• code    │ │              │ │• number      │
+│• role         │ │• name    │ │• name    │ │• name    │ │• code        │ │• date        │
+│               │ │• vatNumber│ │• price   │ │          │ │• inventory   │ │• grossTotal  │
+└───────────────┘ └──────────┘ └──────────┘ └──────────┘ │  Movement    │ │              │
+                                                         │• valuation   │ │• documentType│
+                                                         │  Impact      │ │  Id (FK)     │
+                                                         │• operation   │ └──────────────┘
+                                                         │  Sign        │        │
+                                                         └──────────────┘        │
+                                                                                 │
+                                                                                 │ N
+                                                                      ┌──────────┼──────────┐
+                                                                      │          │          │
+                                                                      ▼          ▼          ▼
+                                                            ┌──────────────┐ ┌──────────┐ ┌──────────────┐
+                                                            │StockMovement │ │Document  │ │Accounting    │
+                                                            │             │ │Line      │ │Entry         │
+                                                            │• quantity   │ │          │ │              │
+                                                            │• type       │ │• quantity│ │• amount      │
+                                                            │             │ │• unitPrice│ │• type        │
+                                                            │• documentType│ │• gross   │ │              │
+                                                            │  Id (FK)    │ │  Amount   │ │              │
+                                                            └──────────────┘ └──────────┘ └──────────────┘
 ```
 
 ## 🎨 Interfaccia Grafica e Navigazione
@@ -811,6 +830,765 @@ EntitiesPage State (Server Component):
     └── Filtered by organizationId + type
 ```
 
+## 📦 Sistema di Classificazione Prodotti
+
+### 🏷️ Categorie e Tipologie Articoli
+
+Il sistema YottaErp utilizza un sistema di classificazione a due livelli per organizzare i prodotti:
+
+#### 1. **ProductCategory** (Categoria Articolo)
+
+**Scopo**: Classificazione logica per raggruppare prodotti simili (es. "Materiali", "Servizi", "Finiture")
+
+**Caratteristiche**:
+- **Codice univoco** per organizzazione (es. "MAT", "SER", "FIN")
+- **Descrizione** testuale della categoria
+- **Multitenant**: Ogni categoria appartiene a un'organizzazione
+- **Opzionale**: Un prodotto può non avere categoria
+
+**Schema Database**:
+```prisma
+model ProductCategory {
+  id            String   @id @default(cuid())
+  organizationId String
+  code          String   // Codice categoria (es. "MAT", "SER")
+  description   String   // Descrizione categoria
+  active        Boolean  @default(true)
+  
+  products      Product[]
+  
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, active])
+}
+```
+
+**Utilizzo**:
+- Filtri e ricerche prodotti per categoria
+- Report e statistiche per categoria
+- Organizzazione logica dell'anagrafica prodotti
+
+#### 2. **ProductType** (Tipologia Articolo)
+
+**Scopo**: Classificazione funzionale che determina il comportamento del prodotto nel sistema
+
+**Caratteristiche**:
+- **Codice univoco** per organizzazione (es. "MAT", "SER", "FIN")
+- **Descrizione** testuale della tipologia
+- **Flag `manageStock`**: Determina se la tipologia gestisce magazzino
+  - `true`: Tipologia gestita a magazzino (es. Materiali)
+  - `false`: Tipologia non gestita a magazzino (es. Servizi)
+- **Multitenant**: Ogni tipologia appartiene a un'organizzazione
+- **Opzionale**: Un prodotto può non avere tipologia
+
+**Schema Database**:
+```prisma
+model ProductType {
+  id            String   @id @default(cuid())
+  organizationId String
+  code          String   // Codice tipologia (es. "MAT", "SER")
+  description   String   // Descrizione tipologia
+  manageStock   Boolean  @default(true) // Flag gestione magazzino
+  active        Boolean  @default(true)
+  
+  products      Product[]
+  
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([organizationId, active])
+}
+```
+
+**Logica `manageStock`**:
+- **`manageStock = true`**: 
+  - Il prodotto può avere movimenti di magazzino
+  - La giacenza viene calcolata da `StockMovement`
+  - Utilizzato per materiali, merci, prodotti fisici
+- **`manageStock = false`**: 
+  - Il prodotto NON ha movimenti di magazzino
+  - Utilizzato per servizi, consulenze, lavorazioni
+
+### 🔗 Relazione con Prodotti
+
+**Schema Product**:
+```prisma
+model Product {
+  id            String   @id @default(cuid())
+  organizationId String
+  code          String   // Codice articolo
+  name          String
+  description   String?
+  
+  // Classificazioni (opzionali)
+  categoryId    String?
+  category      ProductCategory? @relation(...)
+  
+  typeId        String?
+  type          ProductType? @relation(...)
+  
+  price         Decimal  @db.Decimal(12, 2)
+  vatRateId     String?
+  vatRate       VatRate? @relation(...)
+  
+  active        Boolean  @default(true)
+  
+  @@unique([organizationId, code])
+  @@index([categoryId])
+  @@index([typeId])
+}
+```
+
+**Regole**:
+- Un prodotto può avere **0 o 1 categoria**
+- Un prodotto può avere **0 o 1 tipologia**
+- Categoria e tipologia sono **indipendenti** (un prodotto può avere categoria ma non tipologia e viceversa)
+- Se una categoria/tipologia viene eliminata, i prodotti associati vengono **disassociati** (`onDelete: SetNull`)
+
+### 📊 Flusso Utilizzo Classificazioni
+
+#### Creazione Prodotto
+
+```
+User compila form prodotto
+    ↓
+Seleziona Categoria (opzionale)
+    ↓
+Seleziona Tipologia (opzionale)
+    ↓
+Validazione Zod
+    ↓
+Verifica categoria/tipologia appartengono all'organizzazione
+    ↓
+Creazione prodotto con classificazioni
+```
+
+#### Filtri e Ricerche
+
+```
+getProductsAction(filters?: {
+  categoryId?: string;
+  typeId?: string;
+  active?: boolean;
+})
+    ↓
+Prisma Query con filtri
+    ↓
+WHERE organizationId = ? 
+  AND categoryId = ? (se presente)
+  AND typeId = ? (se presente)
+  AND active = ? (se presente)
+```
+
+#### Logica Magazzino
+
+```
+Creazione documento (DDT, Fattura)
+    ↓
+Per ogni riga documento:
+    ↓
+1. Verifica documentType.inventoryMovement
+    ↓
+   Se false → Nessun movimento magazzino, solo registrazione documento
+   Se true → Continua
+    ↓
+2. Verifica product.type.manageStock
+    ↓
+   Se false → Nessun movimento magazzino (prodotto non gestito a magazzino)
+   Se true → Continua
+    ↓
+3. Calcola quantità con operationSign
+    ↓
+   quantity = line.quantity * documentType.operationSign
+   (Se operationSign = -1, inverte segno per reso/carico)
+    ↓
+4. Crea StockMovement:
+    → quantity: negativo per scarico vendita, positivo per carico
+    → type: 'SCARICO_DDT' o 'SCARICO_VENDITA' o 'CARICO_FORNITORE'
+    → documentTypeId: riferimento configurazione tipo documento
+    → documentId: riferimento documento origine
+    ↓
+5. Calcola giacenza aggiornata (somma algebrica movimenti)
+```
+
+**Regola Combinata**:
+- Movimento magazzino creato solo se: `documentType.inventoryMovement = true` **E** `product.type.manageStock = true`
+- Il segno della quantità dipende da `documentType.operationSign` e dal tipo operazione (carico/scarico)
+
+### 🎨 Interfaccia Utente
+
+#### Form Prodotto (`ProductForm.tsx`)
+
+**Caricamento Classificazioni**:
+```typescript
+useEffect(() => {
+  async function loadData() {
+    // Carica categorie attive
+    const categoriesResult = await getProductCategoriesAction();
+    setCategories(categoriesResult.data.filter(c => c.active));
+    
+    // Carica tipologie attive
+    const typesResult = await getProductTypesAction();
+    setTypes(typesResult.data.filter(t => t.active));
+  }
+  loadData();
+}, []);
+```
+
+**Select Categoria**:
+```tsx
+<Select
+  onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}
+  value={field.value || 'none'}
+>
+  <SelectItem value="none">Nessuna categoria</SelectItem>
+  {categories.map((category) => (
+    <SelectItem key={category.id} value={category.id}>
+      {category.code} - {category.description}
+    </SelectItem>
+  ))}
+</Select>
+```
+
+**Select Tipologia** (con indicatore magazzino):
+```tsx
+<Select
+  onValueChange={(value) => field.onChange(value === 'none' ? '' : value)}
+  value={field.value || 'none'}
+>
+  <SelectItem value="none">Nessuna tipologia</SelectItem>
+  {types.map((type) => (
+    <SelectItem key={type.id} value={type.id}>
+      {type.code} - {type.description}
+      {type.manageStock && ' (Magazzino)'}
+    </SelectItem>
+  ))}
+</Select>
+```
+
+#### Tabella Prodotti (`products/page.tsx`)
+
+**Visualizzazione Classificazioni**:
+```tsx
+<TableCell>
+  {product.category ? (
+    <Badge variant="outline">
+      {product.category.code}
+    </Badge>
+  ) : (
+    <span className="text-muted-foreground text-sm">-</span>
+  )}
+</TableCell>
+
+<TableCell>
+  {product.type ? (
+    <div className="flex items-center gap-1">
+      <Badge variant="outline">
+        {product.type.code}
+      </Badge>
+      {product.type.manageStock && (
+        <Badge variant="secondary" className="text-xs">
+          Magazzino
+        </Badge>
+      )}
+    </div>
+  ) : (
+    <span className="text-muted-foreground text-sm">-</span>
+  )}
+</TableCell>
+```
+
+### 🔄 Server Actions
+
+#### Gestione Categorie
+
+**File**: `src/services/actions/product-category-actions.ts`
+
+**Funzioni**:
+- `getProductCategoriesAction()` - Lista categorie organizzazione
+- `createProductCategoryAction()` - Crea nuova categoria
+- `updateProductCategoryAction()` - Aggiorna categoria
+- `deleteProductCategoryAction()` - Elimina categoria (blocca se prodotti associati)
+
+#### Gestione Tipologie
+
+**File**: `src/services/actions/product-type-actions.ts`
+
+**Funzioni**:
+- `getProductTypesAction()` - Lista tipologie organizzazione
+- `createProductTypeAction()` - Crea nuova tipologia
+- `updateProductTypeAction()` - Aggiorna tipologia
+- `deleteProductTypeAction()` - Elimina tipologia (blocca se prodotti associati)
+
+### 📐 Modello Dati Relazionale
+
+```
+┌──────────────────┐
+│ Organization     │
+│                  │
+│ • id             │───┐
+└──────────────────┘   │
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+        ▼              ▼              ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────┐
+│ProductCategory│ │ProductType   │ │ Product  │
+│              │ │              │ │          │
+│• code        │ │• code        │ │• code    │
+│• description │ │• description │ │• name    │
+│              │ │• manageStock │ │• price   │
+│              │ │              │ │          │
+│              │ │              │ │• categoryId (FK)
+│              │ │              │ │• typeId (FK)
+└──────────────┘ └──────────────┘ └──────────┘
+```
+
+### 🎯 Best Practices
+
+1. **Nomenclatura Codici**:
+   - Usa codici brevi e significativi (max 20 caratteri)
+   - Solo lettere maiuscole, numeri e underscore
+   - Esempi: "MAT", "SER", "FIN", "MAT_RAW", "SER_CONS"
+
+2. **Gestione Magazzino**:
+   - Imposta `manageStock = true` solo per prodotti fisici
+   - Servizi e consulenze devono avere `manageStock = false`
+   - Il sistema blocca movimenti magazzino per prodotti con `manageStock = false`
+
+3. **Eliminazione Classificazioni**:
+   - Verifica sempre se ci sono prodotti associati prima di eliminare
+   - Le Server Actions bloccano l'eliminazione se ci sono prodotti associati
+   - Considera la disattivazione (`active = false`) invece dell'eliminazione
+
+4. **Filtri e Report**:
+   - Usa le classificazioni per filtri avanzati
+   - Genera report per categoria o tipologia
+   - Analizza vendite per categoria/tipologia
+
+## 📄 Sistema di Gestione Tipi Documento
+
+### 🎯 DocumentTypeConfig: Configurazione Tipi Documento
+
+Il sistema YottaErp utilizza un sistema configurabile per gestire i tipi di documento, che permette di controllare il comportamento dei documenti rispetto a:
+- **Movimentazione Magazzino**: Se il documento movimenta lo stock
+- **Impatto Valorizzazione**: Se il documento impatta costi/ricavi
+- **Segno Operazione**: Direzione dell'operazione (incremento/decremento)
+- **Numerazione**: Raggruppamento per serie numeriche separate
+
+#### Schema Database
+
+```prisma
+model DocumentTypeConfig {
+  id              String   @id @default(cuid())
+  organizationId  String   // ✅ MULTITENANT
+  
+  // Identificazione
+  code            String   // Codice tipo (es. "QUOTE", "ORDER", "DDT", "INVOICE", "NC")
+  description     String   // Descrizione tipo documento
+  
+  // Numerazione
+  numeratorCode   String   // Raggruppa tipi con stessa numerazione (es. "FATTURE", "DDT")
+  
+  // Flag controllo comportamento
+  inventoryMovement Boolean @default(false) // Movimenta stock?
+  valuationImpact   Boolean @default(false) // Impatta costi/ricavi?
+  operationSign     Int     @default(1)     // +1 incremento, -1 decremento
+  
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  documents       Document[]
+  stockMovements  StockMovement[]
+  
+  @@unique([organizationId, code])
+  @@index([organizationId, active])
+  @@index([organizationId, numeratorCode])
+}
+```
+
+#### Flag di Controllo: Significato e Utilizzo
+
+##### 1. `inventoryMovement` (Movimenta Stock)
+
+**Scopo**: Determina se il documento genera movimenti di magazzino
+
+**Valori**:
+- **`true`**: Il documento movimenta lo stock
+  - Esempi: DDT, Fattura vendita, Ordine fornitore
+  - Comportamento: Crea automaticamente `StockMovement` per ogni riga prodotto
+- **`false`**: Il documento NON movimenta lo stock
+  - Esempi: Preventivo, Ordine cliente (non confermato)
+  - Comportamento: Nessun movimento magazzino, solo registrazione documento
+
+**Logica Applicativa**:
+```typescript
+async function createDocument(data: CreateDocumentInput) {
+  const document = await prisma.document.create({ data });
+  
+  // Per ogni riga documento
+  for (const line of data.lines) {
+    const product = await prisma.product.findUnique({
+      where: { id: line.productId },
+      include: { type: true }
+    });
+    
+    // Verifica: tipo documento movimenta stock E prodotto gestisce magazzino
+    if (document.documentType.inventoryMovement && 
+        product?.type?.manageStock) {
+      
+      // Crea movimento magazzino
+      await prisma.stockMovement.create({
+        data: {
+          productId: line.productId,
+          warehouseId: data.warehouseId,
+          quantity: new Decimal(line.quantity.toString())
+            .mul(document.documentType.operationSign) // Applica segno operazione
+            .neg(), // Negativo per scarico vendita
+          type: 'SCARICO_VENDITA',
+          documentTypeId: document.documentTypeId,
+          documentId: document.id,
+          documentNumber: document.number,
+        }
+      });
+    }
+  }
+  
+  return document;
+}
+```
+
+##### 2. `valuationImpact` (Impatto Valorizzazione)
+
+**Scopo**: Determina se il documento impatta costi/ricavi (contabilità)
+
+**Valori**:
+- **`true`**: Il documento impatta costi/ricavi
+  - Esempi: Fattura vendita, Nota Credito, Fattura acquisto
+  - Comportamento: Registrato in contabilità, impatta profitti/perdite
+- **`false`**: Il documento NON impatta costi/ricavi
+  - Esempi: DDT, Preventivo, Ordine
+  - Comportamento: Solo documentazione, nessun impatto contabile
+
+**Logica Applicativa**:
+```typescript
+async function processDocumentForAccounting(documentId: string) {
+  const document = await prisma.document.findUnique({
+    where: { id: documentId },
+    include: { documentType: true }
+  });
+  
+  // Solo documenti con valuationImpact vengono registrati in contabilità
+  if (document.documentType.valuationImpact) {
+    // Registra in contabilità
+    await registerAccountingEntry({
+      type: document.documentType.operationSign === 1 ? 'REVENUE' : 'CREDIT',
+      amount: document.grossTotal,
+      documentId: document.id,
+      date: document.date,
+    });
+  }
+}
+```
+
+##### 3. `operationSign` (Segno Operazione)
+
+**Scopo**: Determina la direzione dell'operazione per calcoli
+
+**Valori**:
+- **`+1`**: Incremento
+  - Esempi: Fattura vendita, Carico magazzino, Entrata cassa
+  - Comportamento: Aumenta ricavi/stock/entrate
+- **`-1`**: Decremento
+  - Esempi: Nota Credito, Reso fornitore, Uscita cassa
+  - Comportamento: Riduce ricavi/stock/entrate
+
+**Logica Applicativa**:
+```typescript
+// Calcolo totale con segno operazione
+function calculateDocumentTotal(lines: DocumentLine[], operationSign: number) {
+  const baseTotal = lines.reduce((sum, line) => 
+    sum.plus(line.grossAmount), new Decimal(0)
+  );
+  
+  // Applica segno operazione
+  return baseTotal.mul(operationSign);
+}
+
+// Movimento magazzino con segno
+function createStockMovement(
+  quantity: Decimal,
+  operationSign: number,
+  inventoryMovement: boolean
+) {
+  if (!inventoryMovement) return null;
+  
+  // Quantità negativa per scarico, positiva per carico
+  // operationSign = +1 (fattura vendita) → scarico (negativo)
+  // operationSign = -1 (nota credito) → carico (positivo)
+  const signedQuantity = quantity.mul(operationSign).neg();
+  
+  return {
+    quantity: signedQuantity,
+    // ...
+  };
+}
+```
+
+##### 4. `numeratorCode` (Codice Numerazione)
+
+**Scopo**: Raggruppa tipi documento con stessa serie numerica
+
+**Esempi**:
+- **"FATTURE"**: Raggruppa Fatture e Note Credito (numerazione unica)
+- **"DDT"**: Raggruppa tutti i DDT (numerazione separata)
+- **"ORDINI"**: Raggruppa Ordini Cliente e Fornitore
+
+**Logica Applicativa**:
+```typescript
+async function generateDocumentNumber(
+  documentTypeId: string,
+  organizationId: string
+): Promise<string> {
+  const docType = await prisma.documentTypeConfig.findUnique({
+    where: { id: documentTypeId }
+  });
+  
+  // Trova ultimo numero per questa serie numerica
+  const lastDoc = await prisma.document.findFirst({
+    where: {
+      organizationId,
+      documentType: {
+        numeratorCode: docType.numeratorCode
+      }
+    },
+    orderBy: { number: 'desc' }
+  });
+  
+  // Genera numero progressivo
+  const nextNumber = lastDoc 
+    ? parseInt(lastDoc.number) + 1 
+    : 1;
+  
+  return nextNumber.toString().padStart(6, '0');
+}
+```
+
+### 🔄 Flusso Creazione Documento con Movimenti Magazzino
+
+```
+User crea documento (es. DDT)
+    ↓
+createDocumentAction(data)
+    ↓
+1. Crea Document con documentTypeId
+    ↓
+2. Per ogni riga documento:
+    ↓
+   Verifica documentType.inventoryMovement
+    ↓
+   Se true:
+      ↓
+      Verifica product.type.manageStock
+      ↓
+      Se true:
+         ↓
+         Calcola quantità con operationSign
+         ↓
+         Crea StockMovement:
+            - quantity = line.quantity * operationSign * (-1 per scarico)
+            - type = 'SCARICO_DDT' o 'SCARICO_VENDITA'
+            - documentTypeId = document.documentTypeId
+            - documentId = document.id
+    ↓
+3. Se documentType.valuationImpact = true:
+    ↓
+   Registra in contabilità
+    ↓
+4. Return document
+```
+
+### 📊 Esempi Configurazioni Tipi Documento
+
+#### Esempio 1: Preventivo (QUOTE)
+```typescript
+{
+  code: "QUOTE",
+  description: "Preventivo",
+  numeratorCode: "PREVENTIVI",
+  inventoryMovement: false,  // ❌ Non movimenta stock
+  valuationImpact: false,    // ❌ Non impatta contabilità
+  operationSign: 1,          // +1 (neutro, non applicato)
+  active: true
+}
+```
+
+#### Esempio 2: DDT (DELIVERY_NOTE)
+```typescript
+{
+  code: "DDT",
+  description: "Documento di Trasporto",
+  numeratorCode: "DDT",
+  inventoryMovement: true,   // ✅ Movimenta stock
+  valuationImpact: false,    // ❌ Non impatta contabilità
+  operationSign: 1,          // +1 (scarico vendita)
+  active: true
+}
+```
+
+#### Esempio 3: Fattura (INVOICE)
+```typescript
+{
+  code: "INVOICE",
+  description: "Fattura",
+  numeratorCode: "FATTURE",
+  inventoryMovement: true,   // ✅ Movimenta stock (se già non fatto da DDT)
+  valuationImpact: true,     // ✅ Impatta contabilità
+  operationSign: 1,          // +1 (incremento ricavi)
+  active: true
+}
+```
+
+#### Esempio 4: Nota Credito (CREDIT_NOTE)
+```typescript
+{
+  code: "NC",
+  description: "Nota di Credito",
+  numeratorCode: "FATTURE", // Stessa serie di fatture
+  inventoryMovement: true,   // ✅ Movimenta stock (reso)
+  valuationImpact: true,     // ✅ Impatta contabilità (riduce ricavi)
+  operationSign: -1,         // -1 (decremento ricavi)
+  active: true
+}
+```
+
+### 🔗 Relazione Document ↔ StockMovement
+
+**Schema Document**:
+```prisma
+model Document {
+  id            String   @id @default(cuid())
+  documentTypeId String  // ✅ Relazione obbligatoria
+  documentType   DocumentTypeConfig @relation(...)
+  category      DocumentCategory // Enum per logiche hardcoded
+  number        String
+  date          DateTime
+  // ... altri campi
+}
+```
+
+**Schema StockMovement**:
+```prisma
+model StockMovement {
+  id            String   @id @default(cuid())
+  productId     String
+  warehouseId   String
+  quantity      Decimal  @db.Decimal(12, 4)
+  type          MovementType
+  
+  // ✅ Relazione opzionale a DocumentTypeConfig
+  documentTypeId   String?
+  documentType     DocumentTypeConfig? @relation(...)
+  documentId       String?
+  documentNumber   String?
+  
+  // ... altri campi
+}
+```
+
+### 🎨 Interfaccia Utente Configurazione
+
+**Pagina**: `src/app/(dashboard)/settings/document-types/page.tsx`
+
+**Funzionalità**:
+- Lista configurazioni tipi documento organizzazione
+- Creazione nuova configurazione
+- Modifica configurazione esistente
+- Eliminazione (bloccata se documenti associati)
+- Visualizzazione flag con badge colorati
+
+**Form Configurazione**:
+- **Codice**: Input con validazione (solo maiuscole, numeri, underscore)
+- **Descrizione**: Input testo
+- **Codice Numerazione**: Input con validazione
+- **Movimenta Stock**: Switch toggle
+- **Impatto Valutazione**: Switch toggle
+- **Segno Operazione**: Select (+1 / -1)
+- **Attiva**: Switch toggle
+
+### 🔐 Regole di Business
+
+1. **Creazione Documento**:
+   - Ogni documento DEVE avere un `documentTypeId` valido
+   - Il `category` (enum) è mantenuto per compatibilità logiche hardcoded
+   - La configurazione determina comportamento magazzino e contabilità
+
+2. **Movimenti Magazzino**:
+   - Generati solo se `inventoryMovement = true` E `product.type.manageStock = true`
+   - La quantità è moltiplicata per `operationSign`
+   - Il segno finale dipende dal tipo operazione (carico/scarico)
+
+3. **Contabilità**:
+   - Solo documenti con `valuationImpact = true` vengono registrati
+   - Il segno dell'operazione determina entrata/uscita
+
+4. **Numerazione**:
+   - Documenti con stesso `numeratorCode` condividono serie numerica
+   - La numerazione è progressiva per serie
+
+5. **Eliminazione Configurazione**:
+   - Bloccata se ci sono documenti associati
+   - Verifica `prisma.document.count({ where: { documentTypeId } })`
+
+### 📐 Modello Dati Relazionale
+
+```
+┌──────────────────┐
+│ Organization     │
+│                  │
+│ • id             │───┐
+└──────────────────┘   │
+                       │
+        ┌──────────────┼──────────────┐
+        │              │              │
+        ▼              ▼              ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│DocumentType  │ │ Document     │ │StockMovement │
+│Config        │ │              │ │              │
+│              │ │              │ │              │
+│• code        │ │• number      │ │• quantity    │
+│• description │ │• date        │ │• type        │
+│• numerator   │ │• grossTotal  │ │              │
+│  Code        │ │              │ │              │
+│• inventory   │ │• documentType│ │• documentType│
+│  Movement    │ │  Id (FK)     │ │  Id (FK)     │
+│• valuation   │ │              │ │• documentId  │
+│  Impact      │ │              │ │              │
+│• operation   │ │              │ │              │
+│  Sign        │ │              │ │              │
+└──────────────┘ └──────────────┘ └──────────────┘
+```
+
+### 🎯 Best Practices
+
+1. **Configurazione Tipi Documento**:
+   - Crea configurazioni all'inizio del setup organizzazione
+   - Usa codici chiari e consistenti (es. "DDT", "INVOICE", "NC")
+   - Raggruppa tipi correlati con stesso `numeratorCode`
+
+2. **Flag Comportamento**:
+   - `inventoryMovement = true` solo per documenti che movimentano stock
+   - `valuationImpact = true` solo per documenti contabili
+   - `operationSign = -1` solo per documenti che riducono (note credito, resi)
+
+3. **Numerazione**:
+   - Usa `numeratorCode` per raggruppare serie logiche
+   - Esempio: Fatture e Note Credito condividono "FATTURE"
+
+4. **Eliminazione**:
+   - Disattiva (`active = false`) invece di eliminare se ci sono documenti
+   - Verifica sempre documenti associati prima di eliminare
+
 ## 📈 Performance Considerations
 
 ### Ottimizzazioni Implementate:
@@ -823,6 +1601,7 @@ EntitiesPage State (Server Component):
 - ✅ **Suspense boundaries** per loading states
 - ✅ **Server Components** per ridurre bundle client
 - ✅ **Lazy loading Sheet** (mobile menu caricato solo quando necessario)
+- ✅ **Include relazioni** per evitare N+1 queries (categoria, tipologia, vatRate)
 
 ### Ottimizzazioni Suggerite (Futuri):
 - [ ] Paginazione per >100 organizzazioni
