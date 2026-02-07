@@ -5,20 +5,16 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   TableHead,
   TableRow,
   TableHeader,
 } from '@/components/ui/table';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ArrowUpDown, ArrowUp, ArrowDown, Search } from 'lucide-react';
-import { useDebounce } from '@/hooks/use-debounce';
-import { cn } from '@/lib/utils';
-
-const DEBOUNCE_MS = 500;
+import { DataTableSearchInput } from '@/components/ui/data-table-search-input';
 
 /** Colonne ordinabili: id header -> campo per sort */
 const SORTABLE_COLUMNS: { label: string; field: string }[] = [
@@ -37,35 +33,30 @@ function parseSort(sortParam: string | null): { field: string; order: 'asc' | 'd
   return null;
 }
 
+const DEBOUNCE_MS = 500;
+
 export function EntitiesDataTableHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
 
   const sortParam = searchParams.get('sort') ?? undefined;
   const qParam = searchParams.get('q') ?? '';
 
-  const [searchInput, setSearchInput] = useState(qParam);
-  const debouncedSearch = useDebounce(searchInput, DEBOUNCE_MS);
-
-  // Sincronizza input con URL solo quando l'URL è cambiato dall'esterno (es. pulsante indietro):
-  // input già uguale al valore debounced (abbiamo già pushato) ma diverso da qParam.
-  // Così non si sovrascrive nulla mentre l'utente sta digitando.
-  useEffect(() => {
-    if (qParam !== searchInput && searchInput === debouncedSearch) setSearchInput(qParam);
-  }, [qParam, searchInput, debouncedSearch]);
-
-  // Aggiorna URL quando il valore debounced della ricerca cambia
-  useEffect(() => {
-    const next = debouncedSearch.trim() || undefined;
-    const current = qParam.trim() || undefined;
-    if (next === current) return;
-    const nextParams = new URLSearchParams(searchParams.toString());
-    if (next) nextParams.set('q', next);
-    else nextParams.delete('q');
-    nextParams.set('page', '1');
-    router.push(`${pathname}?${nextParams.toString()}`);
-  }, [debouncedSearch, pathname, router, searchParams, qParam]);
+  const updateSearchUrl = useCallback(
+    (debouncedValue: string) => {
+      const next = debouncedValue.trim() || undefined;
+      const nextParams = new URLSearchParams(searchParams.toString());
+      if (next) nextParams.set('q', next);
+      else nextParams.delete('q');
+      nextParams.set('page', '1');
+      startTransition(() => {
+        router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+      });
+    },
+    [pathname, router, searchParams]
+  );
 
   const updateSort = useCallback(
     (field: string) => {
@@ -75,7 +66,9 @@ export function EntitiesDataTableHeader() {
       const nextParams = new URLSearchParams(searchParams.toString());
       nextParams.set('sort', `${field}.${nextOrder}`);
       nextParams.set('page', '1');
-      router.push(`${pathname}?${nextParams.toString()}`);
+      startTransition(() => {
+        router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+      });
     },
     [pathname, router, searchParams, sortParam]
   );
@@ -111,12 +104,12 @@ export function EntitiesDataTableHeader() {
         })}
         <TableHead className="text-right">
           <div className="flex items-center justify-end gap-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <DataTableSearchInput
+              value={qParam}
+              onDebouncedChange={updateSearchUrl}
+              debounceMs={DEBOUNCE_MS}
               placeholder="Cerca..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className={cn('h-8 w-40')}
             />
           </div>
         </TableHead>

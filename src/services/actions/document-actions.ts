@@ -116,14 +116,17 @@ export async function getDocumentsAction(
 
     const where = { ...baseWhere, ...searchFilter };
 
-    // Ordinamento dinamico (documentTypeDescription -> documentType.description)
+    // Ordinamento dinamico (documentTypeDescription -> documentType.description). Prisma richiede un array.
     const parsedSort = parseSortParam(sortParam);
-    let orderBy: Prisma.DocumentOrderByWithRelationInput = { date: 'desc', number: 'desc' };
+    let orderBy: Prisma.DocumentOrderByWithRelationInput[] = [
+      { date: 'desc' },
+      { number: 'desc' },
+    ];
     if (parsedSort && DOCUMENT_SORT_FIELDS.includes(parsedSort.field as (typeof DOCUMENT_SORT_FIELDS)[number])) {
       if (parsedSort.field === 'documentTypeDescription') {
-        orderBy = { documentType: { description: parsedSort.order } };
+        orderBy = [{ documentType: { description: parsedSort.order } }];
       } else {
-        orderBy = { [parsedSort.field]: parsedSort.order };
+        orderBy = [{ [parsedSort.field]: parsedSort.order }];
       }
     }
 
