@@ -11,6 +11,9 @@ import { prisma } from '@/lib/prisma';
 import { AdminSidebar } from '@/components/features/admin/AdminSidebar';
 import { Navbar } from '@/components/common/Navbar';
 
+// Forza rendering dinamico perché usa cookies per autenticazione
+export const dynamic = 'force-dynamic';
+
 export default async function AdminLayout({
   children,
 }: {

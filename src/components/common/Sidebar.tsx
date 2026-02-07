@@ -21,6 +21,7 @@ import {
   Settings,
   Ruler,
   Activity,
+  CreditCard,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -120,6 +121,11 @@ const navItems: NavItem[] = [
         title: 'Tipi Documento',
         href: '/settings/document-types',
         icon: FileText,
+      },
+      {
+        title: 'Modalità di Pagamento',
+        href: '/settings/payments',
+        icon: CreditCard,
       },
     ],
   },
