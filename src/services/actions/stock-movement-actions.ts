@@ -130,7 +130,7 @@ export async function getStockMovementsAction(
             OR: [
               { product: { code: { contains: q, mode: 'insensitive' } } },
               { product: { name: { contains: q, mode: 'insensitive' } } },
-              { document: { number: { contains: q, mode: 'insensitive' } } },
+              { documentNumber: { contains: q, mode: 'insensitive' } },
               { notes: { contains: q, mode: 'insensitive' } },
             ],
           }
@@ -144,7 +144,7 @@ export async function getStockMovementsAction(
       } else if (parsedSort.field === 'warehouseCode') {
         orderBy = [{ warehouse: { code: parsedSort.order } }];
       } else if (parsedSort.field === 'documentNumber') {
-        orderBy = [{ document: { number: parsedSort.order } }];
+        orderBy = [{ documentNumber: parsedSort.order }];
       } else {
         orderBy = [{ [parsedSort.field]: parsedSort.order }];
       }

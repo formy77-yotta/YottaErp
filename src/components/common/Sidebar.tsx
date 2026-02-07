@@ -24,6 +24,7 @@ import {
   CreditCard,
   CalendarClock,
   ClipboardList,
+  LayoutTemplate,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -136,7 +137,12 @@ const navItems: NavItem[] = [
         icon: FileText,
       },
       {
-        title: 'Pagamenti',
+        title: 'Modelli di stampa',
+        href: '/settings/templates',
+        icon: LayoutTemplate,
+      },
+      {
+        title: 'Tipi di pagamento',
         href: '/settings/payments',
         icon: CreditCard,
       },

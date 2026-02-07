@@ -24,6 +24,7 @@ import {
   createDocumentTypeAction, 
   updateDocumentTypeAction
 } from '@/services/actions/document-type-actions';
+import { getTemplatesAction } from '@/services/actions/template-actions';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -61,6 +62,7 @@ interface DocumentTypeFormProps {
     operationSignValuation: number | null;
     documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
     active: boolean;
+    templateId?: string | null;
   };
   
   /**
@@ -82,7 +84,14 @@ export function DocumentTypeForm({
   onError 
 }: DocumentTypeFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const isEditing = !!documentType;
+
+  useEffect(() => {
+    getTemplatesAction().then((res) => {
+      if (res.success) setTemplates(res.data.map((t) => ({ id: t.id, name: t.name })));
+    });
+  }, []);
 
   // Setup form con validazione Zod
   const form = useForm<DocumentTypeFormInput>({
@@ -97,6 +106,7 @@ export function DocumentTypeForm({
       operationSignValuation: null,
       documentDirection: 'SALE' as const,
       active: true,
+      templateId: null,
       ...(isEditing && documentType ? { id: documentType.id } : {}),
     },
   });
@@ -118,6 +128,7 @@ export function DocumentTypeForm({
           : null,
         documentDirection: documentType.documentDirection,
         active: documentType.active,
+        templateId: documentType.templateId ?? null,
         ...(isEditing ? { id: documentType.id } : {}),
       }, { keepDefaultValues: false });
     } else {
@@ -131,6 +142,7 @@ export function DocumentTypeForm({
         operationSignStock: null,
         operationSignValuation: null,
         active: true,
+        templateId: null,
       }, { keepDefaultValues: false });
     }
   }, [documentType, form, isEditing]);
@@ -413,6 +425,40 @@ export function DocumentTypeForm({
               </Select>
               <FormDescription>
                 Determina il tipo di operazione del documento e quali prodotti sono visibili
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Modello di stampa */}
+        <FormField
+          control={form.control}
+          name="templateId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Modello di stampa</FormLabel>
+              <Select
+                onValueChange={(v) => field.onChange(v === '__none__' ? null : v)}
+                value={field.value ?? '__none__'}
+                disabled={isLoading}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nessun modello (usa predefinito)" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="__none__">Nessun modello (usa predefinito)</SelectItem>
+                  {templates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Modello grafico per la stampa di questo tipo di documento. Configura da Impostazioni → Modelli.
               </FormDescription>
               <FormMessage />
             </FormItem>

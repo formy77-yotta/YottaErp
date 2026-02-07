@@ -135,6 +135,8 @@ function DocumentTypeRow({ documentType }: { documentType: {
   operationSignValuation: number | null;
   documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
   active: boolean;
+  templateId: string | null;
+  templateName: string | null;
   createdAt: Date;
   updatedAt: Date;
 } }) {
@@ -205,6 +207,13 @@ function DocumentTypeRow({ documentType }: { documentType: {
         )}
       </TableCell>
       <TableCell>
+        {documentType.templateName ? (
+          <span className="text-sm">{documentType.templateName}</span>
+        ) : (
+          <span className="text-muted-foreground text-sm">—</span>
+        )}
+      </TableCell>
+      <TableCell>
         <Badge variant={documentType.active ? 'default' : 'secondary'}>
           {documentType.active ? 'Attiva' : 'Disattiva'}
         </Badge>
@@ -241,6 +250,7 @@ function DocumentTypesTableSkeleton() {
                 <TableHead>Segno Magazzino</TableHead>
                 <TableHead>Segno Valorizzazione</TableHead>
                 <TableHead>Direzione</TableHead>
+                <TableHead>Modello PDF</TableHead>
                 <TableHead>Stato</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
@@ -271,6 +281,9 @@ function DocumentTypesTableSkeleton() {
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-20 bg-muted animate-pulse rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-4 w-24 bg-muted animate-pulse rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-4 w-16 bg-muted animate-pulse rounded" />

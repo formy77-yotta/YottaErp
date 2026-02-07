@@ -23,20 +23,20 @@ interface DocumentsTableBodyProps {
 export function DocumentsTableBody({ documents }: DocumentsTableBodyProps) {
   return (
     <TableBody>
-      {documents.map((doc) => (
-        <TableRow key={doc.id}>
-          <TableCell className="font-medium">{doc.number}</TableCell>
-          <TableCell>
+      {documents.map((doc) => {
+        const cells = [
+          <TableCell key="num" className="font-medium">{doc.number}</TableCell>,
+          <TableCell key="date">
             {new Date(doc.date).toLocaleDateString('it-IT', {
               year: 'numeric',
               month: '2-digit',
               day: '2-digit',
             })}
-          </TableCell>
-          <TableCell>
+          </TableCell>,
+          <TableCell key="type">
             <Badge variant="outline">{doc.documentType.description}</Badge>
-          </TableCell>
-          <TableCell>
+          </TableCell>,
+          <TableCell key="entity">
             {doc.entity ? (
               <div>
                 <div className="font-medium">{doc.entity.businessName}</div>
@@ -47,18 +47,18 @@ export function DocumentsTableBody({ documents }: DocumentsTableBodyProps) {
             ) : (
               <span className="text-muted-foreground text-sm">-</span>
             )}
-          </TableCell>
-          <TableCell className="text-right">
+          </TableCell>,
+          <TableCell key="net" className="text-right">
             {formatCurrency(new Decimal(doc.netTotal))}
-          </TableCell>
-          <TableCell className="text-right">
+          </TableCell>,
+          <TableCell key="vat" className="text-right">
             {formatCurrency(new Decimal(doc.vatTotal))}
-          </TableCell>
-          <TableCell className="text-right font-medium">
+          </TableCell>,
+          <TableCell key="gross" className="text-right font-medium">
             {formatCurrency(new Decimal(doc.grossTotal))}
-          </TableCell>
-          <TableCell /> {/* Colonna ricerca (header) */}
-          <TableCell className="text-right">
+          </TableCell>,
+          <TableCell key="search" />,
+          <TableCell key="actions" className="text-right">
             <div className="flex items-center justify-end gap-2">
               {(doc.category === 'INVOICE' || doc.category === 'CREDIT_NOTE') && (
                 <DownloadXMLIconButton documentId={doc.id} />
@@ -69,9 +69,11 @@ export function DocumentsTableBody({ documents }: DocumentsTableBodyProps) {
                 </Button>
               </Link>
             </div>
-          </TableCell>
-        </TableRow>
-      ))}
+          </TableCell>,
+        ];
+        return <TableRow key={doc.id}>{cells}</TableRow>;
+      })}
     </TableBody>
   );
 }
+

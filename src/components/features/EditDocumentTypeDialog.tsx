@@ -29,6 +29,7 @@ interface EditDocumentTypeDialogProps {
     operationSignValuation: number | null;
     documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
     active: boolean;
+    templateId?: string | null;
   };
 }
 

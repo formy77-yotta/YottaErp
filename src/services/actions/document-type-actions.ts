@@ -55,6 +55,8 @@ type DocumentTypeConfigOutput = {
   operationSignValuation: number | null;
   documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
   active: boolean;
+  templateId: string | null;
+  templateName: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -77,7 +79,7 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
         organizationId: ctx.organizationId,
       },
       orderBy: [
-        { code: 'asc' }, // Ordina per codice
+        { code: 'asc' },
       ],
       select: {
         id: true,
@@ -90,6 +92,8 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
         operationSignValuation: true,
         documentDirection: true,
         active: true,
+        templateId: true,
+        template: { select: { name: true } },
         createdAt: true,
         updatedAt: true,
       },
@@ -98,8 +102,20 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
     return {
       success: true,
       data: types.map(type => ({
-        ...type,
+        id: type.id,
+        code: type.code,
+        description: type.description,
+        numeratorCode: type.numeratorCode,
+        inventoryMovement: type.inventoryMovement,
+        valuationImpact: type.valuationImpact,
+        operationSignStock: type.operationSignStock,
+        operationSignValuation: type.operationSignValuation,
         documentDirection: type.documentDirection as 'PURCHASE' | 'SALE' | 'INTERNAL',
+        active: type.active,
+        templateId: type.templateId,
+        templateName: type.template?.name ?? null,
+        createdAt: type.createdAt,
+        updatedAt: type.updatedAt,
       })),
     };
   } catch (error) {
@@ -167,7 +183,7 @@ export async function createDocumentTypeAction(
     // 6. ✅ Creazione configurazione con organizationId
     const type = await prisma.documentTypeConfig.create({
       data: {
-        organizationId: ctx.organizationId, // ✅ Associa automaticamente all'organizzazione
+        organizationId: ctx.organizationId,
         code: normalizedCode,
         description: validatedData.description.trim(),
         numeratorCode: normalizedNumeratorCode,
@@ -177,6 +193,7 @@ export async function createDocumentTypeAction(
         operationSignValuation: validatedData.valuationImpact ? validatedData.operationSignValuation : null,
         documentDirection: validatedData.documentDirection,
         active: validatedData.active,
+        templateId: validatedData.templateId ?? null,
       },
     });
 
@@ -316,6 +333,7 @@ export async function updateDocumentTypeAction(
           documentDirection: validatedData.documentDirection 
         }),
         ...(validatedData.active !== undefined && { active: validatedData.active }),
+        ...(validatedData.templateId !== undefined && { templateId: validatedData.templateId }),
       },
     });
 

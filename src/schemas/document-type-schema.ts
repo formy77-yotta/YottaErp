@@ -49,6 +49,7 @@ export const createDocumentTypeSchema = z.object({
     .optional(),
   documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).default('SALE'),
   active: z.boolean().default(true),
+  templateId: z.string().cuid().optional().nullable(),
 }).refine(
   (data) => {
     // Se inventoryMovement è true, operationSignStock deve essere definito
@@ -122,6 +123,7 @@ export const updateDocumentTypeSchema = z.object({
     .optional(),
   documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).optional(),
   active: z.boolean().optional(),
+  templateId: z.string().cuid().optional().nullable(),
 }).refine(
   (data) => {
     // Se inventoryMovement è true, operationSignStock deve essere definito
