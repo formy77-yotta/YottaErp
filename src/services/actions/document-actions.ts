@@ -227,6 +227,7 @@ export async function getDocumentAction(
         grossTotal: true,
         notes: true,
         paymentTerms: true,
+        mainWarehouseId: true,
         createdAt: true,
         updatedAt: true,
         organizationId: true, // Per verifica multitenant
@@ -245,6 +246,7 @@ export async function getDocumentAction(
             netAmount: true,
             vatAmount: true,
             grossAmount: true,
+            warehouseId: true,
           },
         },
       },

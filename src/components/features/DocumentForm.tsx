@@ -310,14 +310,17 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       if (isEditing && documentId) {
         // Aggiornamento documento esistente
         // Converti stringhe vuote in undefined per lo schema Zod
+        const entityIdValue = data.entityId as string | undefined;
+        const mainWarehouseIdValue = data.mainWarehouseId as string | undefined;
+        
         const updateData: UpdateDocumentInput = {
           id: documentId,
-          ...(data.entityId !== undefined && { 
-            entityId: (data.entityId && (data.entityId as string).trim()) ? (data.entityId as string).trim() : undefined
+          ...(entityIdValue !== undefined && { 
+            entityId: entityIdValue?.trim() || undefined
           }),
           ...(data.date && { date: new Date(data.date as string) }),
-          ...(data.mainWarehouseId !== undefined && { 
-            mainWarehouseId: (data.mainWarehouseId && (data.mainWarehouseId as string).trim()) ? (data.mainWarehouseId as string).trim() : undefined
+          ...(mainWarehouseIdValue !== undefined && { 
+            mainWarehouseId: mainWarehouseIdValue?.trim() || undefined
           }),
           // Le righe sono sempre obbligatorie in update
           lines: (data.lines as any[]).map(line => ({
@@ -327,13 +330,17 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             unitPrice: line.unitPrice,
             quantity: line.quantity,
             vatRate: line.vatRate,
-            warehouseId: (line.warehouseId && line.warehouseId.trim()) ? line.warehouseId.trim() : undefined,
+            warehouseId: line.warehouseId?.trim() || undefined,
           })),
           ...(data.notes !== undefined && { notes: (data.notes as string)?.trim() || undefined }),
           ...(data.paymentTerms !== undefined && { paymentTerms: (data.paymentTerms as string)?.trim() || undefined }),
         };
 
+        console.log('Submitting update:', updateData); // Debug
+
         const result = await updateDocumentAction(updateData);
+
+        console.log('Update result:', result); // Debug
 
         if (result.success) {
           onSuccess?.();
@@ -830,7 +837,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           </Button>
           <Button type="submit" disabled={isLoading}>
             {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Crea Documento
+            {isEditing ? 'Salva Modifiche' : 'Crea Documento'}
           </Button>
         </div>
       </form>
