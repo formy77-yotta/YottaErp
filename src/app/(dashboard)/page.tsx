@@ -7,7 +7,7 @@
 
 import { Suspense } from 'react';
 import { getDashboardStats } from '@/services/actions/dashboard-actions';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Users,
   FileText,

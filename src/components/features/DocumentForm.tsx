@@ -217,6 +217,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           // NOTA: mainWarehouseId e warehouseId non sono salvati nel database
           // Vengono determinati al momento della creazione/aggiornamento con logica a cascata
           // In modifica, lasciamo i campi vuoti e l'utente può selezionarli manualmente
+          // IMPORTANTE: reset con keepDefaultValues: false per rimuovere campi non presenti nello schema
           form.reset({
             entityId: doc.entity?.id || '',
             date: new Date(doc.date).toISOString().split('T')[0],
@@ -232,7 +233,17 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             })),
             notes: doc.notes || '',
             paymentTerms: doc.paymentTerms || '',
+          }, { 
+            keepDefaultValues: false, // Rimuove campi non presenti nei dati resettati
+            keepValues: false, // Sostituisce completamente i valori
           });
+          
+          // Rimuovi esplicitamente campi che non sono nello schema update
+          // Questo previene errori di validazione silenziosi
+          setTimeout(() => {
+            form.unregister('documentTypeId');
+            form.unregister('number');
+          }, 0);
         }
       } catch (error) {
         console.error('Errore caricamento dati:', error);
@@ -451,6 +462,9 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           onSubmit,
           (errors) => {
             console.error('Form validation errors:', errors); // Debug
+            console.error('Form values:', form.getValues()); // Debug
+            console.error('Form errors object keys:', Object.keys(errors)); // Debug
+            
             // Mostra il primo errore trovato
             const errorKeys = Object.keys(errors);
             if (errorKeys.length > 0) {
@@ -458,11 +472,14 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               const firstError = errors[firstErrorKey as keyof typeof errors];
               if (firstError && 'message' in firstError) {
                 setError(`Errore di validazione in ${firstErrorKey}: ${firstError.message}`);
+              } else if (firstError && firstError.type) {
+                setError(`Errore di validazione nel campo ${firstErrorKey}: ${firstError.type}`);
               } else {
                 setError(`Errore di validazione nel campo ${firstErrorKey}`);
               }
             } else {
-              setError('Errore di validazione. Controlla i campi del form.');
+              // Se l'oggetto errori è vuoto, potrebbe essere un problema con il resolver
+              setError('Errore di validazione. Verifica che tutti i campi obbligatori siano compilati correttamente.');
             }
           }
         )} 
