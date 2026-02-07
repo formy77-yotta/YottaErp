@@ -19,7 +19,7 @@ import { Decimal } from 'decimal.js';
 import { updateDocumentSchema, type CreateDocumentInput, type UpdateDocumentInput, type DocumentLineInput } from '@/schemas/document-schema';
 import { createDocumentAction, updateDocumentAction, getProposedDocumentNumberAction, getDocumentAction } from '@/services/actions/document-actions';
 import { getDocumentTypesAction } from '@/services/actions/document-type-actions';
-import { getEntitiesAction } from '@/services/actions/entity-actions';
+import { getEntitiesAction, type EntityRow } from '@/services/actions/entity-actions';
 import { getProductsAction } from '@/services/actions/product-actions';
 import { getWarehousesAction } from '@/services/actions/warehouse-actions';
 import { getPaymentConditionsAction } from '@/services/actions/payment-actions';
@@ -128,6 +128,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     unitPrice?: string | Decimal;
     quantity?: string | Decimal;
     vatRate?: string | Decimal;
+    warehouseId?: string;
   }>>([]);
 
   // Crea resolver dinamicamente basato su isEditing
@@ -208,11 +209,14 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         const up = line?.unitPrice ?? snap?.unitPrice;
         const qty = line?.quantity ?? snap?.quantity;
         const vat = line?.vatRate ?? snap?.vatRate;
+        const upStr = up != null ? String(up).trim() : '';
+        const qtyStr = qty != null ? String(qty).trim() : '';
+        const vatStr = vat != null ? String(vat).trim() : '';
         return {
           ...line,
-          unitPrice: up != null && up !== '' && String(up).trim() !== '0' ? up : (snap?.unitPrice ?? '0'),
-          quantity: qty != null && qty !== '' ? qty : (snap?.quantity ?? '1'),
-          vatRate: vat != null && vat !== '' ? vat : (snap?.vatRate ?? '0.22'),
+          unitPrice: upStr !== '' && upStr !== '0' ? up : (snap?.unitPrice ?? '0'),
+          quantity: qtyStr !== '' ? qty : (snap?.quantity ?? '1'),
+          vatRate: vatStr !== '' ? vat : (snap?.vatRate ?? '0.22'),
         };
       });
     }
@@ -294,7 +298,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       try {
         const [typesResult, entitiesResult, productsResult, warehousesResult, paymentConditionsResult, documentResult] = await Promise.all([
           getDocumentTypesAction(),
-          getEntitiesAction(),
+          getEntitiesAction(undefined, { perPage: '500' }),
           getProductsAction({ active: true }),
           getWarehousesAction(),
           getPaymentConditionsAction(true), // Solo condizioni attive
@@ -305,7 +309,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           setDocumentTypes(typesResult.data.filter(t => t.active));
         }
         if (entitiesResult.success) {
-          setEntities(entitiesResult.data.filter(e => e.active));
+          setEntities(entitiesResult.data.data.filter((e: EntityRow) => e.active));
         }
         if (productsResult.success) {
           setProducts(productsResult.data);
@@ -331,13 +335,23 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             warehouseId: '',
           }));
 
+          const linesWithDecimal = doc.lines.map((line) => ({
+            productId: line.productId || '',
+            productCode: line.productCode ?? '',
+            description: line.description ?? '',
+            unitPrice: new Decimal(line.unitPrice != null && String(line.unitPrice).trim() !== '' ? String(line.unitPrice) : '0'),
+            quantity: new Decimal(line.quantity != null && String(line.quantity).trim() !== '' ? String(line.quantity) : '1'),
+            vatRate: new Decimal(line.vatRate != null && String(line.vatRate).trim() !== '' ? String(line.vatRate) : '0.22'),
+            warehouseId: '',
+          }));
+
           setLoadedLinesSnapshot(linesForForm);
 
           form.reset({
             entityId: doc.entityId ?? doc.entity?.id ?? '',
             date: new Date(doc.date),
             mainWarehouseId: '',
-            lines: linesForForm,
+            lines: linesWithDecimal,
             notes: doc.notes || '',
             paymentTerms: doc.paymentTerms || '',
             paymentConditionId: doc.paymentConditionId ?? doc.paymentCondition?.id ?? '',
@@ -348,7 +362,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
           // Forza di nuovo le righe dopo il reset (evita che il field array resti con i default)
           requestAnimationFrame(() => {
-            replace(linesForForm);
+            replace(linesWithDecimal);
           });
 
           setTimeout(() => {
@@ -487,9 +501,12 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                 const up = line?.unitPrice ?? snap?.unitPrice;
                 const qty = line?.quantity ?? snap?.quantity;
                 const vat = line?.vatRate ?? snap?.vatRate;
-                const unitPriceOk = up != null && up !== '' && String(up).trim() !== '0';
-                const qtyOk = qty != null && qty !== '' && String(qty).trim() !== '0';
-                const vatOk = vat != null && vat !== '';
+                const upStr = up != null ? String(up).trim() : '';
+                const qtyStr = qty != null ? String(qty).trim() : '';
+                const vatStr = vat != null ? String(vat).trim() : '';
+                const unitPriceOk = upStr !== '' && upStr !== '0';
+                const qtyOk = qtyStr !== '' && qtyStr !== '0';
+                const vatOk = vatStr !== '';
                 return {
                   ...line,
                   productId:

@@ -22,6 +22,11 @@ import { prisma } from '@/lib/prisma';
 import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError } from '@/lib/auth';
 import { createEntitySchema, updateEntitySchema } from '@/schemas/entity-schema';
 import type { CreateEntityInput, UpdateEntityInput } from '@/schemas/entity-schema';
+import {
+  parseSearchParams,
+  parseSortParam,
+  type SearchParams,
+} from '@/lib/validations/search-params';
 
 /**
  * Tipo di ritorno standard per Server Actions
@@ -70,17 +75,8 @@ function mapEntityTypeFromPrisma(
   }
 }
 
-/**
- * Ottiene tutte le entità dell'organizzazione corrente
- * 
- * MULTITENANT: Filtra automaticamente per organizationId
- * 
- * @param type - Tipo opzionale per filtrare (CUSTOMER, SUPPLIER, LEAD)
- * @returns Array di entità
- */
-export async function getEntitiesAction(
-  type?: 'CUSTOMER' | 'SUPPLIER' | 'LEAD'
-): Promise<ActionResult<Array<{
+/** Tipo riga entità restituita da getEntitiesAction */
+export type EntityRow = {
   id: string;
   type: 'CUSTOMER' | 'SUPPLIER' | 'LEAD';
   businessName: string;
@@ -96,92 +92,129 @@ export async function getEntitiesAction(
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
-}>>> {
+};
+
+/** Campi ordinabili per Entity (whitelist Prisma) */
+const ENTITY_SORT_FIELDS = [
+  'type',
+  'businessName',
+  'vatNumber',
+  'fiscalCode',
+  'address',
+  'email',
+  'active',
+  'createdAt',
+] as const;
+
+/**
+ * Ottiene le entità dell'organizzazione con ricerca, ordinamento e paginazione server-side.
+ *
+ * MULTITENANT: Filtra automaticamente per organizationId.
+ *
+ * @param type - Tipo opzionale per filtrare (CUSTOMER, SUPPLIER, LEAD)
+ * @param searchParamsRaw - Parametri URL (page, perPage, sort, q) da validare con parseSearchParams
+ * @returns { data, count } per la DataTable
+ */
+export async function getEntitiesAction(
+  type?: 'CUSTOMER' | 'SUPPLIER' | 'LEAD',
+  searchParamsRaw?: Record<string, string | string[] | undefined>
+): Promise<ActionResult<{ data: EntityRow[]; count: number }>> {
   try {
-    // 1. ✅ Ottieni contesto autenticazione (include organizationId)
     const ctx = await getAuthContext();
 
-    // 2. Costruisci filtro tipo per Prisma
-    // Usa isLead per distinguere LEAD da CUSTOMER (entrambi sono CLIENT nel DB)
-    let typeFilter: { 
+    const searchParams: SearchParams = searchParamsRaw
+      ? parseSearchParams(searchParamsRaw)
+      : { page: 1, perPage: 10, sort: undefined, q: undefined };
+
+    const { page, perPage, sort: sortParam, q } = searchParams;
+    const skip = (page - 1) * perPage;
+
+    // Filtro tipo (come prima)
+    let typeFilter: {
       type?: { in: ('CLIENT' | 'PROVIDER' | 'BOTH')[] };
       isLead?: boolean;
     } = {};
-    
     if (type) {
-      // Mappa tipo frontend a tipo Prisma
       switch (type) {
         case 'CUSTOMER':
-          // Clienti: CLIENT o BOTH, ma ESCLUDI i LEAD (isLead = false)
-          typeFilter = { 
-            type: { in: ['CLIENT', 'BOTH'] },
-            isLead: false, // Escludi i LEAD
-          };
+          typeFilter = { type: { in: ['CLIENT', 'BOTH'] }, isLead: false };
           break;
         case 'SUPPLIER':
-          // Fornitori: PROVIDER o BOTH
           typeFilter = { type: { in: ['PROVIDER', 'BOTH'] } };
           break;
         case 'LEAD':
-          // Lead: CLIENT con isLead = true
-          typeFilter = { 
-            type: { in: ['CLIENT'] },
-            isLead: true, // Solo i LEAD
-          };
+          typeFilter = { type: { in: ['CLIENT'] }, isLead: true };
           break;
       }
     }
 
-    // 3. Recupera entità filtrate per organizzazione e tipo
-    const entities = await prisma.entity.findMany({
-      where: {
-        organizationId: ctx.organizationId,
-        ...typeFilter,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,
-        type: true,
-        isLead: true, // ✅ Include isLead per distinguere LEAD da CUSTOMER
-        businessName: true,
-        vatNumber: true,
-        fiscalCode: true,
-        address: true,
-        city: true,
-        province: true,
-        zipCode: true,
-        email: true,
-        pec: true,
-        sdiCode: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    // Ricerca testuale: contains su businessName, vatNumber, fiscalCode (case insensitive)
+    const searchFilter =
+      q && q.length > 0
+        ? {
+            OR: [
+              { businessName: { contains: q, mode: 'insensitive' as const } },
+              { vatNumber: { contains: q, mode: 'insensitive' as const } },
+              { fiscalCode: { contains: q, mode: 'insensitive' as const } },
+            ],
+          }
+        : {};
 
-    // 4. Mappa i tipi da Prisma a frontend
-    // Usa isLead per distinguere LEAD da CUSTOMER
-    const mappedEntities = entities.map((entity) => ({
+    const where = {
+      organizationId: ctx.organizationId,
+      ...typeFilter,
+      ...searchFilter,
+    };
+
+    // Ordinamento dinamico (solo campi whitelist)
+    const parsedSort = parseSortParam(sortParam);
+    const orderBy =
+      parsedSort && ENTITY_SORT_FIELDS.includes(parsedSort.field as (typeof ENTITY_SORT_FIELDS)[number])
+        ? { [parsedSort.field]: parsedSort.order }
+        : { createdAt: 'desc' as const };
+
+    const [entities, count] = await Promise.all([
+      prisma.entity.findMany({
+        where,
+        orderBy,
+        skip,
+        take: perPage,
+        select: {
+          id: true,
+          type: true,
+          isLead: true,
+          businessName: true,
+          vatNumber: true,
+          fiscalCode: true,
+          address: true,
+          city: true,
+          province: true,
+          zipCode: true,
+          email: true,
+          pec: true,
+          sdiCode: true,
+          active: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.entity.count({ where }),
+    ]);
+
+    const mappedEntities: EntityRow[] = entities.map((entity) => ({
       ...entity,
       type: mapEntityTypeFromPrisma(entity.type, entity.isLead),
     }));
 
     return {
       success: true,
-      data: mappedEntities,
+      data: { data: mappedEntities, count },
     };
   } catch (error) {
     console.error('Errore recupero entità:', error);
-
     if (error instanceof ForbiddenError) {
-      return {
-        success: false,
-        error: error.message,
-      };
+      return { success: false, error: error.message };
     }
-
     return {
       success: false,
       error: 'Errore durante il recupero delle entità',

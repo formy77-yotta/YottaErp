@@ -1620,6 +1620,15 @@ YottaErp/
 └── README.md
 ```
 
+### DataTable e parametri URL (liste server-side)
+
+Per le liste (Entities, Prodotti, ecc.) usare **ricerca e ordinamento server-side** con parametri nell’URL:
+
+- **Schema comune**: `src/lib/validations/search-params.ts` (Zod) per `page`, `perPage`, `sort` (formato `campo.ordine`), `q` (ricerca testuale).
+- **Server**: la Server Action riceve i `searchParams` validati, applica `where` (es. `contains`, `mode: 'insensitive'` per `q`) e `orderBy` dinamico, restituisce `{ data, count }`.
+- **Client**: `useSearchParams`, `usePathname`, `useRouter` per aggiornare l’URL (sort, q, page); **nessun fetch in useEffect** – il refetch avviene lato server al cambio URL.
+- **UI**: intestazioni cliccabili che impostano `sort` nell’URL; input di ricerca con **debounce (500ms)** che aggiorna `q`; loading con `loading.tsx` o `Suspense`.
+
 ### File Mandatori da Creare Subito
 
 #### 1. `src/lib/prisma.ts`

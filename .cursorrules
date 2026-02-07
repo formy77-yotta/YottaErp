@@ -382,7 +382,8 @@ src/
 ├── lib/
 │   ├── prisma.ts            # Prisma client singleton
 │   ├── decimal-utils.ts     # ✅ Helper per calcoli monetari
-│   └── validators.ts        # ✅ Validatori P.IVA/CF
+│   ├── validators.ts        # ✅ Validatori P.IVA/CF
+│   └── validations/         # ✅ Validazione parametri URL (es. search-params.ts)
 ├── schemas/                 # ✅ Schemi Zod
 │   ├── entity-schema.ts     # Customer, Supplier, Product
 │   ├── document-schema.ts   # Invoice, Order, DDT
@@ -669,6 +670,14 @@ chore(deps): update dependencies
 - Audit log per operazioni critiche
 - GDPR compliance
 
+## DataTable e liste server-side
+
+- Parametri di ricerca/ordinamento/paginazione **nell’URL** (es. `page`, `perPage`, `sort`, `q`).
+- Validare con schema Zod in `src/lib/validations/search-params.ts` e passare i params alla Server Action.
+- **Nessun fetch in useEffect**: il Server Component legge `searchParams` e chiama la Server Action; il client aggiorna l’URL con `useSearchParams`/`useRouter` e la pagina si ri-renderizza con i nuovi dati.
+- Intestazioni ordinabili e input di ricerca con **debounce (500ms)** che aggiornano l’URL.
+- Loading: `loading.tsx` sulla route e/o `Suspense` con skeleton.
+
 ## Performance
 
 ### Frontend
@@ -735,6 +744,13 @@ chore(deps): update dependencies
 6. **Performance** - Deve essere efficiente
 7. **Eleganza** - Deve essere pulito
 
+### DATA TABLE & LIST VIEW RULES
+- Tutte le liste devono supportare ordinamento, ricerca e paginazione Server-side.
+- State Management: L'unica fonte di verità per filtri e sorting è l'URL (URLSearchParams).
+- UX: Le intestazioni delle colonne devono essere cliccabili per attivare il sorting.
+- Performance: La ricerca testuale deve avere un debounce di 500ms per evitare chiamate eccessive al DB.
+- Componenti: Usa @tanstack/react-table con i componenti Table di shadcn/ui.
+- Validazione: Ogni parametro di ricerca nell'URL deve essere validato con Zod prima di essere passato a Prisma.
 ---
 
 **Ricorda:** Queste regole servono a mantenere qualità e consistenza in un sistema ERP mission-critical. In caso di dubbi, chiedi!

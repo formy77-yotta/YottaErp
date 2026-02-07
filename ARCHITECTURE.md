@@ -826,9 +826,35 @@ EntitiesPage State (Server Component):
 ├── entityType: 'CUSTOMER' | 'SUPPLIER' | 'LEAD' | undefined
 │   └── From searchParams.type
 │
-└── entities: Entity[]                   # Fetched from server
-    └── Filtered by organizationId + type
+├── searchParams (page, perPage, sort, q)
+│   └── Validati con parseSearchParams (src/lib/validations/search-params.ts)
+│
+└── entities + count                    # Fetched from getEntitiesAction
+    └── Filtro organizationId + type + ricerca testuale (q)
 ```
+
+### DataTable e parametri di ricerca (server-side)
+
+Le liste (Entities, e in futuro Prodotti, Documenti) seguono il pattern **ricerca e ordinamento server-side** con parametri nell’URL:
+
+- **Parametri comuni** (schema `src/lib/validations/search-params.ts`):
+  - `page`: numero pagina (default 1)
+  - `perPage`: elementi per pagina (default 10)
+  - `sort`: ordinamento in formato `campo.ordine` (es. `businessName.asc`, `createdAt.desc`)
+  - `q`: ricerca testuale (aggiornata con debounce 500ms dal client)
+
+- **Flusso**:
+  1. Il Server Component legge `searchParams` e li passa alla Server Action.
+  2. La Server Action valida con `parseSearchParams`, applica `where` (es. `contains` + `mode: 'insensitive'` per `q`) e `orderBy` dinamico, restituisce `{ data, count }`.
+  3. Il client usa `useSearchParams`, `usePathname`, `useRouter` per aggiornare l’URL (sort, q, page); **nessun fetch in useEffect** – il refetch è lato server al cambio URL.
+  4. Intestazioni cliccabili e input di ricerca (debounce) aggiornano l’URL; la pagina si ri-renderizza con i nuovi dati dal server.
+
+- **Componenti**:
+  - Header DataTable (client): `EntitiesDataTableHeader` – intestazioni ordinabili + input ricerca con debounce.
+  - Body: `EntityTable` con `@tanstack/react-table` (solo body; header separato).
+  - Loading: `loading.tsx` sulla route e/o `Suspense` con skeleton.
+
+- **Regola**: mantenere il caricamento dati **solo server-side** (no `useEffect` per il fetch); stato di loading con `loading.tsx` o `Suspense`.
 
 ## 📦 Sistema di Classificazione Prodotti
 
