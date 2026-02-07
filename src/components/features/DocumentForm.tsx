@@ -514,7 +514,17 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // Creazione nuovo documento
         // ✅ Converti Decimal in stringhe per serializzazione Server Action
         // Zod trasformerà le stringhe in Decimal durante la validazione
+        // Type guard: in creazione, data è sempre CreateDocumentInput
+        if (!('documentTypeId' in data)) {
+          setError('Tipo documento mancante. Impossibile creare il documento.');
+          setIsLoading(false);
+          return;
+        }
+        
         const createData = data as CreateDocumentInput;
+        // ✅ Converti Decimal in stringhe per serializzazione Server Action
+        // Zod trasformerà le stringhe in Decimal durante la validazione
+        // Usiamo 'as' perché TypeScript non sa che Zod trasformerà le stringhe
         const submitData = {
           documentTypeId: createData.documentTypeId || '',
           number: createData.number || undefined,
@@ -526,7 +536,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
             productId: line.productId?.trim() || undefined,
             productCode: (line.productCode || '').trim(),
             description: (line.description || '').trim(),
-            // Converti Decimal in stringhe
+            // Converti Decimal in stringhe (Zod le trasformerà in Decimal)
             unitPrice: toDecimalString(line.unitPrice),
             quantity: toDecimalString(line.quantity),
             vatRate: toDecimalString(line.vatRate),
