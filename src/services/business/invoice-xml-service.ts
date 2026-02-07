@@ -180,7 +180,15 @@ export async function generateInvoiceXML(
     ? /^\d{6}$/.test(codiceDestinatario) // 6 cifre = PA
     : true; // Se c'è solo PEC, assumiamo PA
 
-  // 9. Genera XML
+  // 9. ✅ Validazione: per fatture verso PA, CodiceCIG o CodiceCUP sono obbligatori
+  if (isPA && !document.codiceCIG && !document.codiceCUP) {
+    throw new InvoiceXMLError(
+      'Per fatture verso Pubblica Amministrazione è obbligatorio inserire CodiceCIG o CodiceCUP nel documento.',
+      'MISSING_CIG_OR_CUP_FOR_PA'
+    );
+  }
+
+  // 10. Genera XML
   return buildFatturaPAXML(document, codiceDestinatario || undefined, isPA);
 }
 
