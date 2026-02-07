@@ -68,9 +68,21 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith('/admin')) {
     // Se SUPER_ADMIN_IDS è configurato, fai un controllo leggero
     if (SUPER_ADMIN_IDS.length > 0) {
-      const { isAdmin } = isSuperAdmin(request);
+      const { isAdmin, userId } = isSuperAdmin(request);
       
       if (!isAdmin) {
+        // Log per debugging (solo in development)
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Proxy] Accesso negato a /admin:', {
+            userId,
+            configuredIds: SUPER_ADMIN_IDS,
+            reason: userId 
+              ? `User ID ${userId} non è in SUPER_ADMIN_IDS` 
+              : 'Cookie userId non presente',
+            tip: 'Rimuovi SUPER_ADMIN_IDS dal .env per usare la verifica del database',
+          });
+        }
+        
         // Redirect a pagina di accesso negato
         const url = request.nextUrl.clone();
         url.pathname = '/access-denied';
