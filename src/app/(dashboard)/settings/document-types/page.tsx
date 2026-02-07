@@ -124,7 +124,8 @@ function DocumentTypeRow({ documentType }: { documentType: {
   numeratorCode: string;
   inventoryMovement: boolean;
   valuationImpact: boolean;
-  operationSign: number;
+  operationSignStock: number | null;
+  operationSignValuation: number | null;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -161,9 +162,22 @@ function DocumentTypeRow({ documentType }: { documentType: {
         )}
       </TableCell>
       <TableCell>
-        <Badge variant={documentType.operationSign === 1 ? 'default' : 'destructive'}>
-          {documentType.operationSign === 1 ? '+1' : '-1'}
-        </Badge>
+        {documentType.inventoryMovement && documentType.operationSignStock !== null ? (
+          <Badge variant={documentType.operationSignStock === 1 ? 'default' : 'destructive'}>
+            {documentType.operationSignStock === 1 ? '+1' : '-1'}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {documentType.valuationImpact && documentType.operationSignValuation !== null ? (
+          <Badge variant={documentType.operationSignValuation === 1 ? 'default' : 'destructive'}>
+            {documentType.operationSignValuation === 1 ? '+1' : '-1'}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        )}
       </TableCell>
       <TableCell>
         <Badge variant={documentType.active ? 'default' : 'secondary'}>

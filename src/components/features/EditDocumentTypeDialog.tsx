@@ -25,7 +25,8 @@ interface EditDocumentTypeDialogProps {
     numeratorCode: string;
     inventoryMovement: boolean;
     valuationImpact: boolean;
-    operationSign: number;
+    operationSignStock: number | null;
+    operationSignValuation: number | null;
     active: boolean;
   };
 }

@@ -4,7 +4,8 @@
  * CARATTERISTICHE:
  * - Validazione con Zod
  * - Supporto creazione e modifica
- * - Gestione flag comportamentali (inventoryMovement, valuationImpact, operationSign)
+ * - Gestione flag comportamentali (inventoryMovement, valuationImpact)
+ * - Segni operazione separati per magazzino e valorizzazione (abilitati condizionalmente)
  * - Gestione errori da server
  */
 
@@ -56,7 +57,8 @@ interface DocumentTypeFormProps {
     numeratorCode: string;
     inventoryMovement: boolean;
     valuationImpact: boolean;
-    operationSign: number;
+    operationSignStock: number | null;
+    operationSignValuation: number | null;
     active: boolean;
   };
   
@@ -90,7 +92,8 @@ export function DocumentTypeForm({
       numeratorCode: '',
       inventoryMovement: false,
       valuationImpact: false,
-      operationSign: 1,
+      operationSignStock: null,
+      operationSignValuation: null,
       active: true,
       ...(isEditing && documentType ? { id: documentType.id } : {}),
     },
@@ -105,7 +108,8 @@ export function DocumentTypeForm({
         numeratorCode: documentType.numeratorCode,
         inventoryMovement: documentType.inventoryMovement,
         valuationImpact: documentType.valuationImpact,
-        operationSign: documentType.operationSign,
+        operationSignStock: documentType.operationSignStock,
+        operationSignValuation: documentType.operationSignValuation,
         active: documentType.active,
         ...(isEditing ? { id: documentType.id } : {}),
       }, { keepDefaultValues: false });
@@ -117,7 +121,8 @@ export function DocumentTypeForm({
         numeratorCode: '',
         inventoryMovement: false,
         valuationImpact: false,
-        operationSign: 1,
+        operationSignStock: null,
+        operationSignValuation: null,
         active: true,
       }, { keepDefaultValues: false });
     }
@@ -290,34 +295,90 @@ export function DocumentTypeForm({
           />
         </div>
 
-        {/* Segno operazione */}
+        {/* Segno Operazione Magazzino - Abilitato solo se inventoryMovement = true */}
         <FormField
           control={form.control}
-          name="operationSign"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Segno Operazione *</FormLabel>
-              <Select
-                onValueChange={(value) => field.onChange(parseInt(value))}
-                value={field.value.toString()}
-                disabled={isLoading}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona segno operazione" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="1">+1 (Incremento)</SelectItem>
-                  <SelectItem value="-1">-1 (Decremento)</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                +1 per incrementi (fattura vendita), -1 per decrementi (nota credito)
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
+          name="operationSignStock"
+          render={({ field }) => {
+            const inventoryMovement = form.watch('inventoryMovement');
+            return (
+              <FormItem>
+                <FormLabel>
+                  Segno Operazione Magazzino
+                  {inventoryMovement && ' *'}
+                </FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(parseInt(value))}
+                  value={field.value?.toString() || ''}
+                  disabled={!inventoryMovement || isLoading}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        inventoryMovement 
+                          ? "Seleziona segno operazione magazzino" 
+                          : "Abilita 'Movimenta Stock' per configurare"
+                      } />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="1">+1 (Incremento - es. Carico fornitore, Reso cliente)</SelectItem>
+                    <SelectItem value="-1">-1 (Decremento - es. Scarico vendita, DDT)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  {inventoryMovement 
+                    ? "Segno dell'operazione per movimenti magazzino: +1 per incrementi, -1 per decrementi"
+                    : "Abilita 'Movimenta Stock' per configurare il segno operazione magazzino"
+                  }
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+
+        {/* Segno Operazione Valorizzazione - Abilitato solo se valuationImpact = true */}
+        <FormField
+          control={form.control}
+          name="operationSignValuation"
+          render={({ field }) => {
+            const valuationImpact = form.watch('valuationImpact');
+            return (
+              <FormItem>
+                <FormLabel>
+                  Segno Operazione Valorizzazione
+                  {valuationImpact && ' *'}
+                </FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(parseInt(value))}
+                  value={field.value?.toString() || ''}
+                  disabled={!valuationImpact || isLoading}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        valuationImpact 
+                          ? "Seleziona segno operazione valorizzazione" 
+                          : "Abilita 'Impatto Valorizzazione' per configurare"
+                      } />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="1">+1 (Incremento - es. Fattura vendita, Fattura acquisto)</SelectItem>
+                    <SelectItem value="-1">-1 (Decremento - es. Nota credito, Reso)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  {valuationImpact 
+                    ? "Segno dell'operazione per impatto contabile: +1 per incrementi, -1 per decrementi"
+                    : "Abilita 'Impatto Valorizzazione' per configurare il segno operazione contabile"
+                  }
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
 
         {/* Attivo */}

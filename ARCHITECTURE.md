@@ -996,10 +996,10 @@ Per ogni riga documento:
    Se false → Nessun movimento magazzino (prodotto non gestito a magazzino)
    Se true → Continua
     ↓
-3. Calcola quantità con operationSign
+3. Calcola quantità con operationSignStock
     ↓
-   quantity = line.quantity * documentType.operationSign
-   (Se operationSign = -1, inverte segno per reso/carico)
+   quantity = line.quantity * documentType.operationSignStock
+   (Se operationSignStock = -1, inverte segno per reso/carico)
     ↓
 4. Crea StockMovement:
     → quantity: negativo per scarico vendita, positivo per carico
@@ -1012,7 +1012,8 @@ Per ogni riga documento:
 
 **Regola Combinata**:
 - Movimento magazzino creato solo se: `documentType.inventoryMovement = true` **E** `product.type.manageStock = true`
-- Il segno della quantità dipende da `documentType.operationSign` e dal tipo operazione (carico/scarico)
+- Il segno della quantità dipende da `documentType.operationSignStock` (se `inventoryMovement = true`) e dal tipo operazione (carico/scarico)
+- Il segno dell'impatto contabile dipende da `documentType.operationSignValuation` (se `valuationImpact = true`)
 
 ### 🎨 Interfaccia Utente
 
@@ -1192,7 +1193,8 @@ model DocumentTypeConfig {
   // Flag controllo comportamento
   inventoryMovement Boolean @default(false) // Movimenta stock?
   valuationImpact   Boolean @default(false) // Impatta costi/ricavi?
-  operationSign     Int     @default(1)     // +1 incremento, -1 decremento
+  operationSignStock     Int?    // +1 incremento stock, -1 decremento stock (null se inventoryMovement = false)
+  operationSignValuation Int?    // +1 incremento ricavi, -1 decremento ricavi (null se valuationImpact = false)
   
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -1243,7 +1245,7 @@ async function createDocument(data: CreateDocumentInput) {
           productId: line.productId,
           warehouseId: data.warehouseId,
           quantity: new Decimal(line.quantity.toString())
-            .mul(document.documentType.operationSign) // Applica segno operazione
+            .mul(document.documentType.operationSignStock ?? 1) // Applica segno operazione magazzino
             .neg(), // Negativo per scarico vendita
           type: 'SCARICO_VENDITA',
           documentTypeId: document.documentTypeId,
@@ -1282,7 +1284,7 @@ async function processDocumentForAccounting(documentId: string) {
   if (document.documentType.valuationImpact) {
     // Registra in contabilità
     await registerAccountingEntry({
-      type: document.documentType.operationSign === 1 ? 'REVENUE' : 'CREDIT',
+      type: document.documentType.operationSignValuation === 1 ? 'REVENUE' : 'CREDIT',
       amount: document.grossTotal,
       documentId: document.id,
       date: document.date,
@@ -1291,42 +1293,35 @@ async function processDocumentForAccounting(documentId: string) {
 }
 ```
 
-##### 3. `operationSign` (Segno Operazione)
+##### 3. `operationSignStock` (Segno Operazione Magazzino)
 
-**Scopo**: Determina la direzione dell'operazione per calcoli
+**Scopo**: Determina la direzione dell'operazione per movimenti magazzino
+
+**Attivazione**: Abilitato solo se `inventoryMovement = true`
 
 **Valori**:
-- **`+1`**: Incremento
-  - Esempi: Fattura vendita, Carico magazzino, Entrata cassa
-  - Comportamento: Aumenta ricavi/stock/entrate
-- **`-1`**: Decremento
-  - Esempi: Nota Credito, Reso fornitore, Uscita cassa
-  - Comportamento: Riduce ricavi/stock/entrate
+- **`+1`**: Incremento stock
+  - Esempi: Carico fornitore, Reso cliente, Carico iniziale
+  - Comportamento: Aumenta giacenza magazzino
+- **`-1`**: Decremento stock
+  - Esempi: Scarico vendita, DDT, Reso fornitore
+  - Comportamento: Riduce giacenza magazzino
+- **`null`**: Non applicabile (se `inventoryMovement = false`)
 
 **Logica Applicativa**:
 ```typescript
-// Calcolo totale con segno operazione
-function calculateDocumentTotal(lines: DocumentLine[], operationSign: number) {
-  const baseTotal = lines.reduce((sum, line) => 
-    sum.plus(line.grossAmount), new Decimal(0)
-  );
-  
-  // Applica segno operazione
-  return baseTotal.mul(operationSign);
-}
-
-// Movimento magazzino con segno
+// Movimento magazzino con segno stock
 function createStockMovement(
   quantity: Decimal,
-  operationSign: number,
+  operationSignStock: number | null,
   inventoryMovement: boolean
 ) {
-  if (!inventoryMovement) return null;
+  if (!inventoryMovement || operationSignStock === null) return null;
   
   // Quantità negativa per scarico, positiva per carico
-  // operationSign = +1 (fattura vendita) → scarico (negativo)
-  // operationSign = -1 (nota credito) → carico (positivo)
-  const signedQuantity = quantity.mul(operationSign).neg();
+  // operationSignStock = +1 (carico fornitore) → carico (positivo)
+  // operationSignStock = -1 (scarico vendita) → scarico (negativo)
+  const signedQuantity = quantity.mul(operationSignStock).neg();
   
   return {
     quantity: signedQuantity,
@@ -1335,7 +1330,59 @@ function createStockMovement(
 }
 ```
 
-##### 4. `numeratorCode` (Codice Numerazione)
+##### 4. `operationSignValuation` (Segno Operazione Valorizzazione)
+
+**Scopo**: Determina la direzione dell'operazione per impatto contabile
+
+**Attivazione**: Abilitato solo se `valuationImpact = true`
+
+**Valori**:
+- **`+1`**: Incremento ricavi/costi
+  - Esempi: Fattura vendita, Fattura acquisto
+  - Comportamento: Aumenta ricavi o costi in contabilità
+- **`-1`**: Decremento ricavi/costi
+  - Esempi: Nota Credito, Reso
+  - Comportamento: Riduce ricavi o costi in contabilità
+- **`null`**: Non applicabile (se `valuationImpact = false`)
+
+**Logica Applicativa**:
+```typescript
+// Calcolo totale con segno valorizzazione
+function calculateDocumentTotal(lines: DocumentLine[], operationSignValuation: number | null) {
+  const baseTotal = lines.reduce((sum, line) => 
+    sum.plus(line.grossAmount), new Decimal(0)
+  );
+  
+  // Applica segno operazione solo se valuationImpact è attivo
+  if (operationSignValuation !== null) {
+    return baseTotal.mul(operationSignValuation);
+  }
+  
+  return baseTotal; // Nessun impatto contabile
+}
+
+// Registrazione contabile
+async function processDocumentForAccounting(documentId: string) {
+  const document = await prisma.document.findUnique({
+    where: { id: documentId },
+    include: { documentType: true }
+  });
+  
+  // Solo documenti con valuationImpact vengono registrati in contabilità
+  if (document.documentType.valuationImpact && 
+      document.documentType.operationSignValuation !== null) {
+    // Registra in contabilità
+    await registerAccountingEntry({
+      type: document.documentType.operationSignValuation === 1 ? 'REVENUE' : 'CREDIT',
+      amount: document.grossTotal,
+      documentId: document.id,
+      date: document.date,
+    });
+  }
+}
+```
+
+##### 5. `numeratorCode` (Codice Numerazione)
 
 **Scopo**: Raggruppa tipi documento con stessa serie numerica
 
@@ -1396,7 +1443,7 @@ createDocumentAction(data)
          Calcola quantità con operationSign
          ↓
          Crea StockMovement:
-            - quantity = line.quantity * operationSign * (-1 per scarico)
+            - quantity = line.quantity * operationSignStock * (-1 per scarico)
             - type = 'SCARICO_DDT' o 'SCARICO_VENDITA'
             - documentTypeId = document.documentTypeId
             - documentId = document.id
@@ -1418,7 +1465,8 @@ createDocumentAction(data)
   numeratorCode: "PREVENTIVI",
   inventoryMovement: false,  // ❌ Non movimenta stock
   valuationImpact: false,    // ❌ Non impatta contabilità
-  operationSign: 1,          // +1 (neutro, non applicato)
+  operationSignStock: null,      // Non applicabile (inventoryMovement = false)
+  operationSignValuation: null,  // Non applicabile (valuationImpact = false)
   active: true
 }
 ```
@@ -1431,7 +1479,8 @@ createDocumentAction(data)
   numeratorCode: "DDT",
   inventoryMovement: true,   // ✅ Movimenta stock
   valuationImpact: false,    // ❌ Non impatta contabilità
-  operationSign: 1,          // +1 (scarico vendita)
+  operationSignStock: -1,        // -1 (decremento stock - scarico vendita)
+  operationSignValuation: null,  // Non applicabile (valuationImpact = false)
   active: true
 }
 ```
@@ -1444,7 +1493,8 @@ createDocumentAction(data)
   numeratorCode: "FATTURE",
   inventoryMovement: true,   // ✅ Movimenta stock (se già non fatto da DDT)
   valuationImpact: true,     // ✅ Impatta contabilità
-  operationSign: 1,          // +1 (incremento ricavi)
+  operationSignStock: -1,        // -1 (decremento stock - scarico vendita)
+  operationSignValuation: 1,     // +1 (incremento ricavi)
   active: true
 }
 ```
@@ -1457,7 +1507,8 @@ createDocumentAction(data)
   numeratorCode: "FATTURE", // Stessa serie di fatture
   inventoryMovement: true,   // ✅ Movimenta stock (reso)
   valuationImpact: true,     // ✅ Impatta contabilità (riduce ricavi)
-  operationSign: -1,         // -1 (decremento ricavi)
+  operationSignStock: 1,         // +1 (incremento stock - reso cliente)
+  operationSignValuation: -1,   // -1 (decremento ricavi)
   active: true
 }
 ```
@@ -1525,7 +1576,8 @@ model StockMovement {
 
 2. **Movimenti Magazzino**:
    - Generati solo se `inventoryMovement = true` E `product.type.manageStock = true`
-   - La quantità è moltiplicata per `operationSign`
+   - La quantità è moltiplicata per `operationSignStock` (se `inventoryMovement = true`)
+   - L'importo contabile è moltiplicato per `operationSignValuation` (se `valuationImpact = true`)
    - Il segno finale dipende dal tipo operazione (carico/scarico)
 
 3. **Contabilità**:
@@ -1579,7 +1631,8 @@ model StockMovement {
 2. **Flag Comportamento**:
    - `inventoryMovement = true` solo per documenti che movimentano stock
    - `valuationImpact = true` solo per documenti contabili
-   - `operationSign = -1` solo per documenti che riducono (note credito, resi)
+   - `operationSignStock = -1` per scarichi magazzino, `+1` per carichi
+   - `operationSignValuation = -1` solo per documenti che riducono ricavi/costi (note credito, resi)
 
 3. **Numerazione**:
    - Usa `numeratorCode` per raggruppare serie logiche

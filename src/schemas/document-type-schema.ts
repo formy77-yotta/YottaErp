@@ -35,13 +35,52 @@ export const createDocumentTypeSchema = z.object({
     .max(50, 'Codice numerazione troppo lungo'),
   inventoryMovement: z.boolean().default(false),
   valuationImpact: z.boolean().default(false),
-  operationSign: z
+  operationSignStock: z
     .number()
-    .int('Segno operazione deve essere un numero intero')
-    .refine((val) => val === 1 || val === -1, 'Segno operazione deve essere 1 o -1')
-    .default(1),
+    .int('Segno operazione magazzino deve essere un numero intero')
+    .refine((val) => val === 1 || val === -1, 'Segno operazione magazzino deve essere 1 o -1')
+    .nullable()
+    .optional(),
+  operationSignValuation: z
+    .number()
+    .int('Segno operazione valorizzazione deve essere un numero intero')
+    .refine((val) => val === 1 || val === -1, 'Segno operazione valorizzazione deve essere 1 o -1')
+    .nullable()
+    .optional(),
   active: z.boolean().default(true),
-});
+}).refine(
+  (data) => {
+    // Se inventoryMovement è true, operationSignStock deve essere definito
+    if (data.inventoryMovement && (data.operationSignStock === null || data.operationSignStock === undefined)) {
+      return false;
+    }
+    // Se inventoryMovement è false, operationSignStock deve essere null
+    if (!data.inventoryMovement && data.operationSignStock !== null && data.operationSignStock !== undefined) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Segno operazione magazzino richiesto se Movimenta Stock è attivo',
+    path: ['operationSignStock'],
+  }
+).refine(
+  (data) => {
+    // Se valuationImpact è true, operationSignValuation deve essere definito
+    if (data.valuationImpact && (data.operationSignValuation === null || data.operationSignValuation === undefined)) {
+      return false;
+    }
+    // Se valuationImpact è false, operationSignValuation deve essere null
+    if (!data.valuationImpact && data.operationSignValuation !== null && data.operationSignValuation !== undefined) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Segno operazione valorizzazione richiesto se Impatto Valorizzazione è attivo',
+    path: ['operationSignValuation'],
+  }
+);
 
 export type CreateDocumentTypeInput = z.infer<typeof createDocumentTypeSchema>;
 
@@ -68,12 +107,51 @@ export const updateDocumentTypeSchema = z.object({
     .optional(),
   inventoryMovement: z.boolean().optional(),
   valuationImpact: z.boolean().optional(),
-  operationSign: z
+  operationSignStock: z
     .number()
-    .int('Segno operazione deve essere un numero intero')
-    .refine((val) => val === 1 || val === -1, 'Segno operazione deve essere 1 o -1')
+    .int('Segno operazione magazzino deve essere un numero intero')
+    .refine((val) => val === 1 || val === -1, 'Segno operazione magazzino deve essere 1 o -1')
+    .nullable()
+    .optional(),
+  operationSignValuation: z
+    .number()
+    .int('Segno operazione valorizzazione deve essere un numero intero')
+    .refine((val) => val === 1 || val === -1, 'Segno operazione valorizzazione deve essere 1 o -1')
+    .nullable()
     .optional(),
   active: z.boolean().optional(),
-});
+}).refine(
+  (data) => {
+    // Se inventoryMovement è true, operationSignStock deve essere definito
+    if (data.inventoryMovement && (data.operationSignStock === null || data.operationSignStock === undefined)) {
+      return false;
+    }
+    // Se inventoryMovement è false, operationSignStock deve essere null
+    if (!data.inventoryMovement && data.operationSignStock !== null && data.operationSignStock !== undefined) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Segno operazione magazzino richiesto se Movimenta Stock è attivo',
+    path: ['operationSignStock'],
+  }
+).refine(
+  (data) => {
+    // Se valuationImpact è true, operationSignValuation deve essere definito
+    if (data.valuationImpact && (data.operationSignValuation === null || data.operationSignValuation === undefined)) {
+      return false;
+    }
+    // Se valuationImpact è false, operationSignValuation deve essere null
+    if (!data.valuationImpact && data.operationSignValuation !== null && data.operationSignValuation !== undefined) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Segno operazione valorizzazione richiesto se Impatto Valorizzazione è attivo',
+    path: ['operationSignValuation'],
+  }
+);
 
 export type UpdateDocumentTypeInput = z.infer<typeof updateDocumentTypeSchema>;
