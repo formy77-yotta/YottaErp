@@ -185,7 +185,6 @@ export async function getDocumentAction(
     netAmount: string;
     vatAmount: string;
     grossAmount: string;
-    warehouseId: string | null;
   }>;
 }>> {
   try {
@@ -225,7 +224,6 @@ export async function getDocumentAction(
             netAmount: true,
             vatAmount: true,
             grossAmount: true,
-            warehouseId: true,
           },
         },
       },
