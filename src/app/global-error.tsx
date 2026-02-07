@@ -6,18 +6,25 @@
  * 
  * Next.js pre-renderizza questo componente durante il build,
  * quindi non può dipendere da alcun provider o context.
+ * 
+ * NOTA: Anche se è un client component, Next.js cerca comunque
+ * di pre-renderizzarlo durante il build per verificare che funzioni.
  */
 
 'use client';
 
+// Disabilita il pre-rendering statico per questo componente
+export const dynamic = 'force-dynamic';
+
 export default function GlobalError({
   error,
-  reset,
+  reset: _reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
   // Funzione di reset completamente statica, senza dipendenze
+  // Non usiamo reset() direttamente per evitare dipendenze da context
   const handleReset = () => {
     if (typeof window !== 'undefined') {
       // Usa window.location invece di router per evitare dipendenze
