@@ -25,6 +25,7 @@ import {
   CalendarClock,
   ClipboardList,
   LayoutTemplate,
+  Landmark,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -83,6 +84,11 @@ const navItems: NavItem[] = [
         title: 'Scadenze',
         href: '/scadenze',
         icon: CalendarClock,
+      },
+      {
+        title: 'Banche',
+        href: '/admin/financial-accounts',
+        icon: Landmark,
       },
     ],
   },

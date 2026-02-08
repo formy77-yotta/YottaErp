@@ -23,6 +23,7 @@ import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { parseSearchParams } from '@/lib/validations/search-params';
 import { ScadenzeDataTableHeader } from '@/components/features/scadenze/ScadenzeDataTableHeader';
+import { AllocaPagamentoButton } from '@/components/features/scadenze/AllocaPagamentoButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,26 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'des
   PAID: 'default',
   PARTIAL: 'secondary',
 };
+
+/** Barra avanzamento pagamento: "Pagato X€ di Y€" (paid/total da somma PaymentMapping) */
+function ScadenzaProgressBar({ paid, total }: { paid: string; total: string }) {
+  const paidNum = parseFloat(paid);
+  const totalNum = parseFloat(total);
+  const pct = totalNum > 0 ? Math.min(100, (paidNum / totalNum) * 100) : 0;
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">
+        Pagato {formatCurrency(new Decimal(paid))} di {formatCurrency(new Decimal(total))}
+      </p>
+      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default async function ScadenzePage({
   searchParams,
@@ -92,7 +113,7 @@ async function ScadenzeTable({
           {isEmpty ? (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center">
+                <TableCell colSpan={8} className="h-32 text-center">
                   <CalendarClock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">Nessuna scadenza presente</p>
                   <p className="text-sm text-muted-foreground mt-2">
@@ -131,6 +152,12 @@ async function ScadenzeTable({
                   <TableCell className="text-right font-medium">
                     {formatCurrency(new Decimal(d.amount))}
                   </TableCell>
+                  <TableCell className="w-[200px]">
+                    <ScadenzaProgressBar
+                      paid={d.paidAmount}
+                      total={d.amount}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Badge variant={STATUS_VARIANTS[d.status] ?? 'outline'}>
                       {STATUS_LABELS[d.status] ?? d.status}
@@ -138,12 +165,22 @@ async function ScadenzeTable({
                   </TableCell>
                   <TableCell />
                   <TableCell className="text-right">
-                    <Link href={`/documents/${d.documentId}`}>
-                      <Button variant="ghost" size="sm">
-                        <FileText className="h-4 w-4 mr-1" />
-                        Documento
-                      </Button>
-                    </Link>
+                    <div className="flex items-center justify-end gap-1">
+                      <AllocaPagamentoButton
+                        row={{
+                          id: d.id,
+                          amount: d.amount,
+                          paidAmount: d.paidAmount,
+                          document: { number: d.document.number },
+                        }}
+                      />
+                      <Link href={`/documents/${d.documentId}`}>
+                        <Button variant="ghost" size="sm">
+                          <FileText className="h-4 w-4 mr-1" />
+                          Documento
+                        </Button>
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -223,6 +260,7 @@ function ScadenzeTableSkeleton() {
             <TableHead>Documento</TableHead>
             <TableHead>Cliente / Fornitore</TableHead>
             <TableHead className="text-right">Importo</TableHead>
+            <TableHead>Pagato</TableHead>
             <TableHead>Stato</TableHead>
             <TableHead className="text-right" />
             <TableHead className="text-right">Azioni</TableHead>
@@ -242,6 +280,9 @@ function ScadenzeTableSkeleton() {
               </TableCell>
               <TableCell className="text-right">
                 <div className="h-4 w-20 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell>
+                <div className="h-8 w-full bg-muted animate-pulse rounded" />
               </TableCell>
               <TableCell>
                 <div className="h-5 w-20 bg-muted animate-pulse rounded" />

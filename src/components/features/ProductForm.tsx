@@ -64,6 +64,7 @@ interface ProductFormProps {
     price: string; // Decimal come stringa
     vatRateId: string | null;
     defaultWarehouseId?: string | null;
+    quantityDecimals?: number;
     active: boolean;
   };
   
@@ -105,36 +106,34 @@ export function ProductForm({
       price: '',
       vatRateId: '',
       defaultWarehouseId: '',
+      quantityDecimals: 4,
       active: true,
       ...(isEditing && product ? { id: product.id } : {}),
     },
   });
 
-  // Carica classificazioni al mount
+  // Carica classificazioni al mount (in parallelo per ridurre il tempo di attesa)
   useEffect(() => {
     async function loadData() {
       setLoadingData(true);
       try {
-        // Carica categorie
-        const categoriesResult = await getProductCategoriesAction();
+        const [categoriesResult, typesResult, vatRatesResult, warehousesResult] =
+          await Promise.all([
+            getProductCategoriesAction(),
+            getProductTypesAction(),
+            getVatRatesAction(),
+            getWarehousesAction(),
+          ]);
+
         if (categoriesResult.success) {
-          setCategories(categoriesResult.data.filter(c => c.active));
+          setCategories(categoriesResult.data.filter((c) => c.active));
         }
-
-        // Carica tipologie
-        const typesResult = await getProductTypesAction();
         if (typesResult.success) {
-          setTypes(typesResult.data.filter(t => t.active));
+          setTypes(typesResult.data.filter((t) => t.active));
         }
-
-        // Carica aliquote IVA
-        const vatRatesResult = await getVatRatesAction();
         if (vatRatesResult.success) {
-          setVatRates(vatRatesResult.data.filter(v => v.active));
+          setVatRates(vatRatesResult.data.filter((v) => v.active));
         }
-
-        // Carica magazzini
-        const warehousesResult = await getWarehousesAction();
         if (warehousesResult.success) {
           setWarehouses(warehousesResult.data);
         }
@@ -160,6 +159,7 @@ export function ProductForm({
         price: product.price,
         vatRateId: product.vatRateId || '',
         defaultWarehouseId: product.defaultWarehouseId || '',
+        quantityDecimals: product.quantityDecimals ?? 4,
         active: product.active,
         ...(isEditing ? { id: product.id } : {}),
       }, { keepDefaultValues: false });
@@ -174,6 +174,7 @@ export function ProductForm({
         price: '',
         vatRateId: '',
         defaultWarehouseId: '',
+        quantityDecimals: 4,
         active: true,
       }, { keepDefaultValues: false });
     }
@@ -437,6 +438,32 @@ export function ProductForm({
             )}
           />
         </div>
+
+        {/* Decimali quantità */}
+        <FormField
+          control={form.control}
+          name="quantityDecimals"
+          render={({ field }) => (
+            <FormItem className="max-w-[12rem]">
+              <FormLabel>Decimali quantità</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  min={0}
+                  max={6}
+                  {...field}
+                  onChange={(e) => field.onChange(e.target.value === '' ? 4 : Number(e.target.value))}
+                  value={field.value}
+                  disabled={isLoading}
+                />
+              </FormControl>
+              <FormDescription>
+                Cifre decimali per quantità (0–6). Usato in statistiche e documenti.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         {/* Magazzino Predefinito */}
         <FormField

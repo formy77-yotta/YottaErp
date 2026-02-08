@@ -83,6 +83,7 @@ model Organization {
   products            Product[]
   productCategories   ProductCategory[]
   productTypes        ProductType[]
+  productAnnualStats  ProductAnnualStat[]
   stockMovements      StockMovement[]
   unitsOfMeasure      UnitOfMeasure[]
   users               UserOrganization[]
@@ -90,6 +91,9 @@ model Organization {
   warehouses          Warehouse[]
   paymentTypes        PaymentType[]
   paymentConditions   PaymentCondition[]
+  payments            Payment[]
+  financialAccounts   FinancialAccount[]
+  installments        Installment[]
   printTemplates      PrintTemplate[]
 
   @@index([businessName])
@@ -327,6 +331,9 @@ model Product {
   defaultWarehouseId String? // Magazzino predefinito per il prodotto
   defaultWarehouse   Warehouse? @relation(fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
   
+  // Numero decimali per le quantità (statistiche, documenti, movimenti)
+  quantityDecimals   Int            @default(4)
+  
   active         Boolean          @default(true)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -337,6 +344,7 @@ model Product {
   type           ProductType?     @relation(fields: [typeId], references: [id])
   vatRate        VatRate?         @relation(fields: [vatRateId], references: [id])
   stockMovements StockMovement[]
+  productAnnualStats ProductAnnualStat[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -344,6 +352,34 @@ model Product {
   @@index([categoryId])
   @@index([typeId])
   @@index([defaultWarehouseId])
+}
+
+/// *
+///  * ProductAnnualStat: Statistiche annuali per prodotto (vendite, acquisti, CMP)
+///  *
+///  * REGOLA: Tabella satellite, non usare campi in Product.
+///  * MULTITENANT: Ogni record appartiene a un'organizzazione.
+model ProductAnnualStat {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  productId             String
+  year                  Int
+  purchasedQuantity     Decimal  @db.Decimal(12, 4) @default(0)
+  purchasedTotalAmount  Decimal  @db.Decimal(15, 2) @default(0)
+  soldQuantity          Decimal  @db.Decimal(12, 4) @default(0)
+  soldTotalAmount       Decimal  @db.Decimal(15, 2) @default(0)
+  weightedAverageCost   Decimal  @db.Decimal(15, 4) @default(0)
+  lastCost              Decimal  @db.Decimal(15, 4) @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product               Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, productId, year])
+  @@index([organizationId])
+  @@index([productId])
+  @@index([organizationId, year])
 }
 
 /// *
@@ -490,7 +526,7 @@ model Document {
   organization               Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   paymentCondition           PaymentCondition?  @relation(fields: [paymentConditionId], references: [id])
   lines                      DocumentLine[]
-  paymentDeadlines           PaymentDeadline[]
+  installments               Installment[]
 
   @@unique([organizationId, number])
   @@index([shippingAddressId])
@@ -648,32 +684,127 @@ model PaymentCondition {
 }
 
 /// *
-///  * PaymentDeadline: Scadenze reali generate sui documenti (SNAPSHOT)
-///  * 
-///  * REGOLA SNAPSHOT: Le scadenze sono calcolate al momento della creazione del documento
-///  * e memorizzate come snapshot. Se domani la PaymentCondition cambia, le scadenze
-///  * del documento rimangono invariate.
-///  * 
-///  * REGOLE:
-///  * - amount: Importo della scadenza (rigorosamente Decimal)
-///  * - status: PENDING, PAID, PARTIAL
-///  * - paidAmount: Importo già pagato (per gestire pagamenti parziali)
-///  * - MULTITENANT: Implicito tramite documentId -> organizationId
-model PaymentDeadline {
-  id          String   @id @default(cuid())
-  documentId  String
-  dueDate     DateTime
-  amount      Decimal  @db.Decimal(12, 2)
-  status      String   @default("PENDING") // PENDING, PAID, PARTIAL
-  paidAmount  Decimal  @default(0) @db.Decimal(12, 2)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+///  * Installment: Scadenze reali generate sui documenti (SNAPSHOT)
+///  *
+///  * Aggiornamento del concetto di scadenza: organizationId esplicito, status enum,
+///  * il "pagato" si ottiene come SUM(PaymentMapping.amount) (regola magazzino calcolato).
+model Installment {
+  id             String            @id @default(cuid())
+  organizationId String
+  documentId     String
+  dueDate        DateTime
+  amount         Decimal           @db.Decimal(12, 2)
+  status         InstallmentStatus  @default(PENDING)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
+  document       Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payments       PaymentMapping[]
+
+  @@index([organizationId])
   @@index([documentId])
   @@index([dueDate])
   @@index([status])
+}
+
+enum InstallmentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// *
+///  * FinancialAccount: Conti correnti bancari o Cassa contanti
+///  * Permette di gestire saldi separati e riconciliazioni.
+///  * MULTITENANT: Ogni conto appartiene a un'organizzazione
+model FinancialAccount {
+  id              String        @id @default(cuid())
+  organizationId  String
+  name            String        // Es: "Banca Intesa", "Cassa Centrale", "Stripe"
+  type            FinancialAccountType   @default(BANK)
+  iban            String?
+  bicSwift        String?
+  initialBalance  Decimal       @db.Decimal(12, 2) @default(0)
+  active          Boolean       @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payments        Payment[]
+
+  @@index([organizationId])
+}
+
+enum FinancialAccountType {
+  BANK
+  CASH
+  VIRTUAL
+}
+
+/// *
+///  * Payment: Movimento finanziario reale (Entrata/Uscita)
+///  *
+///  * L'importo può essere distribuito su una o più scadenze (Installment) tramite PaymentMapping.
+///  * MULTITENANT: organizationId obbligatorio
+model Payment {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  financialAccountId String
+  date               DateTime       @default(now())
+  amount             Decimal        @db.Decimal(12, 2)
+  description        String
+  method             PaymentMethod
+  type               PaymentFlowType  // INFLOW = Entrata, OUTFLOW = Uscita
+  reference          String?        // ID Transazione, numero assegno
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  financialAccount   FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  mappings           PaymentMapping[]
+
+  @@index([organizationId])
+  @@index([financialAccountId])
+  @@index([date])
+}
+
+enum PaymentMethod {
+  TRANSFER
+  CASH
+  CREDIT_CARD
+  CHECK
+  RIBA
+  OTHER
+}
+
+enum PaymentFlowType {
+  INFLOW
+  OUTFLOW
+}
+
+/// *
+///  * PaymentMapping: Riconciliazione tra un pagamento e una o più scadenze (Installment)
+///  *
+///  * REGOLA: SUM(amount) per paymentId non può superare Payment.amount
+///  * Il "pagato" su una scadenza = SUM(PaymentMapping.amount) per quell'installment
+model PaymentMapping {
+  id            String     @id @default(cuid())
+  paymentId     String
+  installmentId String
+  amount        Decimal    @db.Decimal(12, 2) // Quota del pagamento applicata a questa scadenza
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  payment       Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  installment   Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+
+  @@unique([paymentId, installmentId])
+  @@index([paymentId])
+  @@index([installmentId])
 }
 
 /// *

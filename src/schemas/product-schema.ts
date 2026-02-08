@@ -80,6 +80,9 @@ export const createProductSchema = z.object({
   // Se specificato, viene usato quando si crea un documento (priorità sul magazzino documento)
   defaultWarehouseId: z.string().cuid().optional().or(z.literal('')),
 
+  // Decimali per quantità (0-6, usato in statistiche e visualizzazioni)
+  quantityDecimals: z.coerce.number().int().min(0).max(6).default(4),
+
   // Metadata
   active: z.boolean().default(true),
 });
@@ -128,6 +131,9 @@ export const updateProductSchema = z.object({
 
   // Magazzino predefinito (opzionale)
   defaultWarehouseId: z.string().cuid().optional().or(z.literal('')).optional(),
+
+  // Decimali per quantità (0-6)
+  quantityDecimals: z.coerce.number().int().min(0).max(6).optional(),
 
   // Metadata
   active: z.boolean().optional(),

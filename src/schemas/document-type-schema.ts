@@ -16,6 +16,32 @@
 
 import { z } from 'zod';
 
+const buildOperationSignSchema = (label: 'magazzino' | 'valorizzazione') =>
+  z.preprocess(
+    (value: unknown) => {
+      if (value === '' || value === null || value === undefined) {
+        return null;
+      }
+
+      if (typeof value === 'string') {
+        const parsed = Number(value);
+        return Number.isNaN(parsed) ? null : parsed;
+      }
+
+      if (typeof value === 'number' && Number.isNaN(value)) {
+        return null;
+      }
+
+      return value;
+    },
+    z
+      .number()
+      .int(`Segno operazione ${label} deve essere un numero intero`)
+      .refine((val) => val === 1 || val === -1, `Segno operazione ${label} deve essere 1 o -1`)
+      .nullable()
+      .optional()
+  );
+
 /**
  * Schema per creazione configurazione tipo documento
  */
@@ -35,18 +61,8 @@ export const createDocumentTypeSchema = z.object({
     .max(50, 'Codice numerazione troppo lungo'),
   inventoryMovement: z.boolean().default(false),
   valuationImpact: z.boolean().default(false),
-  operationSignStock: z
-    .number()
-    .int('Segno operazione magazzino deve essere un numero intero')
-    .refine((val) => val === 1 || val === -1, 'Segno operazione magazzino deve essere 1 o -1')
-    .nullable()
-    .optional(),
-  operationSignValuation: z
-    .number()
-    .int('Segno operazione valorizzazione deve essere un numero intero')
-    .refine((val) => val === 1 || val === -1, 'Segno operazione valorizzazione deve essere 1 o -1')
-    .nullable()
-    .optional(),
+  operationSignStock: buildOperationSignSchema('magazzino'),
+  operationSignValuation: buildOperationSignSchema('valorizzazione'),
   documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).default('SALE'),
   active: z.boolean().default(true),
   templateId: z.string().cuid().optional().nullable(),
@@ -109,18 +125,8 @@ export const updateDocumentTypeSchema = z.object({
     .optional(),
   inventoryMovement: z.boolean().optional(),
   valuationImpact: z.boolean().optional(),
-  operationSignStock: z
-    .number()
-    .int('Segno operazione magazzino deve essere un numero intero')
-    .refine((val) => val === 1 || val === -1, 'Segno operazione magazzino deve essere 1 o -1')
-    .nullable()
-    .optional(),
-  operationSignValuation: z
-    .number()
-    .int('Segno operazione valorizzazione deve essere un numero intero')
-    .refine((val) => val === 1 || val === -1, 'Segno operazione valorizzazione deve essere 1 o -1')
-    .nullable()
-    .optional(),
+  operationSignStock: buildOperationSignSchema('magazzino'),
+  operationSignValuation: buildOperationSignSchema('valorizzazione'),
   documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).optional(),
   active: z.boolean().optional(),
   templateId: z.string().cuid().optional().nullable(),

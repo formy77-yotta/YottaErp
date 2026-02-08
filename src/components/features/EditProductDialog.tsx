@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { ProductForm } from './ProductForm';
+import { ProductStatsCard } from './products/ProductStatsCard';
 import { Edit } from 'lucide-react';
 
 interface EditProductDialogProps {
@@ -64,6 +65,9 @@ export function EditProductDialog({ product }: EditProductDialogProps) {
             alert(error);
           }}
         />
+        <div className="mt-6 border-t pt-6">
+          <ProductStatsCard productId={product.id} />
+        </div>
       </DialogContent>
     </Dialog>
   );

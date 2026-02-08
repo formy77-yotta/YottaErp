@@ -42,6 +42,12 @@ type ActionResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+/** Statistiche valorizzazione anno corrente (per elenco prodotti) */
+export type ProductCurrentYearStat = {
+  weightedAverageCost: string;
+  lastCost: string;
+} | null;
+
 /** Tipo riga prodotto per DataTable / form */
 export type ProductRow = {
   id: string;
@@ -60,6 +66,8 @@ export type ProductRow = {
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
+  /** Valorizzazione: CMP e ultimo costo anno corrente (se presenti) */
+  currentYearStat: ProductCurrentYearStat;
 };
 
 const PRODUCT_SORT_FIELDS = ['code', 'name', 'categoryId', 'typeId', 'price', 'vatRateId', 'active', 'createdAt'] as const;
@@ -115,55 +123,40 @@ export async function getProductsAction(
       orderBy = [{ [parsedSort.field]: parsedSort.order }];
     }
 
+    const selectBase = {
+      id: true,
+      code: true,
+      name: true,
+      description: true,
+      categoryId: true,
+      typeId: true,
+      price: true,
+      vatRateId: true,
+      defaultWarehouseId: true,
+      active: true,
+      createdAt: true,
+      updatedAt: true,
+      category: {
+        select: { id: true, code: true, description: true },
+      },
+      type: {
+        select: { id: true, code: true, description: true, manageStock: true },
+      },
+      vatRate: {
+        select: { id: true, name: true, value: true },
+      },
+      defaultWarehouse: {
+        select: { id: true, code: true, name: true },
+      },
+    } as const;
+
     const [products, count] = await Promise.all([
       prisma.product.findMany({
         where,
         orderBy,
         skip,
         take: perPage,
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          description: true,
-          categoryId: true,
-          typeId: true,
-          price: true,
-          vatRateId: true,
-          defaultWarehouseId: true,
-          active: true,
-          createdAt: true,
-          updatedAt: true,
-          category: {
-            select: {
-              id: true,
-              code: true,
-              description: true,
-            },
-          },
-          type: {
-            select: {
-              id: true,
-              code: true,
-              description: true,
-              manageStock: true,
-            },
-          },
-          vatRate: {
-            select: {
-              id: true,
-              name: true,
-              value: true,
-            },
-          },
-          defaultWarehouse: {
-            select: {
-              id: true,
-              code: true,
-              name: true,
-            },
-          },
-        },
+        select: selectBase,
       }),
       prisma.product.count({ where }),
     ]);
@@ -180,6 +173,7 @@ export async function getProductsAction(
             value: product.vatRate.value.toString(),
           }
         : null,
+      currentYearStat: null,
     }));
 
     return {
@@ -237,6 +231,7 @@ export async function getProductAction(
   vatRate: { id: string; name: string; value: string } | null;
   defaultWarehouseId: string | null;
   defaultWarehouse: { id: string; code: string; name: string } | null;
+  quantityDecimals: number;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -258,6 +253,7 @@ export async function getProductAction(
         price: true,
         vatRateId: true,
         defaultWarehouseId: true,
+        quantityDecimals: true,
         active: true,
         createdAt: true,
         updatedAt: true,
@@ -500,6 +496,7 @@ export async function createProductAction(
         price: priceDecimal, // ✅ Decimal, non number!
         vatRateId: validatedData.vatRateId || null,
         defaultWarehouseId: validatedData.defaultWarehouseId || null,
+        quantityDecimals: validatedData.quantityDecimals ?? 4,
         active: validatedData.active,
       },
     });
@@ -682,6 +679,7 @@ export async function updateProductAction(
       price?: Decimal;
       vatRateId?: string | null;
       defaultWarehouseId?: string | null;
+      quantityDecimals?: number;
       active?: boolean;
     } = {};
 
@@ -716,6 +714,10 @@ export async function updateProductAction(
 
     if (validatedData.defaultWarehouseId !== undefined) {
       updateData.defaultWarehouseId = validatedData.defaultWarehouseId || null;
+    }
+
+    if (validatedData.quantityDecimals !== undefined) {
+      updateData.quantityDecimals = validatedData.quantityDecimals;
     }
 
     if (validatedData.active !== undefined) {

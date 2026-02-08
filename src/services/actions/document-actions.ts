@@ -7,6 +7,7 @@ import { getAuthContext, ForbiddenError, verifyOrganizationAccess } from '@/lib/
 import { createDocumentSchema, updateDocumentSchema, type CreateDocumentInput, type UpdateDocumentInput } from '@/schemas/document-schema';
 import { calculateLineTotal, toDecimal } from '@/lib/decimal-utils';
 import { processDocumentLineStock } from '@/services/business/stock-service';
+import { applyDocumentStats, revertDocumentStats } from '@/services/business/stats-service';
 import { generateInvoiceXML, InvoiceXMLError } from '@/services/business/invoice-xml-service';
 import { calculateDeadlines } from '@/lib/utils/payment-calculator';
 import type { Prisma } from '@prisma/client';
@@ -614,6 +615,11 @@ export async function updateDocumentAction(
 
       // 3.3. Se ci sono righe da aggiornare, gestisci l'aggiornamento
       if (validatedData.lines && validatedData.lines.length > 0) {
+        // 3.3.0. Revert statistiche valorizzazione (stato vecchio) prima di modificare le righe
+        if (existingDocument.documentType.valuationImpact && existingDocument.documentType.operationSignValuation != null && existingDocument.documentType.operationSignValuation !== 0) {
+          await revertDocumentStats(tx, existingDocument);
+        }
+
         // 3.3.1. Elimina vecchi movimenti di magazzino associati alle righe
         // (se il documento ha inventoryMovement attivo)
         if (existingDocument.documentType.inventoryMovement) {
@@ -714,7 +720,7 @@ export async function updateDocumentAction(
         // 3.3.5. Gestione scadenze pagamento (se paymentConditionId modificato)
         if (validatedData.paymentConditionId !== undefined) {
           // Elimina scadenze esistenti (se presenti)
-          await tx.paymentDeadline.deleteMany({
+          await tx.installment.deleteMany({
             where: { documentId: validatedData.id },
           });
 
@@ -757,15 +763,15 @@ export async function updateDocumentAction(
               documentDate
             );
 
-            // Crea PaymentDeadline per ogni scadenza calcolata
+            // Crea Installment per ogni scadenza calcolata
             for (const deadline of deadlines) {
-              await tx.paymentDeadline.create({
+              await tx.installment.create({
                 data: {
+                  organizationId: ctx.organizationId,
                   documentId: validatedData.id,
                   dueDate: deadline.dueDate,
                   amount: deadline.amount,
                   status: 'PENDING',
-                  paidAmount: new Decimal(0),
                 },
               });
             }
@@ -805,6 +811,11 @@ export async function updateDocumentAction(
           },
         });
 
+        // 3.3.7. Applica statistiche valorizzazione (nuovo stato righe)
+        if (existingDocument.documentType.valuationImpact && existingDocument.documentType.operationSignValuation != null && existingDocument.documentType.operationSignValuation !== 0) {
+          await applyDocumentStats(tx, validatedData.id);
+        }
+
         return updated;
       } else {
         // 3.4. Nessuna riga da aggiornare: aggiorna solo campi documento e snapshot entità (se modificata)
@@ -840,16 +851,16 @@ export async function updateDocumentAction(
         // 3.4.1. Gestione scadenze pagamento (se paymentConditionId modificato)
         if (validatedData.paymentConditionId !== undefined) {
           // Elimina scadenze esistenti (se presenti)
-          await tx.paymentDeadline.deleteMany({
+          await tx.installment.deleteMany({
             where: { documentId: validatedData.id },
           });
 
           // Se è stata selezionata una nuova condizione, genera nuove scadenze
           if (validatedData.paymentConditionId) {
-            // Recupera documento per ottenere grossTotal
+            // Recupera documento per ottenere grossTotal e organizationId
             const doc = await tx.document.findUnique({
               where: { id: validatedData.id },
-              select: { grossTotal: true, date: true },
+              select: { grossTotal: true, date: true, organizationId: true },
             });
 
             if (doc) {
@@ -890,15 +901,15 @@ export async function updateDocumentAction(
                 documentDate
               );
 
-              // Crea PaymentDeadline per ogni scadenza calcolata
+              // Crea Installment per ogni scadenza calcolata
               for (const deadline of deadlines) {
-                await tx.paymentDeadline.create({
+                await tx.installment.create({
                   data: {
+                    organizationId: doc.organizationId,
                     documentId: validatedData.id,
                     dueDate: deadline.dueDate,
                     amount: deadline.amount,
                     status: 'PENDING',
-                    paidAmount: new Decimal(0),
                   },
                 });
               }
@@ -1549,15 +1560,15 @@ export async function createDocumentAction(
           validatedData.date instanceof Date ? validatedData.date : new Date(validatedData.date)
         );
 
-        // Crea PaymentDeadline per ogni scadenza calcolata
+        // Crea Installment per ogni scadenza calcolata
         for (const deadline of deadlines) {
-          await tx.paymentDeadline.create({
+          await tx.installment.create({
             data: {
+              organizationId: createdDocument.organizationId,
               documentId: createdDocument.id,
               dueDate: deadline.dueDate,
               amount: deadline.amount,
               status: 'PENDING',
-              paidAmount: new Decimal(0),
             },
           });
         }
@@ -1586,6 +1597,11 @@ export async function createDocumentAction(
           documentNumber,
           ctx.organizationId
         );
+      }
+
+      // 6.7. ✅ Valorizzazione magazzino (se tipo documento prevede valuationImpact)
+      if (documentType.valuationImpact && documentType.operationSignValuation != null && documentType.operationSignValuation !== 0) {
+        await applyDocumentStats(tx, createdDocument.id);
       }
 
       return createdDocument;

@@ -11,7 +11,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { 
@@ -85,7 +85,26 @@ export function DocumentTypeForm({
 }: DocumentTypeFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
+  const [stockSignValue, setStockSignValue] = useState<string | undefined>(undefined);
+  const [valuationSignValue, setValuationSignValue] = useState<string | undefined>(undefined);
   const isEditing = !!documentType;
+
+  const normalizeSignValue = (value: unknown): 1 | -1 | null => {
+    if (value === 1 || value === -1) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return parsed === 1 || parsed === -1 ? (parsed as 1 | -1) : null;
+    }
+
+    if (typeof value === 'number') {
+      return value === 1 || value === -1 ? value : null;
+    }
+
+    return null;
+  };
 
   useEffect(() => {
     getTemplatesAction().then((res) => {
@@ -111,26 +130,50 @@ export function DocumentTypeForm({
     },
   });
 
+  const inventoryMovement = form.watch('inventoryMovement');
+  const valuationImpact = form.watch('valuationImpact');
+  const skipStockClearRef = useRef(true);
+  const skipValuationClearRef = useRef(true);
+
   // Aggiorna i valori del form quando la configurazione viene caricata
   useEffect(() => {
+    skipStockClearRef.current = true;
+    skipValuationClearRef.current = true;
+
     if (documentType) {
+      const normalizedOperationSignStock = normalizeSignValue(documentType.operationSignStock);
+      const normalizedOperationSignValuation = normalizeSignValue(documentType.operationSignValuation);
+      const normalizedStockValue = normalizedOperationSignStock !== null
+        ? String(normalizedOperationSignStock)
+        : undefined;
+      const normalizedValuationValue = normalizedOperationSignValuation !== null
+        ? String(normalizedOperationSignValuation)
+        : undefined;
+
       form.reset({
         code: documentType.code,
         description: documentType.description,
         numeratorCode: documentType.numeratorCode,
         inventoryMovement: documentType.inventoryMovement,
         valuationImpact: documentType.valuationImpact,
-        operationSignStock: (documentType.operationSignStock === 1 || documentType.operationSignStock === -1) 
-          ? documentType.operationSignStock 
-          : null,
-        operationSignValuation: (documentType.operationSignValuation === 1 || documentType.operationSignValuation === -1) 
-          ? documentType.operationSignValuation 
-          : null,
+        operationSignStock: normalizedOperationSignStock,
+        operationSignValuation: normalizedOperationSignValuation,
         documentDirection: documentType.documentDirection,
         active: documentType.active,
         templateId: documentType.templateId ?? null,
         ...(isEditing ? { id: documentType.id } : {}),
       }, { keepDefaultValues: false });
+
+      form.setValue('operationSignStock', normalizedOperationSignStock, {
+        shouldValidate: false,
+        shouldDirty: false,
+      });
+      form.setValue('operationSignValuation', normalizedOperationSignValuation, {
+        shouldValidate: false,
+        shouldDirty: false,
+      });
+      setStockSignValue(normalizedStockValue);
+      setValuationSignValue(normalizedValuationValue);
     } else {
       // Reset al form vuoto quando si crea una nuova configurazione
       form.reset({
@@ -144,8 +187,55 @@ export function DocumentTypeForm({
         active: true,
         templateId: null,
       }, { keepDefaultValues: false });
+      setStockSignValue(undefined);
+      setValuationSignValue(undefined);
     }
   }, [documentType, form, isEditing]);
+
+  useEffect(() => {
+    if (skipStockClearRef.current) {
+      skipStockClearRef.current = false;
+      return;
+    }
+    if (!inventoryMovement) {
+      form.setValue('operationSignStock', null, { shouldValidate: true, shouldDirty: true });
+      form.clearErrors('operationSignStock');
+      setStockSignValue(undefined);
+    }
+  }, [inventoryMovement, form]);
+
+  useEffect(() => {
+    if (skipValuationClearRef.current) {
+      skipValuationClearRef.current = false;
+      return;
+    }
+    if (!valuationImpact) {
+      form.setValue('operationSignValuation', null, { shouldValidate: true, shouldDirty: true });
+      form.clearErrors('operationSignValuation');
+      setValuationSignValue(undefined);
+    }
+  }, [valuationImpact, form]);
+
+  // Sync form value from documentType when form was reset but we're in edit mode (fix remount/reset losing value)
+  useEffect(() => {
+    if (!documentType || !valuationImpact) return;
+    const current = form.getValues('operationSignValuation');
+    const fromDoc = normalizeSignValue(documentType.operationSignValuation);
+    if ((current === null || current === undefined) && fromDoc !== null) {
+      form.setValue('operationSignValuation', fromDoc, { shouldValidate: false, shouldDirty: false });
+      setValuationSignValue(String(fromDoc));
+    }
+  }, [documentType, valuationImpact, form]);
+
+  useEffect(() => {
+    if (!documentType || !inventoryMovement) return;
+    const current = form.getValues('operationSignStock');
+    const fromDoc = normalizeSignValue(documentType.operationSignStock);
+    if ((current === null || current === undefined) && fromDoc !== null) {
+      form.setValue('operationSignStock', fromDoc, { shouldValidate: false, shouldDirty: false });
+      setStockSignValue(String(fromDoc));
+    }
+  }, [documentType, inventoryMovement, form]);
 
   /**
    * Handler submit form
@@ -319,7 +409,10 @@ export function DocumentTypeForm({
           control={form.control}
           name="operationSignStock"
           render={({ field }) => {
-            const inventoryMovement = form.watch('inventoryMovement');
+            const fallbackFromDoc = documentType && inventoryMovement
+              ? (() => { const n = normalizeSignValue(documentType.operationSignStock); return n !== null ? String(n) : undefined; })()
+              : undefined;
+            const displayValue = stockSignValue ?? (field.value != null ? String(field.value) : fallbackFromDoc);
             return (
               <FormItem>
                 <FormLabel>
@@ -327,8 +420,11 @@ export function DocumentTypeForm({
                   {inventoryMovement && ' *'}
                 </FormLabel>
                 <Select
-                  onValueChange={(value) => field.onChange(parseInt(value))}
-                  value={field.value?.toString() || ''}
+                  onValueChange={(value) => {
+                    setStockSignValue(value === '' ? undefined : value);
+                    field.onChange(value === '' ? null : Number(value));
+                  }}
+                  value={displayValue}
                   disabled={!inventoryMovement || isLoading}
                 >
                   <FormControl>
@@ -362,7 +458,10 @@ export function DocumentTypeForm({
           control={form.control}
           name="operationSignValuation"
           render={({ field }) => {
-            const valuationImpact = form.watch('valuationImpact');
+            const fallbackFromDoc = documentType && valuationImpact
+              ? (() => { const n = normalizeSignValue(documentType.operationSignValuation); return n !== null ? String(n) : undefined; })()
+              : undefined;
+            const displayValue = valuationSignValue ?? (field.value != null ? String(field.value) : fallbackFromDoc);
             return (
               <FormItem>
                 <FormLabel>
@@ -370,8 +469,11 @@ export function DocumentTypeForm({
                   {valuationImpact && ' *'}
                 </FormLabel>
                 <Select
-                  onValueChange={(value) => field.onChange(parseInt(value))}
-                  value={field.value?.toString() || ''}
+                  onValueChange={(value) => {
+                    setValuationSignValue(value === '' ? undefined : value);
+                    field.onChange(value === '' ? null : Number(value));
+                  }}
+                  value={displayValue}
                   disabled={!valuationImpact || isLoading}
                 >
                   <FormControl>

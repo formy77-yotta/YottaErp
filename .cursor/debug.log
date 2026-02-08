@@ -1,0 +1,69 @@
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591127713}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591127713}
+{"location":"document-type-actions.ts","message":"getDocumentTypesAction FAD","data":{"code":"FAD","operationSignValuation":1,"operationSignStock":null},"timestamp":1770591200862,"hypothesisId":"H1"}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591202745}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591202746}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: raw props","data":{"hypothesisId":"H1","code":"DDT","operationSignValuation":null,"operationSignValuationType":"object","operationSignStock":-1},"timestamp":1770591202758}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: after normalize","data":{"hypothesisId":"H2","normalizedOperationSignStock":-1,"normalizedOperationSignValuation":null},"timestamp":1770591202759}
+{"location":"DocumentTypeForm.tsx","message":"effect valuationImpact: skip first run","data":{"hypothesisId":"H3"},"timestamp":1770591202759}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: state set","data":{"hypothesisId":"H3","normalizedStockValue":"-1"},"timestamp":1770591202759}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: raw props","data":{"hypothesisId":"H1","code":"DDT","operationSignValuation":null,"operationSignValuationType":"object","operationSignStock":-1},"timestamp":1770591202761}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: after normalize","data":{"hypothesisId":"H2","normalizedOperationSignStock":-1,"normalizedOperationSignValuation":null},"timestamp":1770591202761}
+{"location":"DocumentTypeForm.tsx","message":"effect valuationImpact: skip first run","data":{"hypothesisId":"H3"},"timestamp":1770591202761}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: state set","data":{"hypothesisId":"H3","normalizedStockValue":"-1"},"timestamp":1770591202761}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591202769}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591202769}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591202789}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591202789}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203072}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203073}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203310}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203310}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203907}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203907}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203925}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591203926}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591204951}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591204951}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: raw props","data":{"hypothesisId":"H1","code":"FAC","operationSignValuation":-1,"operationSignValuationType":"number","operationSignStock":null},"timestamp":1770591204961}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: after normalize","data":{"hypothesisId":"H2","normalizedOperationSignStock":null,"normalizedOperationSignValuation":-1},"timestamp":1770591204961}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: state set","data":{"hypothesisId":"H3","normalizedValuationValue":"-1"},"timestamp":1770591204962}
+{"location":"DocumentTypeForm.tsx","message":"effect valuationImpact: skip first run","data":{"hypothesisId":"H3"},"timestamp":1770591204962}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: raw props","data":{"hypothesisId":"H1","code":"FAC","operationSignValuation":-1,"operationSignValuationType":"number","operationSignStock":null},"timestamp":1770591204964}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: after normalize","data":{"hypothesisId":"H2","normalizedOperationSignStock":null,"normalizedOperationSignValuation":-1},"timestamp":1770591204964}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: state set","data":{"hypothesisId":"H3","normalizedValuationValue":"-1"},"timestamp":1770591204965}
+{"location":"DocumentTypeForm.tsx","message":"effect valuationImpact: skip first run","data":{"hypothesisId":"H3"},"timestamp":1770591204965}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591204973}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591204974}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591204991}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591204991}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591205273}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591205273}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591205500}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591205501}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591205992}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591205992}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591206009}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"-1","fieldValue":-1,"displayValue":"-1","fallbackFromDoc":"-1"},"timestamp":1770591206010}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591207051}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","fieldValue":null},"timestamp":1770591207051}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: raw props","data":{"hypothesisId":"H1","code":"FAD","operationSignValuation":1,"operationSignValuationType":"number","operationSignStock":null},"timestamp":1770591207061}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: state set","data":{"hypothesisId":"H3","normalizedValuationValue":"1"},"timestamp":1770591207062}
+{"location":"DocumentTypeForm.tsx","message":"effect valuationImpact: skip first run","data":{"hypothesisId":"H3"},"timestamp":1770591207062}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: after normalize","data":{"hypothesisId":"H2","normalizedOperationSignStock":null,"normalizedOperationSignValuation":1},"timestamp":1770591207061}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: raw props","data":{"hypothesisId":"H1","code":"FAD","operationSignValuation":1,"operationSignValuationType":"number","operationSignStock":null},"timestamp":1770591207064}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: after normalize","data":{"hypothesisId":"H2","normalizedOperationSignStock":null,"normalizedOperationSignValuation":1},"timestamp":1770591207064}
+{"location":"DocumentTypeForm.tsx","message":"effect documentType: state set","data":{"hypothesisId":"H3","normalizedValuationValue":"1"},"timestamp":1770591207064}
+{"location":"DocumentTypeForm.tsx","message":"effect valuationImpact: skip first run","data":{"hypothesisId":"H3"},"timestamp":1770591207064}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207069}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207070}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207089}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207089}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207362}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207363}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207613}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207613}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207965}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207965}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207983}
+{"location":"DocumentTypeForm.tsx","message":"render Select valorizzazione","data":{"hypothesisId":"H4","valuationSignValue":"1","fieldValue":1,"displayValue":"1","fallbackFromDoc":"1"},"timestamp":1770591207983}

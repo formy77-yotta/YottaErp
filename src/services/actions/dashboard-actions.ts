@@ -95,27 +95,23 @@ export async function getDashboardStats(): Promise<{
         },
         _sum: { grossTotal: true },
       }),
-      // Scadenze non saldate da documenti di vendita (crediti)
-      prisma.paymentDeadline.findMany({
+      // Scadenze non saldate da documenti di vendita (crediti) — paid = sum(PaymentMapping)
+      prisma.installment.findMany({
         where: {
-          document: {
-            organizationId: ctx.organizationId,
-            documentType: { documentDirection: 'SALE' },
-          },
+          organizationId: ctx.organizationId,
+          document: { documentType: { documentDirection: 'SALE' } },
           status: { in: ['PENDING', 'PARTIAL'] },
         },
-        select: { amount: true, paidAmount: true },
+        select: { amount: true, payments: { select: { amount: true } } },
       }),
       // Scadenze non saldate da documenti di acquisto (debiti)
-      prisma.paymentDeadline.findMany({
+      prisma.installment.findMany({
         where: {
-          document: {
-            organizationId: ctx.organizationId,
-            documentType: { documentDirection: 'PURCHASE' },
-          },
+          organizationId: ctx.organizationId,
+          document: { documentType: { documentDirection: 'PURCHASE' } },
           status: { in: ['PENDING', 'PARTIAL'] },
         },
-        select: { amount: true, paidAmount: true },
+        select: { amount: true, payments: { select: { amount: true } } },
       }),
       // Totale entità
       prisma.entity.count({
@@ -183,14 +179,16 @@ export async function getDashboardStats(): Promise<{
       }),
     ]);
 
-    // 4. Calcola crediti e debiti (residuo = amount - paidAmount)
+    // 4. Calcola crediti e debiti (residuo = amount - sum(payments.amount))
     const toNum = (v: unknown) => (v != null ? Number(v) : 0);
+    const paidOf = (d: { amount: unknown; payments: { amount: unknown }[] }) =>
+      d.payments.reduce((s, p) => s + toNum(p.amount), 0);
     const creditsFromSales = salesDeadlines.reduce(
-      (sum, d) => sum + toNum(d.amount) - toNum(d.paidAmount),
+      (sum, d) => sum + toNum(d.amount) - paidOf(d),
       0
     );
     const debitsFromPurchases = purchaseDeadlines.reduce(
-      (sum, d) => sum + toNum(d.amount) - toNum(d.paidAmount),
+      (sum, d) => sum + toNum(d.amount) - paidOf(d),
       0
     );
     const revenueFiscalYear = toNum(revenueAggregate._sum.grossTotal);

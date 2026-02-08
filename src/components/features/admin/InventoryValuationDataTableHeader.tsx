@@ -1,5 +1,5 @@
 /**
- * Intestazione DataTable Scadenze: colonne ordinabili e ricerca con debounce.
+ * Intestazione DataTable Valorizzazione Magazzino: colonne ordinabili e ricerca con debounce.
  * Aggiorna l'URL (sort, q) tramite useSearchParams/usePathname/useRouter.
  */
 
@@ -18,23 +18,25 @@ import { DataTableSearchInput } from '@/components/ui/data-table-search-input';
 
 const DEBOUNCE_MS = 500;
 
-/** Colonne ordinabili: label -> campo per sort (backend) */
 const SORTABLE_COLUMNS: { label: string; field: string }[] = [
-  { label: 'Scadenza', field: 'dueDate' },
-  { label: 'Documento', field: 'documentNumber' },
-  { label: 'Cliente / Fornitore', field: 'documentCustomerName' },
-  { label: 'Importo', field: 'amount' },
-  { label: 'Stato', field: 'status' },
+  { label: 'Codice Articolo', field: 'productCode' },
+  { label: 'Descrizione', field: 'productName' },
+  { label: 'Q.tà Acquistata | Valore Acquisto', field: 'purchasedTotalAmount' },
+  { label: 'Q.tà Venduta | Valore Vendita', field: 'soldTotalAmount' },
+  { label: 'Costo Medio (CMP)', field: 'weightedAverageCost' },
+  { label: 'Ultimo Costo', field: 'lastCost' },
 ];
 
-function parseSort(sortParam: string | null): { field: string; order: 'asc' | 'desc' } | null {
+function parseSort(
+  sortParam: string | null
+): { field: string; order: 'asc' | 'desc' } | null {
   if (!sortParam?.trim()) return null;
   const [field, order] = sortParam.split('.');
   if (order === 'asc' || order === 'desc') return { field, order };
   return null;
 }
 
-export function ScadenzeDataTableHeader() {
+export function InventoryValuationDataTableHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -77,32 +79,7 @@ export function ScadenzeDataTableHeader() {
   return (
     <TableHeader>
       <TableRow>
-        {SORTABLE_COLUMNS.slice(0, 4).map(({ label, field }) => {
-          const isSorted = currentSort?.field === field;
-          return (
-            <TableHead key={field}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={field === 'amount' ? '-ml-3 h-8 font-medium justify-end' : '-ml-3 h-8 font-medium'}
-                onClick={() => updateSort(field)}
-              >
-                {label}
-                {isSorted ? (
-                  currentSort.order === 'asc' ? (
-                    <ArrowUp className="ml-2 h-4 w-4" />
-                  ) : (
-                    <ArrowDown className="ml-2 h-4 w-4" />
-                  )
-                ) : (
-                  <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
-                )}
-              </Button>
-            </TableHead>
-          );
-        })}
-        <TableHead className="w-[200px]">Pagato</TableHead>
-        {SORTABLE_COLUMNS.slice(4).map(({ label, field }) => {
+        {SORTABLE_COLUMNS.map(({ label, field }) => {
           const isSorted = currentSort?.field === field;
           return (
             <TableHead key={field}>
@@ -133,11 +110,10 @@ export function ScadenzeDataTableHeader() {
               value={qParam}
               onDebouncedChange={updateSearchUrl}
               debounceMs={DEBOUNCE_MS}
-              placeholder="Cerca documento o cliente..."
+              placeholder="Cerca codice o descrizione..."
             />
           </div>
         </TableHead>
-        <TableHead className="text-right w-[120px]">Azioni</TableHead>
       </TableRow>
     </TableHeader>
   );

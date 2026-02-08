@@ -141,11 +141,9 @@ export async function getPaymentDeadlines(
 > {
   const ctx = await getAuthContext();
 
-  const deadlines = await prisma.paymentDeadline.findMany({
+  const deadlines = await prisma.installment.findMany({
     where: {
-      document: {
-        organizationId: ctx.organizationId,
-      },
+      organizationId: ctx.organizationId,
       ...(params?.dateFrom &&
         params?.dateTo && {
           dueDate: {
@@ -168,28 +166,43 @@ export async function getPaymentDeadlines(
           category: true,
         },
       },
+      payments: { select: { amount: true } },
     },
     orderBy: {
       dueDate: 'asc',
     },
   });
 
-  return deadlines.map((d) => ({
-    id: d.id,
-    documentId: d.documentId,
-    dueDate: d.dueDate,
-    amount: d.amount.toString(),
-    status: d.status,
-    paidAmount: d.paidAmount.toString(),
-    document: {
-      id: d.document.id,
-      number: d.document.number,
-      date: d.document.date,
-      customerNameSnapshot: d.document.customerNameSnapshot,
-      grossTotal: d.document.grossTotal.toString(),
-      category: d.document.category,
-    },
-  }));
+  return deadlines.map((d) => {
+    const paidFromMappings = d.payments.reduce(
+      (sum, m) => sum + Number(m.amount),
+      0
+    );
+    const paidAmountStr = paidFromMappings.toFixed(2);
+    const amountNum = Number(d.amount.toString());
+    const status =
+      paidFromMappings >= amountNum
+        ? 'PAID'
+        : paidFromMappings > 0
+          ? 'PARTIAL'
+          : d.status.toString();
+    return {
+      id: d.id,
+      documentId: d.documentId,
+      dueDate: d.dueDate,
+      amount: d.amount.toString(),
+      status,
+      paidAmount: paidAmountStr,
+      document: {
+        id: d.document.id,
+        number: d.document.number,
+        date: d.document.date,
+        customerNameSnapshot: d.document.customerNameSnapshot,
+        grossTotal: d.document.grossTotal.toString(),
+        category: d.document.category,
+      },
+    };
+  });
 }
 
 /** Tipo riga scadenza per DataTable */
@@ -229,16 +242,16 @@ export async function getPaymentDeadlinesPage(
   const { page, perPage, sort: sortParam, q } = searchParams;
   const skip = (page - 1) * perPage;
 
-  const where: Prisma.PaymentDeadlineWhereInput = {
-    document: {
-      organizationId: ctx.organizationId,
-      ...(q && q.length > 0 && {
+  const where: Prisma.InstallmentWhereInput = {
+    organizationId: ctx.organizationId,
+    ...(q && q.length > 0 && {
+      document: {
         OR: [
           { number: { contains: q, mode: 'insensitive' } },
           { customerNameSnapshot: { contains: q, mode: 'insensitive' } },
         ],
-      }),
-    },
+      },
+    }),
     ...(params?.dateFrom && params?.dateTo && { dueDate: { gte: params.dateFrom, lte: params.dateTo } }),
     ...(params?.dateFrom && !params?.dateTo && { dueDate: { gte: params.dateFrom } }),
     ...(params?.dateTo && !params?.dateFrom && { dueDate: { lte: params.dateTo } }),
@@ -246,7 +259,7 @@ export async function getPaymentDeadlinesPage(
   };
 
   const parsedSort = parseSortParam(sortParam);
-  let orderBy: Prisma.PaymentDeadlineOrderByWithRelationInput[] = [{ dueDate: 'asc' }];
+  let orderBy: Prisma.InstallmentOrderByWithRelationInput[] = [{ dueDate: 'asc' }];
   if (parsedSort && DEADLINE_SORT_FIELDS.includes(parsedSort.field as (typeof DEADLINE_SORT_FIELDS)[number])) {
     if (parsedSort.field === 'documentNumber') {
       orderBy = [{ document: { number: parsedSort.order } }];
@@ -258,7 +271,7 @@ export async function getPaymentDeadlinesPage(
   }
 
   const [deadlines, count] = await Promise.all([
-    prisma.paymentDeadline.findMany({
+    prisma.installment.findMany({
       where,
       orderBy,
       skip,
@@ -274,27 +287,42 @@ export async function getPaymentDeadlinesPage(
             category: true,
           },
         },
+        payments: { select: { amount: true } },
       },
     }),
-    prisma.paymentDeadline.count({ where }),
+    prisma.installment.count({ where }),
   ]);
 
-  const data: PaymentDeadlineRow[] = deadlines.map((d) => ({
-    id: d.id,
-    documentId: d.documentId,
-    dueDate: d.dueDate,
-    amount: d.amount.toString(),
-    status: d.status,
-    paidAmount: d.paidAmount.toString(),
-    document: {
-      id: d.document.id,
-      number: d.document.number,
-      date: d.document.date,
-      customerNameSnapshot: d.document.customerNameSnapshot,
-      grossTotal: d.document.grossTotal.toString(),
-      category: d.document.category,
-    },
-  }));
+  const data: PaymentDeadlineRow[] = deadlines.map((d) => {
+    const paidFromMappings = d.payments.reduce(
+      (sum, m) => sum + Number(m.amount),
+      0
+    );
+    const paidAmountStr = paidFromMappings.toFixed(2);
+    const amountNum = Number(d.amount.toString());
+    const status =
+      paidFromMappings >= amountNum
+        ? 'PAID'
+        : paidFromMappings > 0
+          ? 'PARTIAL'
+          : d.status.toString();
+    return {
+      id: d.id,
+      documentId: d.documentId,
+      dueDate: d.dueDate,
+      amount: d.amount.toString(),
+      status,
+      paidAmount: paidAmountStr,
+      document: {
+        id: d.document.id,
+        number: d.document.number,
+        date: d.document.date,
+        customerNameSnapshot: d.document.customerNameSnapshot,
+        grossTotal: d.document.grossTotal.toString(),
+        category: d.document.category,
+      },
+    };
+  });
 
   return { data, count };
 }

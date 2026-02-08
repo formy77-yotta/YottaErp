@@ -18,10 +18,11 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { CreateProductDialog } from '@/components/features/CreateProductDialog';
-import { EditProductDialog } from '@/components/features/EditProductDialog';
 import { DeleteProductButton } from '@/components/features/DeleteProductButton';
+import { RecalculateStatsButton } from '@/components/features/products/RecalculateStatsButton';
+import { ProductStatsPopup } from '@/components/features/products/ProductStatsPopup';
 import { Badge } from '@/components/ui/badge';
-import { Package, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, ChevronLeft, ChevronRight, Edit } from 'lucide-react';
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { parseSearchParams } from '@/lib/validations/search-params';
@@ -45,7 +46,10 @@ export default async function ProductsPage({
             Gestisci i prodotti e servizi della tua organizzazione
           </p>
         </div>
-        <CreateProductDialog />
+        <div className="flex items-center gap-4">
+          <RecalculateStatsButton />
+          <CreateProductDialog />
+        </div>
       </div>
 
       <Suspense fallback={<ProductsTableSkeleton />}>
@@ -194,8 +198,17 @@ function ProductRow({ product }: { product: ProductRow }) {
       </TableCell>
       <TableCell />
       <TableCell className="text-right">
-        <div className="flex items-center justify-end gap-2">
-          <EditProductDialog product={product} />
+        <div className="flex items-center justify-end gap-1">
+          <ProductStatsPopup
+            productId={product.id}
+            productCode={product.code}
+            productName={product.name}
+          />
+          <Button variant="ghost" size="icon" asChild>
+            <Link href={`/products/${product.id}`} title="Apri scheda prodotto">
+              <Edit className="h-4 w-4" />
+            </Link>
+          </Button>
           <DeleteProductButton productId={product.id} />
         </div>
       </TableCell>
@@ -250,6 +263,8 @@ function ProductsTableSkeleton() {
             <TableHead>Prezzo</TableHead>
             <TableHead>IVA</TableHead>
             <TableHead>Stato</TableHead>
+            <TableHead className="text-right">CMP</TableHead>
+            <TableHead className="text-right">Ultimo costo</TableHead>
             <TableHead className="text-right" />
             <TableHead className="text-right">Azioni</TableHead>
           </TableRow>
@@ -277,6 +292,12 @@ function ProductsTableSkeleton() {
               </TableCell>
               <TableCell>
                 <div className="h-4 w-16 bg-muted animate-pulse rounded" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell>
+                <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" />
               </TableCell>
               <TableCell />
               <TableCell className="text-right">
