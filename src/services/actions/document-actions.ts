@@ -235,6 +235,14 @@ export async function getDocumentAction(
       sdiCode: string;
     };
   } | null;
+  shippingNominative: string | null;
+  shippingReceiverName: string | null;
+  shippingStreet: string | null;
+  shippingCity: string | null;
+  shippingZipCode: string | null;
+  shippingProvince: string | null;
+  shippingCountry: string | null;
+  shippingAddressId: string | null;
   createdAt: Date;
   updatedAt: Date;
   lines: Array<{

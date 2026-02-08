@@ -41,7 +41,7 @@ const createStyles = (fontSize: string) =>
 
 function getRowStyles(line: DocumentLineSnapshot, conditionalStyles: ConditionalStyle[]): Record<string, unknown> & { color?: string } {
   const applied: Record<string, unknown> & { color?: string } = {};
-  const lineRecord = line as Record<string, unknown>;
+  const lineRecord = line as unknown as Record<string, unknown>;
   for (const rule of conditionalStyles) {
     if (rule.target !== 'row') continue;
     const fieldValue = lineRecord[rule.condition];

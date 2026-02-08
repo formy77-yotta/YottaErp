@@ -50,7 +50,7 @@ export const StandardRecipient: React.FC<RecipientBlockProps> = ({
   return (
     <View style={[styles.container, containerStyle]}>
       {showLabel && <Text style={styles.label}>Destinatario</Text>}
-      <Text style={[styles.name, textColor && { color: textColor }]}>{customer.name}</Text>
+      <Text style={[styles.name, ...(textColor ? [{ color: textColor }] : [])]}>{customer.name}</Text>
       {customer.vat && (
         <Text style={detailStyle}>P.IVA: {customer.vat}</Text>
       )}

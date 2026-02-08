@@ -44,7 +44,8 @@ export function TemplatePreviewPdf({
         config,
         organization: { name: organizationName, logoUrl: organizationLogoUrl },
       });
-      pdf(pdfDoc)
+      // Layout components render <Document> at root; pdf() expects DocumentProps at type level
+      pdf(pdfDoc as React.ReactElement)
         .toBlob()
         .then((blob) => {
           if (lastKeyRef.current !== key) return;

@@ -73,7 +73,7 @@ export const StandardHeader: React.FC<BaseHeaderProps> = ({
   );
 
   return (
-    <View style={[styles.container, config.backgroundColor && { backgroundColor: config.backgroundColor }]}>
+    <View style={[styles.container, ...(config.backgroundColor ? [{ backgroundColor: config.backgroundColor }] : [])]}>
       <View style={styles.leftBlock}>
         {config.logoPosition === 'left' && <LogoBlock />}
       </View>
