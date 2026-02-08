@@ -28,6 +28,7 @@ import {
   type SearchParams,
 } from '@/lib/validations/search-params';
 import type { Prisma } from '@prisma/client';
+import { getStocks } from '@/services/business/stock-service';
 import { 
   createProductSchema, 
   updateProductSchema,
@@ -68,6 +69,8 @@ export type ProductRow = {
   updatedAt: Date;
   /** Valorizzazione: CMP e ultimo costo anno corrente (se presenti) */
   currentYearStat: ProductCurrentYearStat;
+  /** Giacenza attuale (solo se tipo gestisce magazzino), altrimenti null */
+  stock: string | null;
 };
 
 const PRODUCT_SORT_FIELDS = ['code', 'name', 'categoryId', 'typeId', 'price', 'vatRateId', 'active', 'createdAt'] as const;
@@ -161,6 +164,14 @@ export async function getProductsAction(
       prisma.product.count({ where }),
     ]);
 
+    const productIdsWithStock = products
+      .filter((p) => p.type?.manageStock)
+      .map((p) => p.id);
+    const stocksMap =
+      productIdsWithStock.length > 0
+        ? await getStocks(productIdsWithStock, ctx.organizationId)
+        : {};
+
     const data: ProductRow[] = products.map((product) => ({
       ...product,
       price: product.price.toString(),
@@ -174,6 +185,9 @@ export async function getProductsAction(
           }
         : null,
       currentYearStat: null,
+      stock: product.type?.manageStock
+        ? (stocksMap[product.id]?.toFixed(2) ?? '0')
+        : null,
     }));
 
     return {

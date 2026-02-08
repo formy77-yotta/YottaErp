@@ -82,8 +82,8 @@ export async function applyDocumentStats(
   for (const line of document.lines) {
     if (!line.productId) continue;
 
-    const lineQuantity = toDecimal(line.quantity);
-    const lineNetAmount = toDecimal(line.netAmount);
+    const lineQuantity = toDecimal(line.quantity as string | number | Decimal);
+    const lineNetAmount = toDecimal(line.netAmount as string | number | Decimal);
     const deltaQty = lineQuantity.mul(sign);
     const deltaAmount = lineNetAmount.mul(sign);
 
@@ -176,8 +176,8 @@ export async function revertDocumentStats(
   for (const line of snapshot.lines) {
     if (!line.productId) continue;
 
-    const lineQuantity = toDecimal(line.quantity);
-    const lineNetAmount = toDecimal(line.netAmount);
+    const lineQuantity = toDecimal(line.quantity as string | number | Decimal);
+    const lineNetAmount = toDecimal(line.netAmount as string | number | Decimal);
     const deltaQty = lineQuantity.mul(sign);
     const deltaAmount = lineNetAmount.mul(sign);
     const negDeltaQty = deltaQty.neg();

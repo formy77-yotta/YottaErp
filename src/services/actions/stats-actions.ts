@@ -5,7 +5,7 @@ import { Decimal } from 'decimal.js';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, verifyOrganizationAccess } from '@/lib/auth';
 import { recalculateStatsForYear } from '@/services/business/stats-service';
-import { getStock } from '@/services/business/stock-service';
+import { getStock, getStocks } from '@/services/business/stock-service';
 import {
   parseSearchParams,
   parseSortParam,
@@ -196,6 +196,7 @@ export async function getAllProductsStats(
               id: true,
               code: true,
               name: true,
+              quantityDecimals: true,
             },
           },
         },
@@ -203,19 +204,28 @@ export async function getAllProductsStats(
       prisma.productAnnualStat.count({ where }),
     ]);
 
-    const data: ProductStatsRow[] = stats.map((stat) => ({
-      id: stat.id,
-      productId: stat.productId,
-      productCode: stat.product.code,
-      productName: stat.product.name,
-      year: stat.year,
-      purchasedQuantity: stat.purchasedQuantity.toString(),
-      purchasedTotalAmount: stat.purchasedTotalAmount.toString(),
-      soldQuantity: stat.soldQuantity.toString(),
-      soldTotalAmount: stat.soldTotalAmount.toString(),
-      weightedAverageCost: stat.weightedAverageCost.toString(),
-      lastCost: stat.lastCost.toString(),
-    }));
+    const productIds = stats.map((s) => s.productId);
+    const stocksMap = productIds.length > 0 ? await getStocks(productIds, ctx.organizationId) : {};
+
+    const data: ProductStatsRow[] = stats.map((stat) => {
+      const qtyDecimals = stat.product.quantityDecimals ?? 4;
+      const currentStock = stocksMap[stat.productId] ?? new Decimal(0);
+      return {
+        id: stat.id,
+        productId: stat.productId,
+        productCode: stat.product.code,
+        productName: stat.product.name,
+        year: stat.year,
+        purchasedQuantity: stat.purchasedQuantity.toString(),
+        purchasedTotalAmount: stat.purchasedTotalAmount.toString(),
+        soldQuantity: stat.soldQuantity.toString(),
+        soldTotalAmount: stat.soldTotalAmount.toString(),
+        weightedAverageCost: stat.weightedAverageCost.toString(),
+        lastCost: stat.lastCost.toString(),
+        currentStock: currentStock.toFixed(qtyDecimals),
+        quantityDecimals: qtyDecimals,
+      };
+    });
 
     return {
       success: true,

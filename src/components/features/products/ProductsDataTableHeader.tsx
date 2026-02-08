@@ -102,6 +102,7 @@ export function ProductsDataTableHeader() {
             </TableHead>
           );
         })}
+        <TableHead className="text-right font-medium">Giacenza</TableHead>
         <TableHead className="text-right">
           <div className="flex items-center justify-end gap-2">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />

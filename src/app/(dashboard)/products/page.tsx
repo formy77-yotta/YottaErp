@@ -93,7 +93,7 @@ async function ProductsTable({
           {isEmpty ? (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center">
+                <TableCell colSpan={10} className="h-32 text-center">
                   <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">Nessun prodotto configurato</p>
                   <p className="text-sm text-muted-foreground mt-2">
@@ -169,17 +169,13 @@ function ProductRow({ product }: { product: ProductRow }) {
       </TableCell>
       <TableCell>
         {product.type ? (
-          <div className="flex items-center gap-1">
-            <Badge variant="outline">{product.type.code}</Badge>
-            {product.type.manageStock && (
-              <Badge variant="secondary" className="text-xs">
-                Magazzino
-              </Badge>
-            )}
-          </div>
+          <Badge variant="outline">{product.type.code}</Badge>
         ) : (
           <span className="text-muted-foreground text-sm">-</span>
         )}
+      </TableCell>
+      <TableCell className="text-right font-mono text-sm tabular-nums">
+        {product.stock !== null ? product.stock : '-'}
       </TableCell>
       <TableCell className="font-medium">
         {formatCurrency(priceDecimal)}
@@ -263,8 +259,7 @@ function ProductsTableSkeleton() {
             <TableHead>Prezzo</TableHead>
             <TableHead>IVA</TableHead>
             <TableHead>Stato</TableHead>
-            <TableHead className="text-right">CMP</TableHead>
-            <TableHead className="text-right">Ultimo costo</TableHead>
+            <TableHead className="text-right">Giacenza</TableHead>
             <TableHead className="text-right" />
             <TableHead className="text-right">Azioni</TableHead>
           </TableRow>
@@ -294,10 +289,7 @@ function ProductsTableSkeleton() {
                 <div className="h-4 w-16 bg-muted animate-pulse rounded" />
               </TableCell>
               <TableCell>
-                <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" />
-              </TableCell>
-              <TableCell>
-                <div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" />
+                <div className="h-4 w-12 bg-muted animate-pulse rounded ml-auto" />
               </TableCell>
               <TableCell />
               <TableCell className="text-right">

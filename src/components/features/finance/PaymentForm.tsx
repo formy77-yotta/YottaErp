@@ -66,7 +66,7 @@ export function PaymentForm({
   const [paymentTypes, setPaymentTypes] = useState<Array<{ id: string; name: string; sdiCode: string }>>([]);
 
   const form = useForm<NewPaymentFormValues>({
-    resolver: zodResolver(newPaymentFormSchema),
+    resolver: zodResolver(newPaymentFormSchema) as any,
     defaultValues: {
       financialAccountId: defaultFinancialAccountId ?? '',
       amount: '',

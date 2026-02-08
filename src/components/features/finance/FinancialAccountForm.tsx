@@ -33,7 +33,7 @@ interface FinancialAccountFormProps {
 
 export function FinancialAccountForm({ onSuccess, onError }: FinancialAccountFormProps) {
   const form = useForm<CreateFinancialAccountFormValues>({
-    resolver: zodResolver(createFinancialAccountFormSchema),
+    resolver: zodResolver(createFinancialAccountFormSchema) as any,
     defaultValues: {
       name: '',
       type: 'BANK',

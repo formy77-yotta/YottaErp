@@ -34,8 +34,7 @@ export const createFinancialAccountFormSchema = z.object({
   iban: z.string().max(34).optional().or(z.literal('')),
   initialBalance: z
     .string()
-    .regex(/^-?\d+(\.\d{1,2})?$/, 'Saldo iniziale non valido (max 2 decimali)')
-    .default('0'),
+    .regex(/^-?\d+(\.\d{1,2})?$/, 'Saldo iniziale non valido (max 2 decimali)'),
 });
 
 export type CreateFinancialAccountFormValues = z.infer<typeof createFinancialAccountFormSchema>;
@@ -74,6 +73,8 @@ export const reconcilePaymentSchema = z
   );
 
 export type ReconcilePaymentInput = z.infer<typeof reconcilePaymentSchema>;
+/** Input grezzo (es. da form) prima delle transform amount → Decimal */
+export type ReconcilePaymentRawInput = z.input<typeof reconcilePaymentSchema>;
 export type AllocationItem = z.infer<typeof allocationItemSchema>;
 
 /** Schema per il form di creazione pagamento (importo come stringa per input) */

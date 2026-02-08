@@ -26,6 +26,7 @@ import {
   ClipboardList,
   LayoutTemplate,
   Landmark,
+  Wallet,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -89,6 +90,11 @@ const navItems: NavItem[] = [
         title: 'Banche',
         href: '/admin/financial-accounts',
         icon: Landmark,
+      },
+      {
+        title: 'Pagamenti',
+        href: '/admin/payments',
+        icon: Wallet,
       },
     ],
   },

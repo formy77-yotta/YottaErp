@@ -16,10 +16,10 @@ export function AllocaPagamentoButton({ row }: { row: ScadenzaRow }) {
         variant="ghost"
         size="sm"
         onClick={() => setOpen(true)}
-        title="Alloca pagamento"
+        title="Pagamento"
       >
         <Wallet className="h-4 w-4 mr-1" />
-        Alloca
+        Pagamento
       </Button>
       <ReconcilePaymentDialog
         open={open}

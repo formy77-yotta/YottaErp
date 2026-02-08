@@ -12,7 +12,7 @@ import { getAuthContext } from '@/lib/auth';
 import {
   reconcilePaymentSchema,
   createFinancialAccountSchema,
-  type ReconcilePaymentInput,
+  type ReconcilePaymentRawInput,
   type CreateFinancialAccountRawInput,
 } from '@/schemas/finance-schema';
 import { Decimal } from 'decimal.js';
@@ -69,7 +69,10 @@ export async function createFinancialAccount(
 export async function getFinancialAccounts(activeOnly = true) {
   const ctx = await getAuthContext();
   const accounts = await prisma.financialAccount.findMany({
-    where: { organizationId: ctx.organizationId },
+    where: {
+      organizationId: ctx.organizationId,
+      ...(activeOnly ? { active: true } : {}),
+    },
     orderBy: [{ type: 'asc' }, { name: 'asc' }],
   });
   return accounts;
@@ -166,7 +169,7 @@ export async function deleteFinancialAccount(
  * - Per ogni scadenza: allocazione <= residuo (amount - SUM(mapping esistenti)).
  */
 export async function reconcilePayment(
-  input: ReconcilePaymentInput
+  input: ReconcilePaymentRawInput
 ): Promise<ReconcilePaymentResult> {
   const parseResult = reconcilePaymentSchema.safeParse(input);
   if (!parseResult.success) {
@@ -311,8 +314,18 @@ export async function reconcilePayment(
   return { success: true, paymentId: targetPaymentId, mappingIds };
 }
 
-/** Lista pagamenti dell'organizzazione (per dropdown "Alloca pagamento") */
-export async function listPayments(options?: { direction?: 'INFLOW' | 'OUTFLOW'; limit?: number }) {
+/** Lista pagamenti dell'organizzazione (per elenco e dropdown) */
+export type ListPaymentItem = {
+  id: string;
+  amount: string;
+  date: string;
+  direction: string;
+  reference: string | null;
+  accountName: string;
+  allocated: number;
+};
+
+export async function listPayments(options?: { direction?: 'INFLOW' | 'OUTFLOW'; limit?: number }): Promise<ListPaymentItem[]> {
   const ctx = await getAuthContext();
   const list = await prisma.payment.findMany({
     where: {
@@ -327,15 +340,52 @@ export async function listPayments(options?: { direction?: 'INFLOW' | 'OUTFLOW';
       date: true,
       type: true,
       reference: true,
+      financialAccount: { select: { name: true } },
       mappings: { select: { amount: true } },
     },
   });
   return list.map((p) => ({
     id: p.id,
     amount: p.amount.toString(),
-    date: p.date,
+    date: p.date.toISOString(),
     direction: p.type,
     reference: p.reference ?? null,
+    accountName: p.financialAccount.name,
     allocated: p.mappings.reduce((s, m) => s + Number(m.amount), 0),
   }));
+}
+
+/** Scadenze con residuo per dropdown "Collega scadenze" (serializzabile) */
+export type InstallmentOption = {
+  id: string;
+  dueDate: string;
+  amount: string;
+  paidAmount: string;
+  documentNumber: string;
+};
+
+export async function getInstallmentsForAllocation(limit = 200): Promise<InstallmentOption[]> {
+  const ctx = await getAuthContext();
+  const list = await prisma.installment.findMany({
+    where: { organizationId: ctx.organizationId },
+    orderBy: { dueDate: 'asc' },
+    take: limit,
+    select: {
+      id: true,
+      dueDate: true,
+      amount: true,
+      document: { select: { number: true } },
+      payments: { select: { amount: true } },
+    },
+  });
+  return list.map((inst) => {
+    const paid = inst.payments.reduce((s, m) => s + Number(m.amount), 0);
+    return {
+      id: inst.id,
+      dueDate: inst.dueDate.toISOString(),
+      amount: inst.amount.toString(),
+      paidAmount: paid.toFixed(2),
+      documentNumber: inst.document.number,
+    };
+  });
 }
