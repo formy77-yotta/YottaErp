@@ -19,7 +19,8 @@ import { Decimal } from 'decimal.js';
 import { updateDocumentSchema, type CreateDocumentInput, type UpdateDocumentInput, type DocumentLineInput } from '@/schemas/document-schema';
 import { createDocumentAction, updateDocumentAction, getProposedDocumentNumberAction, getDocumentAction } from '@/services/actions/document-actions';
 import { getDocumentTypesAction } from '@/services/actions/document-type-actions';
-import { getEntitiesAction, type EntityRow } from '@/services/actions/entity-actions';
+import { getEntitiesAction, getEntityAddressesAction, type EntityRow } from '@/services/actions/entity-actions';
+import type { EntityAddressRow } from '@/services/actions/entity-actions';
 import { getProductsAction } from '@/services/actions/product-actions';
 import { getWarehousesAction } from '@/services/actions/warehouse-actions';
 import { getPaymentConditionsAction } from '@/services/actions/payment-actions';
@@ -53,7 +54,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
 
 interface DocumentFormProps {
   /**
@@ -119,6 +120,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
     numberOfDues: number;
     isEndOfMonth: boolean;
   }>>([]);
+  const [entityAddresses, setEntityAddresses] = useState<EntityAddressRow[]>([]);
 
   // In modifica: righe caricate dal documento, usate per totali/validazione finché useWatch non si aggiorna dopo reset
   const [loadedLinesSnapshot, setLoadedLinesSnapshot] = useState<Array<{
@@ -147,6 +149,15 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       // In modifica, solo campi presenti in UpdateDocumentInput
       // NOTA: id viene aggiunto in onSubmit, non nei defaultValues
       entityId: '',
+      entityAddressId: '',
+      shippingAddressId: '',
+      shippingNominative: '',
+      shippingReceiverName: '',
+      shippingStreet: '',
+      shippingCity: '',
+      shippingZipCode: '',
+      shippingProvince: '',
+      shippingCountry: 'IT',
       date: new Date(),
       mainWarehouseId: '',
       lines: [
@@ -168,6 +179,15 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
       documentTypeId: '',
       number: '',
       entityId: '',
+      entityAddressId: '',
+      shippingAddressId: '',
+      shippingNominative: '',
+      shippingReceiverName: '',
+      shippingStreet: '',
+      shippingCity: '',
+      shippingZipCode: '',
+      shippingProvince: '',
+      shippingCountry: 'IT',
       date: new Date(), // Data odierna
       mainWarehouseId: '',
       lines: [
@@ -189,6 +209,45 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
   // Watch documentTypeId per proporre numero automaticamente
   const documentTypeId = form.watch('documentTypeId');
+  const selectedEntityId = form.watch('entityId');
+  const shippingAddressId = form.watch('shippingAddressId');
+  const isManualShipping = shippingAddressId === 'manual';
+
+  // Carica indirizzi dell'entità quando si seleziona un cliente/fornitore (indirizzo cliente + destinazione consegna)
+  useEffect(() => {
+    if (!selectedEntityId || typeof selectedEntityId !== 'string' || !selectedEntityId.trim()) {
+      setEntityAddresses([]);
+      form.setValue('entityAddressId', '');
+      form.setValue('shippingAddressId', '');
+      form.setValue('shippingNominative', '');
+      form.setValue('shippingReceiverName', '');
+      form.setValue('shippingStreet', '');
+      form.setValue('shippingCity', '');
+      form.setValue('shippingZipCode', '');
+      form.setValue('shippingProvince', '');
+      form.setValue('shippingCountry', 'IT');
+      return;
+    }
+    setEntityAddresses([]);
+    form.setValue('entityAddressId', '');
+    form.setValue('shippingAddressId', '');
+    form.setValue('shippingReceiverName', '');
+    form.setValue('shippingStreet', '');
+    form.setValue('shippingCity', '');
+    form.setValue('shippingZipCode', '');
+    form.setValue('shippingProvince', '');
+    form.setValue('shippingCountry', 'IT');
+    getEntityAddressesAction(selectedEntityId).then((res) => {
+      if (res.success && res.data.length > 0) {
+        setEntityAddresses(res.data);
+        const defaultAddr = res.data.find((a) => a.isDefault);
+        form.setValue('entityAddressId', defaultAddr ? defaultAddr.id : '');
+      } else {
+        setEntityAddresses([]);
+        form.setValue('entityAddressId', '');
+      }
+    });
+  }, [selectedEntityId, form]);
 
   // useWatch fa sì che il componente si ri-renderizzi quando cambiano le righe → totali sempre aggiornati
   const watchedLines = useWatch({
@@ -347,8 +406,26 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
 
           setLoadedLinesSnapshot(linesForForm);
 
+          const hasShippingSnapshot =
+            (doc.shippingStreet?.trim() ?? '') !== '' ||
+            (doc.shippingCity?.trim() ?? '') !== '' ||
+            (doc.shippingReceiverName?.trim() ?? '') !== '' ||
+            (doc.shippingNominative?.trim() ?? '') !== '';
+          const shippingIdForm =
+            hasShippingSnapshot && !doc.shippingAddressId
+              ? 'manual'
+              : (doc.shippingAddressId ?? 'same');
           form.reset({
             entityId: doc.entityId ?? doc.entity?.id ?? '',
+            entityAddressId: '',
+            shippingAddressId: shippingIdForm,
+            shippingNominative: doc.shippingNominative ?? '',
+            shippingReceiverName: doc.shippingReceiverName ?? '',
+            shippingStreet: doc.shippingStreet ?? '',
+            shippingCity: doc.shippingCity ?? '',
+            shippingZipCode: doc.shippingZipCode ?? '',
+            shippingProvince: doc.shippingProvince ?? '',
+            shippingCountry: doc.shippingCountry ?? 'IT',
             date: new Date(doc.date),
             mainWarehouseId: '',
             lines: linesWithDecimal,
@@ -570,11 +647,28 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
           return;
         }
         
+        const entityAddressIdValue = (data as UpdateDocumentInput).entityAddressId as string | undefined;
+        const shippingIdRaw = (data as UpdateDocumentInput).shippingAddressId as string | undefined;
+        const sidUpdate = shippingIdRaw?.trim() || '';
+        const isManualUpdate = sidUpdate === 'manual';
         const updateData = {
           id: documentId,
           ...(entityIdValue !== undefined && { 
             entityId: entityIdValue?.trim() || undefined
           }),
+          ...(entityAddressIdValue !== undefined && { 
+            entityAddressId: entityAddressIdValue?.trim() || undefined
+          }),
+          ...(!isManualUpdate && sidUpdate && sidUpdate !== 'same' ? { shippingAddressId: sidUpdate } : isManualUpdate ? {
+            shippingAddressId: undefined,
+            shippingNominative: (data as UpdateDocumentInput).shippingNominative?.trim() || '',
+            shippingReceiverName: (data as UpdateDocumentInput).shippingReceiverName?.trim() || '',
+            shippingStreet: (data as UpdateDocumentInput).shippingStreet?.trim() || '',
+            shippingCity: (data as UpdateDocumentInput).shippingCity?.trim() || '',
+            shippingZipCode: (data as UpdateDocumentInput).shippingZipCode?.trim() || '',
+            shippingProvince: (data as UpdateDocumentInput).shippingProvince?.trim() || '',
+            shippingCountry: (data as UpdateDocumentInput).shippingCountry?.trim() || 'IT',
+          } : { shippingAddressId: undefined }),
           ...(data.date && { date: data.date }),
           ...(mainWarehouseIdValue !== undefined && { 
             mainWarehouseId: mainWarehouseIdValue?.trim() || undefined
@@ -633,18 +727,27 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
         // ✅ Converti Decimal in stringhe per serializzazione Server Action
         // Zod trasformerà le stringhe in Decimal durante la validazione
         // Usiamo 'as' perché TypeScript non sa che Zod trasformerà le stringhe
+        const sid = createData.shippingAddressId?.trim() || '';
+        const isManual = sid === 'manual';
         const submitData = {
           documentTypeId: createData.documentTypeId || '',
           number: createData.number || undefined,
           entityId: createData.entityId?.trim() || undefined,
+          entityAddressId: createData.entityAddressId?.trim() || undefined,
+          shippingAddressId: !isManual && sid && sid !== 'same' ? sid : undefined,
+          shippingNominative: isManual ? (createData.shippingNominative?.trim() || '') : undefined,
+          shippingReceiverName: isManual ? (createData.shippingReceiverName?.trim() || '') : undefined,
+          shippingStreet: isManual ? (createData.shippingStreet?.trim() || '') : undefined,
+          shippingCity: isManual ? (createData.shippingCity?.trim() || '') : undefined,
+          shippingZipCode: isManual ? (createData.shippingZipCode?.trim() || '') : undefined,
+          shippingProvince: isManual ? (createData.shippingProvince?.trim() || '') : undefined,
+          shippingCountry: isManual ? (createData.shippingCountry?.trim() || 'IT') : undefined,
           date: createData.date,
-          // ✅ Converti stringa vuota in undefined per mainWarehouseId
           mainWarehouseId: createData.mainWarehouseId?.trim() || undefined,
           lines: (createData.lines || []).map(line => ({
             productId: line.productId?.trim() || undefined,
             productCode: (line.productCode || '').trim(),
             description: (line.description || '').trim(),
-            // Converti Decimal in stringhe (Zod le trasformerà in Decimal)
             unitPrice: toDecimalString(line.unitPrice),
             quantity: toDecimalString(line.quantity),
             vatRate: toDecimalString(line.vatRate),
@@ -816,6 +919,191 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
               </FormItem>
             )}
           />
+
+          {/* Destinazione (sede/consegna) - solo se è selezionato un cliente/fornitore con sedi */}
+          {selectedEntityId && selectedEntityId !== 'none' && (
+            <FormField
+              control={form.control}
+              name="entityAddressId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    Destinazione
+                  </FormLabel>
+                  <Select
+                    onValueChange={(value) => field.onChange(value === 'main' ? '' : value)}
+                    value={field.value || 'main'}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Indirizzo principale" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="main">Indirizzo principale (sede legale)</SelectItem>
+                      {entityAddresses.map((addr) => (
+                        <SelectItem key={addr.id} value={addr.id}>
+                          {addr.type === 'LEGAL_HEADQUARTER' ? 'Sede legale' : 'Consegna'}
+                          {addr.nominative ? ` - ${addr.nominative}` : ''}
+                          {addr.receiverName ? ` - ${addr.receiverName}` : ''}: {addr.street}, {addr.city}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Scegli quale indirizzo usare per fatturazione (sede legale / consegna).
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {/* Destinazione diversa (consegna) - snapshot separato per DDT/Fattura */}
+          {selectedEntityId && selectedEntityId !== 'none' && (entityAddresses.length > 0 || true) && (
+            <>
+              <FormField
+                control={form.control}
+                name="shippingAddressId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Destinazione di consegna
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || 'same'}
+                      disabled={isLoading}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Stesso indirizzo cliente" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="same">Stesso indirizzo cliente</SelectItem>
+                      {entityAddresses.map((addr) => (
+                        <SelectItem key={addr.id} value={addr.id}>
+                          {addr.type === 'LEGAL_HEADQUARTER' ? 'Sede legale' : 'Consegna'}
+                          {addr.nominative ? ` - ${addr.nominative}` : ''}
+                          {addr.receiverName ? ` - ${addr.receiverName}` : ''}: {addr.street}, {addr.city}
+                        </SelectItem>
+                      ))}
+                        <SelectItem value="manual">Inserisci manuale (cantiere, subappalto…)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Indirizzo dove spedire/consegnare (snapshot salvato sul documento).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {isManualShipping && (
+                <div className="grid gap-4 rounded-lg border p-4">
+                  <p className="text-sm font-medium text-muted-foreground">Indirizzo di consegna (manuale)</p>
+                  <FormField
+                    control={form.control}
+                    name="shippingNominative"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nominativo</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Azienda o persona terza (es. Edilizia Rossi S.r.l., Mario Bianchi)" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="shippingReceiverName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Destinatario (es. Cantiere Roma, Presso…)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Presso Cantiere Beta" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="shippingStreet"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Via e numero</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Via Example 1" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="shippingZipCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CAP</FormLabel>
+                          <FormControl>
+                            <Input placeholder="00100" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="shippingCity"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Città</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Roma" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="shippingProvince"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Provincia</FormLabel>
+                          <FormControl>
+                            <Input placeholder="RM" maxLength={2} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="shippingCountry"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Paese</FormLabel>
+                          <FormControl>
+                            <Input placeholder="IT" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           {/* Data Documento */}
           <FormField

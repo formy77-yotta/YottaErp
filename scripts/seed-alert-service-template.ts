@@ -6,7 +6,7 @@
  */
 
 import { prisma } from '../src/lib/prisma';
-import { alertServiceTemplateConfig } from '../src/lib/pdf/template-schema';
+import { parseTemplateConfigV2 } from '../src/lib/pdf/config-schema-v2';
 
 async function main() {
   console.log('🌱 Seed template "Alert Service"...\n');
@@ -21,7 +21,12 @@ async function main() {
     where: { organizationId: organization.id, name: 'Alert Service' },
   });
 
-  const config = alertServiceTemplateConfig as object;
+  const config = parseTemplateConfigV2({
+    baseLayout: 'invoice-standard',
+    conditionalStyles: [
+      { target: 'row', condition: 'productType', value: 'SERVICE', backgroundColor: '#fecaca' },
+    ],
+  }) as object;
   if (existing) {
     await prisma.printTemplate.update({
       where: { id: existing.id },

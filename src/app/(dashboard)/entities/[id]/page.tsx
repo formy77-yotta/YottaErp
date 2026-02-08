@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { ToggleEntityActive } from '@/components/features/ToggleEntityActive';
+import { EntityAddressesSection } from '@/components/features/EntityAddressesSection';
 
 interface EntityDetailPageProps {
   params: Promise<{ id: string }>;
@@ -137,13 +138,13 @@ export default async function EntityDetailPage({ params }: EntityDetailPageProps
         </CardContent>
       </Card>
 
-      {/* Card Indirizzo */}
+      {/* Card Indirizzo (sede principale dall'anagrafica) */}
       {(entity.address || entity.city || entity.province || entity.zipCode) && (
         <Card>
           <CardHeader>
-            <CardTitle>Indirizzo</CardTitle>
+            <CardTitle>Indirizzo principale</CardTitle>
             <CardDescription>
-              Indirizzo completo dell'anagrafica
+              Indirizzo salvato sull&apos;anagrafica (puoi gestire sedi multiple nella sezione sotto)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -160,6 +161,9 @@ export default async function EntityDetailPage({ params }: EntityDetailPageProps
           </CardContent>
         </Card>
       )}
+
+      {/* Sedi e Destinazioni */}
+      <EntityAddressesSection entityId={entity.id} addresses={entity.addresses ?? []} />
 
       {/* Card Modifica */}
       <Card>

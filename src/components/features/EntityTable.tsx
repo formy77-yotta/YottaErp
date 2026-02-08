@@ -5,6 +5,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -18,6 +19,26 @@ import Link from 'next/link';
 import { Edit } from 'lucide-react';
 import { DeleteEntityButton } from './DeleteEntityButton';
 import type { EntityRow } from '@/services/actions/entity-actions';
+
+/** Evita hydration mismatch quando estensioni (es. 3CX) modificano numeri nel DOM */
+function VatFiscalCell({ vatNumber, fiscalCode }: { vatNumber: string | null; fiscalCode: string | null }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) {
+    return (
+      <div className="text-sm text-muted-foreground">
+        {vatNumber || fiscalCode ? '…' : '—'}
+      </div>
+    );
+  }
+  return (
+    <div className="text-sm">
+      {vatNumber && <div>P.IVA: {vatNumber}</div>}
+      {fiscalCode && <div className="text-muted-foreground">CF: {fiscalCode}</div>}
+      {!vatNumber && !fiscalCode && <span className="text-muted-foreground">—</span>}
+    </div>
+  );
+}
 
 interface EntityTableProps {
   entities: EntityRow[];
@@ -59,17 +80,7 @@ const columns: ColumnDef<EntityRow>[] = [
     header: '',
     cell: ({ row }) => {
       const e = row.original;
-      return (
-        <div className="text-sm">
-          {e.vatNumber && <div>P.IVA: {e.vatNumber}</div>}
-          {e.fiscalCode && (
-            <div className="text-muted-foreground">CF: {e.fiscalCode}</div>
-          )}
-          {!e.vatNumber && !e.fiscalCode && (
-            <span className="text-muted-foreground">-</span>
-          )}
-        </div>
-      );
+      return <VatFiscalCell vatNumber={e.vatNumber} fiscalCode={e.fiscalCode} />;
     },
   },
   {
@@ -147,7 +158,10 @@ export function EntityTable({ entities }: EntityTableProps) {
       {table.getRowModel().rows.map((row) => (
         <TableRow key={row.id}>
           {row.getVisibleCells().map((cell) => (
-            <TableCell key={cell.id} className={cell.column.id === 'actions' ? 'text-right' : undefined}>
+            <TableCell
+              key={cell.id}
+              className={cell.column.id === 'actions' ? 'text-right' : undefined}
+            >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
             </TableCell>
           ))}

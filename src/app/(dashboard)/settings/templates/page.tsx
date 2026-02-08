@@ -107,12 +107,12 @@ async function TemplatesTable() {
                   <TableCell>
                     <span
                       className="inline-block w-6 h-6 rounded border mr-2 align-middle"
-                      style={{ backgroundColor: t.config.primaryColor }}
+                      style={{ backgroundColor: t.config.colors.primary }}
                     />
-                    <span className="font-mono text-sm">{t.config.primaryColor}</span>
+                    <span className="font-mono text-sm">{t.config.colors.primary}</span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{t.config.layoutType}</Badge>
+                    <Badge variant="outline">{t.config.baseLayout}</Badge>
                   </TableCell>
                   <TableCell>
                     {t.isDefault ? (

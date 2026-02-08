@@ -221,3 +221,60 @@ export function validateZipCode(zipCode: string | null | undefined): boolean {
   }
   return /^\d{5}$/.test(zipCode);
 }
+
+// ============================================================================
+// SCHEMA SEDI E DESTINAZIONI (EntityAddress)
+// ============================================================================
+
+export const entityAddressTypeSchema = z.enum(['LEGAL_HEADQUARTER', 'SHIPPING'], {
+  message: 'Tipo indirizzo non valido. Deve essere LEGAL_HEADQUARTER o SHIPPING',
+});
+
+/**
+ * Schema Zod per indirizzo anagrafica (sede legale / destinazione consegna)
+ *
+ * REGOLE:
+ * - province: esattamente 2 caratteri (sigla provincia italiana)
+ * - zipCode: se country è IT, esattamente 5 cifre
+ * - nominative: opzionale; azienda o persona terza presso cui si consegna
+ * - receiverName: opzionale; utile per SHIPPING (es. "Presso Cantiere Beta" - subappalto)
+ */
+export const entityAddressSchema = z
+  .object({
+    type: entityAddressTypeSchema,
+    street: z
+      .string()
+      .min(3, 'Indirizzo deve contenere almeno 3 caratteri')
+      .max(255, 'Indirizzo troppo lungo'),
+    city: z
+      .string()
+      .min(2, 'Città deve contenere almeno 2 caratteri')
+      .max(100, 'Città troppo lunga'),
+    zipCode: z.string().min(1, 'CAP obbligatorio'),
+    province: z
+      .string()
+      .length(2, 'Provincia deve essere di 2 caratteri (es. MI, RM)')
+      .regex(/^[A-Za-z]{2}$/, 'Provincia: 2 lettere (es. MI, RM)')
+      .transform((val) => val.toUpperCase()),
+    country: z.string().min(2, 'Codice paese obbligatorio').default('IT'),
+    nominative: z
+      .string()
+      .max(255, 'Nominativo troppo lungo')
+      .optional()
+      .or(z.literal('')),
+    receiverName: z
+      .string()
+      .max(255, 'Destinatario troppo lungo')
+      .optional()
+      .or(z.literal('')),
+    isDefault: z.boolean().optional().default(false),
+  })
+  .refine(
+    (data) => {
+      if (data.country?.toUpperCase() !== 'IT') return true;
+      return /^\d{5}$/.test((data.zipCode || '').trim());
+    },
+    { message: 'CAP deve contenere esattamente 5 cifre per l\'Italia', path: ['zipCode'] }
+  );
+
+export type EntityAddressInput = z.infer<typeof entityAddressSchema>;

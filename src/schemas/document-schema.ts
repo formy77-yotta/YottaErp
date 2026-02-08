@@ -60,7 +60,20 @@ export const createDocumentSchema = z.object({
   
   // Entità (cliente/fornitore) - opzionale per documenti interni
   entityId: z.string().cuid().optional(),
-  
+
+  // Destinazione (sede/consegna) - opzionale; se presente usa questo indirizzo per lo snapshot cliente
+  entityAddressId: z.string().cuid().optional(),
+
+  // Destinazione di consegna (snapshot): da indirizzo anagrafica o manuale
+  shippingAddressId: z.string().cuid().optional(),
+  shippingNominative: z.string().max(255).optional().or(z.literal('')),
+  shippingReceiverName: z.string().max(255).optional().or(z.literal('')),
+  shippingStreet: z.string().max(255).optional().or(z.literal('')),
+  shippingCity: z.string().max(100).optional().or(z.literal('')),
+  shippingZipCode: z.string().max(20).optional().or(z.literal('')),
+  shippingProvince: z.string().max(10).optional().or(z.literal('')),
+  shippingCountry: z.string().max(2).optional().or(z.literal('')).default('IT'),
+
   // Data documento
   date: z.date().or(z.string().pipe(z.coerce.date())),
   
@@ -119,7 +132,20 @@ export const updateDocumentSchema = z.object({
   
   // Entità (cliente/fornitore) - modificabile
   entityId: z.string().cuid().optional(),
-  
+
+  // Destinazione (sede/consegna) - se presente usa questo indirizzo per lo snapshot cliente
+  entityAddressId: z.string().cuid().optional(),
+
+  // Destinazione di consegna (snapshot) - modificabile
+  shippingAddressId: z.string().cuid().optional(),
+  shippingNominative: z.string().max(255).optional().or(z.literal('')),
+  shippingReceiverName: z.string().max(255).optional().or(z.literal('')),
+  shippingStreet: z.string().max(255).optional().or(z.literal('')),
+  shippingCity: z.string().max(100).optional().or(z.literal('')),
+  shippingZipCode: z.string().max(20).optional().or(z.literal('')),
+  shippingProvince: z.string().max(10).optional().or(z.literal('')),
+  shippingCountry: z.string().max(2).optional().or(z.literal('')).default('IT'),
+
   // Data documento (modificabile)
   date: z.date().or(z.string().pipe(z.coerce.date())).optional(),
   

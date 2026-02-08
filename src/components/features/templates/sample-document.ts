@@ -1,4 +1,4 @@
-import type { DocumentSnapshot } from '@/components/pdf/UniversalPdfRenderer';
+import type { DocumentSnapshot } from '@/lib/pdf/document-snapshot';
 
 /** Documento di esempio per anteprima live nell'editor modelli PDF */
 export const sampleDocument: DocumentSnapshot = {

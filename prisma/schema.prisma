@@ -139,10 +139,10 @@ model UserOrganization {
 ///  * I documenti fanno SNAPSHOT di questi dati (non dipendono da relazioni)
 ///  * MULTITENANT: Ogni entità appartiene a un'organizzazione
 model Entity {
-  id             String       @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
   type           EntityType
-  isLead         Boolean      @default(false)
+  isLead         Boolean          @default(false)
   businessName   String
   vatNumber      String?
   fiscalCode     String?
@@ -150,25 +150,59 @@ model Entity {
   city           String?
   province       String?
   zipCode        String?
-  country        String       @default("IT")
+  country        String           @default("IT")
   email          String?
   pec            String?
   phone          String?
   sdiCode        String?
   vatRateId      String?
   notes          String?
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  addresses      EntityAddress[]
   documents      Document[]
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  defaultVatRate VatRate?     @relation(fields: [vatRateId], references: [id])
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  defaultVatRate VatRate?         @relation(fields: [vatRateId], references: [id])
 
   @@unique([organizationId, vatNumber])
   @@index([organizationId])
   @@index([organizationId, businessName])
   @@index([organizationId, type])
   @@index([organizationId, type, isLead])
+}
+
+/// *
+///  * EntityAddress: Sedi e destinazioni di consegna/fatturazione per un'Entity
+///  * REGOLA: type LEGAL_HEADQUARTER = sede legale; SHIPPING = destinazione consegna (es. subappalto)
+///  * nominative: azienda o persona terza presso cui si consegna (es. "Edilizia Rossi S.r.l.", "Mario Bianchi")
+///  * receiverName: per SHIPPING può indicare "Presso Cantiere Beta" (subappalto)
+///  * isDefault: quale indirizzo usare di default in DDT/Fattura se ce n'è più di uno
+model EntityAddress {
+  id          String              @id @default(cuid())
+  entityId    String
+  type        EntityAddressType
+  street      String
+  city        String
+  zipCode     String
+  province    String
+  country     String              @default("IT")
+  nominative  String?             // Nominativo: altra azienda o persona terza
+  receiverName String?
+  isDefault   Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  entity      Entity              @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  documentsWithShippingAddress Document[]
+
+  @@index([entityId])
+  @@index([entityId, type])
+  @@index([entityId, isDefault])
+}
+
+enum EntityAddressType {
+  LEGAL_HEADQUARTER
+  SHIPPING
 }
 
 /// *
@@ -435,6 +469,17 @@ model Document {
   // ✅ Codici per fatture verso PA (obbligatori per FatturaPA)
   codiceCIG                  String?            // Codice Identificativo Gara
   codiceCUP                  String?            // Codice Unico Progetto
+
+  // ✅ Snapshot destinazione di consegna (Regola Snapshot: sempre copiati, mai JOIN in stampe/views)
+  shippingNominative         String?            // Nominativo: azienda o persona terza
+  shippingReceiverName       String?            // Es: Nome cantiere o subappaltatore
+  shippingStreet             String?
+  shippingCity               String?
+  shippingZipCode            String?
+  shippingProvince           String?
+  shippingCountry            String?            @default("IT")
+  shippingAddressId          String?            // Tracciabilità opzionale con EntityAddress; dati vincolanti sono i campi sopra
+  shippingAddress            EntityAddress?    @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
   
   createdAt                  DateTime           @default(now())
   updatedAt                  DateTime           @updatedAt
@@ -448,6 +493,7 @@ model Document {
   paymentDeadlines           PaymentDeadline[]
 
   @@unique([organizationId, number])
+  @@index([shippingAddressId])
   @@index([organizationId])
   @@index([organizationId, date])
   @@index([organizationId, entityId])

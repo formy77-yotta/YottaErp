@@ -286,6 +286,14 @@ export async function getDocumentAction(
         customerProvince: true,
         customerZip: true,
         customerCountry: true,
+        shippingNominative: true,
+        shippingReceiverName: true,
+        shippingStreet: true,
+        shippingCity: true,
+        shippingZipCode: true,
+        shippingProvince: true,
+        shippingCountry: true,
+        shippingAddressId: true,
         netTotal: true,
         vatTotal: true,
         grossTotal: true,
@@ -358,6 +366,14 @@ export async function getDocumentAction(
         customerProvince: document.customerProvince,
         customerZip: document.customerZip,
         customerCountry: document.customerCountry,
+        shippingNominative: document.shippingNominative,
+        shippingReceiverName: document.shippingReceiverName,
+        shippingStreet: document.shippingStreet,
+        shippingCity: document.shippingCity,
+        shippingZipCode: document.shippingZipCode,
+        shippingProvince: document.shippingProvince,
+        shippingCountry: document.shippingCountry,
+        shippingAddressId: document.shippingAddressId,
         netTotal: document.netTotal.toString(),
         vatTotal: document.vatTotal.toString(),
         grossTotal: document.grossTotal.toString(),
@@ -482,17 +498,35 @@ export async function updateDocumentAction(
           // ✅ Verifica che l'entità appartenga all'organizzazione corrente
           verifyOrganizationAccess(ctx, entity);
 
-          // Crea snapshot nuova entità
-          entitySnapshot = {
-            customerNameSnapshot: entity.businessName,
-            customerVatSnapshot: entity.vatNumber,
-            customerFiscalCodeSnapshot: entity.fiscalCode,
+          // Indirizzo: da entità o da sede se entityAddressId fornito
+          let addressSnapshot = {
             customerAddressSnapshot: entity.address || '',
-            customerSdiSnapshot: entity.sdiCode,
             customerCity: entity.city || '',
             customerProvince: entity.province || '',
             customerZip: entity.zipCode || '',
             customerCountry: entity.country || 'IT',
+          };
+          if (validatedData.entityAddressId) {
+            const addr = await tx.entityAddress.findFirst({
+              where: { id: validatedData.entityAddressId, entityId: validatedData.entityId },
+            });
+            if (addr) {
+              const addrLine = [addr.street, addr.receiverName].filter(Boolean).join(' - ');
+              addressSnapshot = {
+                customerAddressSnapshot: addrLine || addr.street,
+                customerCity: addr.city,
+                customerProvince: addr.province,
+                customerZip: addr.zipCode,
+                customerCountry: addr.country || 'IT',
+              };
+            }
+          }
+          entitySnapshot = {
+            customerNameSnapshot: entity.businessName,
+            customerVatSnapshot: entity.vatNumber,
+            customerFiscalCodeSnapshot: entity.fiscalCode,
+            customerSdiSnapshot: entity.sdiCode,
+            ...addressSnapshot,
           };
         } else {
           // Entità rimossa (documento interno)
@@ -508,6 +542,66 @@ export async function updateDocumentAction(
             customerCountry: 'IT',
           };
         }
+      }
+
+      // 3.2.2. Snapshot destinazione di consegna (update)
+      type UpdateShippingSnapshot = {
+        shippingNominative: string | null;
+        shippingReceiverName: string | null;
+        shippingStreet: string | null;
+        shippingCity: string | null;
+        shippingZipCode: string | null;
+        shippingProvince: string | null;
+        shippingCountry: string | null;
+        shippingAddressId: string | null;
+      };
+      let updateShippingSnapshot: UpdateShippingSnapshot | null = null;
+      const hasManualShippingUpdate =
+        (validatedData.shippingStreet?.trim() ?? '') !== '' ||
+        (validatedData.shippingCity?.trim() ?? '') !== '' ||
+        (validatedData.shippingReceiverName?.trim() ?? '') !== '' ||
+        (validatedData.shippingNominative?.trim() ?? '') !== '';
+      if (
+        validatedData.shippingAddressId &&
+        String(validatedData.shippingAddressId).trim() !== '' &&
+        validatedData.entityId
+      ) {
+        const addr = await tx.entityAddress.findFirst({
+          where: {
+            id: validatedData.shippingAddressId,
+            entityId: validatedData.entityId,
+          },
+        });
+        if (addr) {
+          const entityForVerify = await tx.entity.findUnique({
+            where: { id: addr.entityId },
+            select: { organizationId: true },
+          });
+          if (entityForVerify) {
+            verifyOrganizationAccess(ctx, entityForVerify);
+            updateShippingSnapshot = {
+              shippingNominative: addr.nominative,
+              shippingReceiverName: addr.receiverName,
+              shippingStreet: addr.street,
+              shippingCity: addr.city,
+              shippingZipCode: addr.zipCode,
+              shippingProvince: addr.province,
+              shippingCountry: addr.country || 'IT',
+              shippingAddressId: addr.id,
+            };
+          }
+        }
+      } else if (hasManualShippingUpdate) {
+        updateShippingSnapshot = {
+          shippingNominative: (validatedData.shippingNominative?.trim() ?? '') || null,
+          shippingReceiverName: (validatedData.shippingReceiverName?.trim() ?? '') || null,
+          shippingStreet: (validatedData.shippingStreet?.trim() ?? '') || null,
+          shippingCity: (validatedData.shippingCity?.trim() ?? '') || null,
+          shippingZipCode: (validatedData.shippingZipCode?.trim() ?? '') || null,
+          shippingProvince: (validatedData.shippingProvince?.trim() ?? '') || null,
+          shippingCountry: (validatedData.shippingCountry?.trim() ?? '') || 'IT',
+          shippingAddressId: null,
+        };
       }
 
       // 3.3. Se ci sono righe da aggiornare, gestisci l'aggiornamento
@@ -678,6 +772,7 @@ export async function updateDocumentAction(
               entityId: validatedData.entityId || null,
             }),
             ...(entitySnapshot && entitySnapshot),
+            ...(updateShippingSnapshot && updateShippingSnapshot),
             ...(validatedData.date && { date: validatedData.date }),
             // NOTA: mainWarehouseId non è salvato nel documento (non esiste nello schema)
             // Viene solo usato al momento della creazione/aggiornamento per determinare il warehouseId delle righe
@@ -712,6 +807,7 @@ export async function updateDocumentAction(
               entityId: validatedData.entityId || null,
             }),
             ...(entitySnapshot && entitySnapshot),
+            ...(updateShippingSnapshot && updateShippingSnapshot),
             ...(validatedData.date && { date: validatedData.date }),
             // NOTA: mainWarehouseId non è salvato nel documento (non esiste nello schema)
             // Viene solo usato al momento della creazione/aggiornamento per determinare il warehouseId delle righe
@@ -1084,17 +1180,35 @@ export async function createDocumentAction(
       // ✅ Verifica appartenenza all'organizzazione
       verifyOrganizationAccess(ctx, entity);
 
-      // ✅ Snapshot dati Entity
-      entitySnapshot = {
-        customerNameSnapshot: entity.businessName,
-        customerVatSnapshot: entity.vatNumber,
-        customerFiscalCodeSnapshot: entity.fiscalCode,
+      // ✅ Snapshot dati Entity (indirizzo da sede se entityAddressId fornito)
+      let addressSnapshot = {
         customerAddressSnapshot: entity.address || '',
-        customerSdiSnapshot: entity.sdiCode,
         customerCity: entity.city || '',
         customerProvince: entity.province || '',
         customerZip: entity.zipCode || '',
         customerCountry: entity.country || 'IT',
+      };
+      if (validatedData.entityAddressId) {
+        const addr = await prisma.entityAddress.findFirst({
+          where: { id: validatedData.entityAddressId, entityId: validatedData.entityId },
+        });
+        if (addr) {
+          const addrLine = [addr.street, addr.receiverName].filter(Boolean).join(' - ');
+          addressSnapshot = {
+            customerAddressSnapshot: addrLine || addr.street,
+            customerCity: addr.city,
+            customerProvince: addr.province,
+            customerZip: addr.zipCode,
+            customerCountry: addr.country || 'IT',
+          };
+        }
+      }
+      entitySnapshot = {
+        customerNameSnapshot: entity.businessName,
+        customerVatSnapshot: entity.vatNumber,
+        customerFiscalCodeSnapshot: entity.fiscalCode,
+        customerSdiSnapshot: entity.sdiCode,
+        ...addressSnapshot,
       };
     } else {
       // Se non c'è entityId, usa valori di default (per documenti interni)
@@ -1108,6 +1222,71 @@ export async function createDocumentAction(
         customerProvince: '',
         customerZip: '',
         customerCountry: 'IT',
+      };
+    }
+
+    // 4.1. ✅ Snapshot destinazione di consegna (Regola Snapshot: sempre copiati su Document)
+    type ShippingSnapshot = {
+      shippingNominative: string | null;
+      shippingReceiverName: string | null;
+      shippingStreet: string | null;
+      shippingCity: string | null;
+      shippingZipCode: string | null;
+      shippingProvince: string | null;
+      shippingCountry: string | null;
+      shippingAddressId: string | null;
+    };
+    let shippingSnapshot: ShippingSnapshot = {
+      shippingNominative: null,
+      shippingReceiverName: null,
+      shippingStreet: null,
+      shippingCity: null,
+      shippingZipCode: null,
+      shippingProvince: null,
+      shippingCountry: null,
+      shippingAddressId: null,
+    };
+    const hasManualShipping =
+      (validatedData.shippingStreet?.trim() ?? '') !== '' ||
+      (validatedData.shippingCity?.trim() ?? '') !== '' ||
+      (validatedData.shippingReceiverName?.trim() ?? '') !== '' ||
+      (validatedData.shippingNominative?.trim() ?? '') !== '';
+    if (validatedData.shippingAddressId && validatedData.entityId) {
+      const addr = await prisma.entityAddress.findFirst({
+        where: {
+          id: validatedData.shippingAddressId,
+          entityId: validatedData.entityId,
+        },
+      });
+      if (addr) {
+        const entityForVerify = await prisma.entity.findUnique({
+          where: { id: addr.entityId },
+          select: { organizationId: true },
+        });
+        if (entityForVerify) {
+          verifyOrganizationAccess(ctx, entityForVerify);
+          shippingSnapshot = {
+            shippingNominative: addr.nominative,
+            shippingReceiverName: addr.receiverName,
+            shippingStreet: addr.street,
+            shippingCity: addr.city,
+            shippingZipCode: addr.zipCode,
+            shippingProvince: addr.province,
+            shippingCountry: addr.country || 'IT',
+            shippingAddressId: addr.id,
+          };
+        }
+      }
+    } else if (hasManualShipping) {
+      shippingSnapshot = {
+        shippingNominative: (validatedData.shippingNominative?.trim() ?? '') || null,
+        shippingReceiverName: (validatedData.shippingReceiverName?.trim() ?? '') || null,
+        shippingStreet: (validatedData.shippingStreet?.trim() ?? '') || null,
+        shippingCity: (validatedData.shippingCity?.trim() ?? '') || null,
+        shippingZipCode: (validatedData.shippingZipCode?.trim() ?? '') || null,
+        shippingProvince: (validatedData.shippingProvince?.trim() ?? '') || null,
+        shippingCountry: (validatedData.shippingCountry?.trim() ?? '') || 'IT',
+        shippingAddressId: null,
       };
     }
 
@@ -1280,7 +1459,7 @@ export async function createDocumentAction(
 
       const category = categoryMap[documentType.code] || 'INVOICE';
 
-      // 6.3. Crea documento con snapshot
+      // 6.3. Crea documento con snapshot (cliente + destinazione consegna)
       const createdDocument = await tx.document.create({
         data: {
           organizationId: ctx.organizationId,
@@ -1290,6 +1469,7 @@ export async function createDocumentAction(
           date: validatedData.date,
           entityId: validatedData.entityId || null,
           ...entitySnapshot,
+          ...shippingSnapshot,
           netTotal: netTotal.toDecimalPlaces(2),
           vatTotal: vatTotal.toDecimalPlaces(2),
           grossTotal: grossTotal.toDecimalPlaces(2),

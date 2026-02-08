@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError } from '@/lib/auth';
 import { createEntitySchema, updateEntitySchema } from '@/schemas/entity-schema';
 import type { CreateEntityInput, UpdateEntityInput } from '@/schemas/entity-schema';
+import { entityAddressSchema, type EntityAddressInput } from '@/lib/validations/entity';
 import {
   parseSearchParams,
   parseSortParam,
@@ -248,12 +249,13 @@ export async function getEntityAction(
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
+  addresses: EntityAddressRow[];
 }>> {
   try {
     // 1. ✅ Ottieni contesto autenticazione
     const ctx = await getAuthContext();
 
-    // 2. Recupera entità (include organizationId per verifica)
+    // 2. Recupera entità con indirizzi (include organizationId per verifica)
     const entity = await prisma.entity.findUnique({
       where: { id },
       select: {
@@ -273,7 +275,25 @@ export async function getEntityAction(
         active: true,
         createdAt: true,
         updatedAt: true,
-        organizationId: true, // Necessario per verifyOrganizationAccess
+        organizationId: true,
+        addresses: {
+          orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            entityId: true,
+            type: true,
+            street: true,
+            city: true,
+            zipCode: true,
+            province: true,
+            country: true,
+            nominative: true,
+            receiverName: true,
+            isDefault: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
       },
     });
 
@@ -287,12 +307,28 @@ export async function getEntityAction(
     // 3. ✅ Verifica che appartenga all'organizzazione corrente
     verifyOrganizationAccess(ctx, entity);
 
-    // 4. Mappa tipo da Prisma a frontend
+    // 4. Mappa tipo da Prisma a frontend e indirizzi
+    const { addresses, organizationId: _org, ...rest } = entity;
     return {
       success: true,
       data: {
-        ...entity,
+        ...rest,
         type: mapEntityTypeFromPrisma(entity.type, entity.isLead),
+        addresses: addresses.map((a) => ({
+          id: a.id,
+          entityId: a.entityId,
+          type: a.type,
+          street: a.street,
+          city: a.city,
+          zipCode: a.zipCode,
+          province: a.province,
+          country: a.country,
+          nominative: a.nominative,
+          receiverName: a.receiverName,
+          isDefault: a.isDefault,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+        })),
       },
     };
   } catch (error) {
@@ -878,5 +914,288 @@ export async function deleteEntityAction(
       success: false,
       error: 'Errore durante l\'eliminazione dell\'entità',
     };
+  }
+}
+
+// ============================================================================
+// ENTITY ADDRESSES (Sedi e Destinazioni)
+// ============================================================================
+
+/** Tipo indirizzo restituito da getEntityAction / getEntityAddressesAction */
+export type EntityAddressRow = {
+  id: string;
+  entityId: string;
+  type: 'LEGAL_HEADQUARTER' | 'SHIPPING';
+  street: string;
+  city: string;
+  zipCode: string;
+  province: string;
+  country: string;
+  nominative: string | null;
+  receiverName: string | null;
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * Verifica che l'entità appartenga all'organizzazione corrente (per uso con indirizzi)
+ */
+async function ensureEntityBelongsToOrg(
+  entityId: string
+): Promise<{ id: string; organizationId: string }> {
+  const ctx = await getAuthContext();
+  const entity = await prisma.entity.findUnique({
+    where: { id: entityId },
+    select: { id: true, organizationId: true },
+  });
+  if (!entity) {
+    throw new Error('Entità non trovata');
+  }
+  verifyOrganizationAccess(ctx, entity);
+  return entity;
+}
+
+/**
+ * Aggiunge un indirizzo (sede/destinazione) a un'anagrafica.
+ * MULTITENANT: Verifica che l'entità appartenga all'organizzazione corrente.
+ * Se è il primo indirizzo o isDefault=true, viene impostato come default.
+ */
+export async function addEntityAddressAction(
+  entityId: string,
+  data: EntityAddressInput
+): Promise<ActionResult<EntityAddressRow>> {
+  try {
+    const ctx = await getAuthContext();
+    if (!canWrite(ctx)) {
+      return { success: false, error: 'Non hai i permessi per modificare le anagrafiche' };
+    }
+
+    await ensureEntityBelongsToOrg(entityId);
+
+    const validated = entityAddressSchema.parse({
+      ...data,
+      nominative: data.nominative?.trim() || undefined,
+      receiverName: data.receiverName?.trim() || undefined,
+    });
+
+    const count = await prisma.entityAddress.count({ where: { entityId } });
+    const isFirst = count === 0;
+    const setAsDefault = validated.isDefault ?? isFirst;
+
+    if (setAsDefault) {
+      await prisma.entityAddress.updateMany({
+        where: { entityId },
+        data: { isDefault: false },
+      });
+    }
+
+    const created = await prisma.entityAddress.create({
+      data: {
+        entityId,
+        type: validated.type,
+        street: validated.street,
+        city: validated.city,
+        zipCode: validated.zipCode.trim(),
+        province: validated.province,
+        country: (validated.country || 'IT').toUpperCase(),
+        nominative: validated.nominative?.trim() || null,
+        receiverName: validated.receiverName?.trim() || null,
+        isDefault: setAsDefault,
+      },
+    });
+
+    revalidatePath('/entities');
+    revalidatePath(`/entities/${entityId}`);
+
+    return {
+      success: true,
+      data: {
+        id: created.id,
+        entityId: created.entityId,
+        type: created.type,
+        street: created.street,
+        city: created.city,
+        zipCode: created.zipCode,
+        province: created.province,
+        country: created.country,
+        nominative: created.nominative,
+        receiverName: created.receiverName,
+        isDefault: created.isDefault,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+      },
+    };
+  } catch (error) {
+    console.error('Errore aggiunta indirizzo entità:', error);
+    if (error instanceof ForbiddenError) {
+      return { success: false, error: error.message };
+    }
+    if (error instanceof Error) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Errore durante l\'aggiunta dell\'indirizzo' };
+  }
+}
+
+/**
+ * Imposta un indirizzo come predefinito per l'entità.
+ * MULTITENANT: Verifica che l'entità appartenga all'organizzazione corrente.
+ */
+export async function setDefaultEntityAddressAction(
+  addressId: string,
+  entityId: string
+): Promise<ActionResult<EntityAddressRow>> {
+  try {
+    const ctx = await getAuthContext();
+    if (!canWrite(ctx)) {
+      return { success: false, error: 'Non hai i permessi per modificare le anagrafiche' };
+    }
+
+    await ensureEntityBelongsToOrg(entityId);
+
+    const address = await prisma.entityAddress.findFirst({
+      where: { id: addressId, entityId },
+    });
+    if (!address) {
+      return { success: false, error: 'Indirizzo non trovato' };
+    }
+
+    await prisma.$transaction([
+      prisma.entityAddress.updateMany({
+        where: { entityId },
+        data: { isDefault: false },
+      }),
+      prisma.entityAddress.update({
+        where: { id: addressId },
+        data: { isDefault: true },
+      }),
+    ]);
+
+    const updated = await prisma.entityAddress.findUniqueOrThrow({
+      where: { id: addressId },
+    });
+
+    revalidatePath('/entities');
+    revalidatePath(`/entities/${entityId}`);
+
+    return {
+      success: true,
+      data: {
+        id: updated.id,
+        entityId: updated.entityId,
+        type: updated.type,
+        street: updated.street,
+        city: updated.city,
+        zipCode: updated.zipCode,
+        province: updated.province,
+        country: updated.country,
+        nominative: updated.nominative,
+        receiverName: updated.receiverName,
+        isDefault: updated.isDefault,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      },
+    };
+  } catch (error) {
+    console.error('Errore impostazione indirizzo default:', error);
+    if (error instanceof ForbiddenError) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Errore durante l\'impostazione dell\'indirizzo predefinito' };
+  }
+}
+
+/**
+ * Elimina un indirizzo di un'anagrafica.
+ * MULTITENANT: Verifica che l'entità appartenga all'organizzazione corrente.
+ */
+export async function deleteEntityAddressAction(
+  addressId: string
+): Promise<ActionResult<void>> {
+  try {
+    const ctx = await getAuthContext();
+    if (!canWrite(ctx)) {
+      return { success: false, error: 'Non hai i permessi per modificare le anagrafiche' };
+    }
+
+    const address = await prisma.entityAddress.findUnique({
+      where: { id: addressId },
+      include: { entity: { select: { id: true, organizationId: true } } },
+    });
+    if (!address) {
+      return { success: false, error: 'Indirizzo non trovato' };
+    }
+
+    verifyOrganizationAccess(ctx, address.entity);
+
+    await prisma.entityAddress.delete({
+      where: { id: addressId },
+    });
+
+    const entityId = address.entityId;
+    const remaining = await prisma.entityAddress.findFirst({
+      where: { entityId },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (remaining && !remaining.isDefault) {
+      await prisma.entityAddress.update({
+        where: { id: remaining.id },
+        data: { isDefault: true },
+      });
+    }
+
+    revalidatePath('/entities');
+    revalidatePath(`/entities/${entityId}`);
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error('Errore eliminazione indirizzo:', error);
+    if (error instanceof ForbiddenError) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Errore durante l\'eliminazione dell\'indirizzo' };
+  }
+}
+
+/**
+ * Restituisce gli indirizzi di un'entità.
+ * MULTITENANT: Verifica che l'entità appartenga all'organizzazione corrente.
+ */
+export async function getEntityAddressesAction(
+  entityId: string
+): Promise<ActionResult<EntityAddressRow[]>> {
+  try {
+    await ensureEntityBelongsToOrg(entityId);
+
+    const addresses = await prisma.entityAddress.findMany({
+      where: { entityId },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    });
+
+    return {
+      success: true,
+      data: addresses.map((a) => ({
+        id: a.id,
+        entityId: a.entityId,
+        type: a.type,
+        street: a.street,
+        city: a.city,
+        zipCode: a.zipCode,
+        province: a.province,
+        country: a.country,
+        nominative: a.nominative,
+        receiverName: a.receiverName,
+        isDefault: a.isDefault,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+      })),
+    };
+  } catch (error) {
+    console.error('Errore recupero indirizzi entità:', error);
+    if (error instanceof ForbiddenError) {
+      return { success: false, error: error.message };
+    }
+    return { success: false, error: 'Errore durante il recupero degli indirizzi' };
   }
 }

@@ -11,17 +11,19 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, canWrite, verifyOrganizationAccess, ForbiddenError } from '@/lib/auth';
 import {
-  PrintTemplateConfigSchema,
-  parseTemplateConfig,
-  type PrintTemplateConfig,
-} from '@/lib/pdf/template-schema';
+  parseTemplateConfigV2,
+  PrintTemplateConfigSchemaV2,
+  type PrintTemplateConfigV2,
+} from '@/lib/pdf/config-schema-v2';
+import { renderDocumentPDF } from '@/lib/pdf/render-document';
+import { sampleDocument } from '@/components/features/templates/sample-document';
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 
 export type PrintTemplateOutput = {
   id: string;
   name: string;
-  config: PrintTemplateConfig;
+  config: PrintTemplateConfigV2;
   isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -35,11 +37,11 @@ export async function getTemplatesAction(): Promise<ActionResult<PrintTemplateOu
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
     });
     const data = rows.map((t) => {
-      const parsed = parseTemplateConfig(t.config);
+      const config = parseTemplateConfigV2(t.config);
       return {
         id: t.id,
         name: t.name,
-        config: parsed.data,
+        config,
         isDefault: t.isDefault,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
@@ -64,11 +66,11 @@ export async function createTemplateAction(
     if (!canWrite(ctx)) {
       return { success: false, error: 'Non hai i permessi per creare modelli' };
     }
-    const parsed = PrintTemplateConfigSchema.safeParse(config);
+    const parsed = PrintTemplateConfigSchemaV2.safeParse(config);
     if (!parsed.success) {
       return {
         success: false,
-        error: 'Configurazione non valida: ' + parsed.error.flatten().formErrors.join(', '),
+        error: 'Configurazione non valida: ' + (parsed.error.flatten().formErrors.join(', ') || 'schema non riconosciuto'),
       };
     }
     const isFirst = (await prisma.printTemplate.count({ where: { organizationId: ctx.organizationId } })) === 0;
@@ -111,11 +113,11 @@ export async function updateTemplateAction(
     const updateData: { name?: string; config?: object } = {};
     if (payload.name !== undefined) updateData.name = payload.name.trim();
     if (payload.config !== undefined) {
-      const parsed = PrintTemplateConfigSchema.safeParse(payload.config);
+      const parsed = PrintTemplateConfigSchemaV2.safeParse(payload.config);
       if (!parsed.success) {
         return {
           success: false,
-          error: 'Configurazione non valida: ' + parsed.error.flatten().formErrors.join(', '),
+          error: 'Configurazione non valida: ' + (parsed.error.flatten().formErrors.join(', ') || 'schema non riconosciuto'),
         };
       }
       updateData.config = parsed.data as object;
@@ -202,5 +204,51 @@ export async function setDefaultTemplateAction(id: string): Promise<ActionResult
       return { success: false, error: error.message };
     }
     return { success: false, error: 'Errore durante l\'impostazione del modello predefinito' };
+  }
+}
+
+/** Risultato anteprima PDF (base64 per invio al client) */
+export type PreviewPDFResult = ActionResult<{ pdfData: string }>;
+
+/**
+ * Genera anteprima PDF del modello usando la pipeline con layout modulari.
+ */
+export async function generatePreviewPDFAction(templateId: string): Promise<PreviewPDFResult> {
+  try {
+    const ctx = await getAuthContext();
+    const template = await prisma.printTemplate.findUnique({
+      where: { id: templateId, organizationId: ctx.organizationId },
+    });
+    if (!template) {
+      return { success: false, error: 'Template non trovato' };
+    }
+    const config = parseTemplateConfigV2(template.config);
+    const org = await prisma.organization.findUnique({
+      where: { id: ctx.organizationId },
+      select: { businessName: true, logoUrl: true },
+    });
+    if (!org) {
+      return { success: false, error: 'Organizzazione non trovata' };
+    }
+    const blob = await renderDocumentPDF({
+      document: sampleDocument,
+      templateConfig: config,
+      organization: { name: org.businessName, logoUrl: org.logoUrl },
+    });
+    const buffer = await blob.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+    return {
+      success: true,
+      data: { pdfData: `data:application/pdf;base64,${base64}` },
+    };
+  } catch (error) {
+    console.error('generatePreviewPDFAction:', error);
+    if (error instanceof ForbiddenError) {
+      return { success: false, error: error.message };
+    }
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Errore generazione anteprima PDF',
+    };
   }
 }

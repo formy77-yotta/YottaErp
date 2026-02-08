@@ -24,10 +24,8 @@ export const reportBlocksSchema = z.object({
 export type ReportBlocksConfig = z.infer<typeof reportBlocksSchema>;
 
 export {
-  positionsSchema,
-  type PositionsConfig,
-  type PrintTemplateConfig,
-  PrintTemplateConfigSchema,
-  defaultPrintTemplateConfig,
-  parseTemplateConfig,
-} from './template-schema';
+  PrintTemplateConfigSchemaV2,
+  type PrintTemplateConfigV2,
+  parseTemplateConfigV2,
+  defaultPrintTemplateConfigV2,
+} from './config-schema-v2';

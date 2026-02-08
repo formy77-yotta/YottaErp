@@ -1,14 +1,14 @@
 /**
- * Pagina modifica modello di stampa PDF
+ * Pagina modifica modello di stampa (Wizard)
  */
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getAuthContext, verifyOrganizationAccess } from '@/lib/auth';
-import { TemplateEditor } from '@/components/features/templates/TemplateEditor';
-import { parseTemplateConfig } from '@/lib/pdf/template-schema';
+import { parseTemplateConfigV2 } from '@/lib/pdf/config-schema-v2';
 import { getCurrentOrganizationAction } from '@/services/actions/organization-actions';
+import { EditTemplateForm } from '@/components/features/templates/EditTemplateForm';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 
@@ -34,7 +34,7 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
   }
   verifyOrganizationAccess(ctx, { organizationId: template.organizationId });
 
-  const parsed = parseTemplateConfig(template.config);
+  const initialConfig = parseTemplateConfigV2(template.config);
   const org = orgResult.success && orgResult.organization ? orgResult.organization : null;
 
   return (
@@ -47,17 +47,14 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
         </Link>
         <div>
           <h1 className="text-3xl font-bold">Modifica modello</h1>
-          <p className="text-muted-foreground mt-1">
-            {template.name}
-          </p>
+          <p className="text-muted-foreground mt-1">{template.name}</p>
         </div>
       </div>
 
-      <TemplateEditor
-        key={template.id}
-        initialConfig={parsed.data}
-        initialName={template.name}
+      <EditTemplateForm
         templateId={template.id}
+        initialName={template.name}
+        initialConfig={initialConfig}
         organizationName={org?.businessName ?? 'La tua organizzazione'}
         organizationLogoUrl={org?.logoUrl ?? null}
         redirectPath="/settings/templates"
