@@ -4,9 +4,11 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { pdf } from '@react-pdf/renderer';
 import { PrintTemplateConfigSchema, type PrintTemplateConfig } from '@/lib/pdf/template-schema';
 import { generateTemplateConfigViaAI } from '@/app/_actions/template-ai';
 import { createTemplateAction, updateTemplateAction } from '@/services/actions/template-actions';
@@ -25,12 +27,6 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Sparkles } from 'lucide-react';
-import dynamic from 'next/dynamic';
-
-const PDFViewer = dynamic(
-  () => import('@react-pdf/renderer').then((mod) => mod.PDFViewer),
-  { ssr: false }
-);
 
 interface TemplateEditorProps {
   /** Config iniziale (nuovo modello o modifica) */
@@ -41,8 +37,10 @@ interface TemplateEditorProps {
   templateId?: string;
   /** Nome organizzazione per intestazione PDF */
   organizationName?: string;
-  onSuccess?: () => void;
-  onError?: (message: string) => void;
+  /** URL logo organizzazione (da anagrafica). Se presente e showLogo=true viene mostrato in anteprima. */
+  organizationLogoUrl?: string | null;
+  /** Path dove fare redirect dopo salvataggio (es. /settings/templates). Nessuna callback da Server Component. */
+  redirectPath?: string;
 }
 
 export function TemplateEditor({
@@ -50,10 +48,10 @@ export function TemplateEditor({
   initialName = '',
   templateId,
   organizationName = 'La tua organizzazione',
-  onSuccess,
-  onError,
+  organizationLogoUrl = null,
+  redirectPath = '/settings/templates',
 }: TemplateEditorProps) {
-  const [config, setConfig] = useState<PrintTemplateConfig>(initialConfig);
+  const router = useRouter();
   const [name, setName] = useState(initialName);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -64,19 +62,65 @@ export function TemplateEditor({
     defaultValues: initialConfig,
   });
 
-  const applyFormToConfig = useCallback(() => {
-    const values = form.getValues();
-    setConfig({
-      primaryColor: values.primaryColor,
-      secondaryColor: values.secondaryColor,
-      fontSize: values.fontSize,
-      layoutType: values.layoutType,
-      showLogo: values.showLogo,
-      showWatermark: values.showWatermark,
-      tableStyle: values.tableStyle,
-      columnsConfig: values.columnsConfig,
-    });
-  }, [form]);
+  const watched = form.watch();
+  const [previewConfig, setPreviewConfig] = useState<PrintTemplateConfig>(initialConfig);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeyRef = useRef<string>('');
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const previewGenRef = useRef<string>('');
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = JSON.stringify(watched);
+    if (key === lastKeyRef.current) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      lastKeyRef.current = key;
+      try {
+        setPreviewConfig(JSON.parse(key) as PrintTemplateConfig);
+      } catch {
+        setPreviewConfig((prev) => prev);
+      }
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [watched]);
+
+  // Genera PDF come blob e mostra in iframe: un solo aggiornamento, niente doppio flash
+  useEffect(() => {
+    const key = JSON.stringify(previewConfig);
+    previewGenRef.current = key;
+    let revoked = false;
+    const doc = (
+      <UniversalPdfRenderer
+        document={sampleDocument}
+        templateConfig={previewConfig}
+        organizationName={organizationName}
+        organizationLogoUrl={organizationLogoUrl}
+      />
+    );
+    pdf(doc)
+      .toBlob()
+      .then((blob) => {
+        if (revoked || previewGenRef.current !== key) return;
+        const url = URL.createObjectURL(blob);
+        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = url;
+        setBlobUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      revoked = true;
+    };
+  }, [previewConfig, organizationName]);
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, []);
 
   const handleAiGenerate = async () => {
     if (!aiPrompt.trim()) return;
@@ -85,9 +129,10 @@ export function TemplateEditor({
       const result = await generateTemplateConfigViaAI(aiPrompt);
       if (result.success) {
         form.reset(result.config);
-        setConfig(result.config);
+        lastKeyRef.current = JSON.stringify(result.config);
+        setPreviewConfig(result.config);
       } else {
-        onError?.(result.error);
+        alert(result.error);
       }
     } finally {
       setAiLoading(false);
@@ -95,11 +140,10 @@ export function TemplateEditor({
   };
 
   const handleSave = async () => {
-    applyFormToConfig();
     const values = form.getValues();
     const nameTrim = name.trim();
     if (!nameTrim) {
-      onError?.('Inserisci un nome per il modello');
+      alert('Inserisci un nome per il modello');
       return;
     }
     setSaveLoading(true);
@@ -113,20 +157,22 @@ export function TemplateEditor({
         showWatermark: values.showWatermark,
         tableStyle: values.tableStyle,
         columnsConfig: values.columnsConfig,
+        positions: values.positions ?? { recipient: 'left', logo: 'left' },
+        conditionalStyles: values.conditionalStyles ?? [],
       };
       if (templateId) {
         const res = await updateTemplateAction(templateId, { name: nameTrim, config: payload });
         if (res.success) {
-          onSuccess?.();
+          router.replace(redirectPath);
         } else {
-          onError?.(res.error);
+          alert(res.error);
         }
       } else {
         const res = await createTemplateAction(nameTrim, payload);
         if (res.success) {
-          onSuccess?.();
+          router.replace(redirectPath);
         } else {
-          onError?.(res.error);
+          alert(res.error);
         }
       }
     } finally {
@@ -214,6 +260,41 @@ export function TemplateEditor({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Posizione Destinatario</Label>
+              <Select
+                value={form.watch('positions.recipient') ?? 'left'}
+                onValueChange={(v: 'left' | 'right') =>
+                  form.setValue('positions', { ...form.watch('positions'), recipient: v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="left">Sinistra</SelectItem>
+                  <SelectItem value="right">Destra (buste con finestra)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Posizione Logo</Label>
+              <Select
+                value={form.watch('positions.logo') ?? 'left'}
+                onValueChange={(v: 'left' | 'right' | 'center') =>
+                  form.setValue('positions', { ...form.watch('positions'), logo: v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="left">Sinistra</SelectItem>
+                  <SelectItem value="center">Centro</SelectItem>
+                  <SelectItem value="right">Destra</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center justify-between">
               <Label>Mostra logo</Label>
               <Switch
@@ -245,6 +326,15 @@ export function TemplateEditor({
                 checked={form.watch('tableStyle.stripedRows')}
                 onCheckedChange={(v) =>
                   form.setValue('tableStyle', { ...form.watch('tableStyle'), stripedRows: v })
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Bordi tabella</Label>
+              <Switch
+                checked={form.watch('tableStyle.showBorders') !== false}
+                onCheckedChange={(v) =>
+                  form.setValue('tableStyle', { ...form.watch('tableStyle'), showBorders: v })
                 }
               />
             </div>
@@ -292,9 +382,6 @@ export function TemplateEditor({
         </Card>
 
         <div className="flex gap-2">
-          <Button onClick={() => { applyFormToConfig(); }} variant="outline">
-            Aggiorna anteprima
-          </Button>
           <Button onClick={handleSave} disabled={saveLoading}>
             {saveLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {templateId ? 'Salva modifiche' : 'Crea modello'}
@@ -310,13 +397,18 @@ export function TemplateEditor({
         </CardHeader>
         <CardContent>
           <div className="border rounded-lg overflow-hidden bg-gray-100" style={{ height: 600 }}>
-            <PDFViewer width="100%" height="100%">
-              <UniversalPdfRenderer
-                document={sampleDocument}
-                templateConfig={config}
-                organizationName={organizationName}
+            {blobUrl ? (
+              <iframe
+                src={blobUrl}
+                title="Anteprima PDF"
+                className="w-full h-full border-0 bg-white"
+                style={{ minHeight: 600 }}
               />
-            </PDFViewer>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin" />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -5,12 +5,16 @@
 import Link from 'next/link';
 import { TemplateEditor } from '@/components/features/templates/TemplateEditor';
 import { defaultPrintTemplateConfig } from '@/lib/pdf/template-schema';
+import { getCurrentOrganizationAction } from '@/services/actions/organization-actions';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
-export default function NewTemplatePage() {
+export default async function NewTemplatePage() {
+  const orgResult = await getCurrentOrganizationAction();
+  const org = orgResult.success && orgResult.organization ? orgResult.organization : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -30,9 +34,9 @@ export default function NewTemplatePage() {
       <TemplateEditor
         initialConfig={defaultPrintTemplateConfig}
         initialName=""
-        organizationName="La tua organizzazione"
-        onSuccess={() => window.location.replace('/settings/templates')}
-        onError={(msg) => alert(msg)}
+        organizationName={org?.businessName ?? 'La tua organizzazione'}
+        organizationLogoUrl={org?.logoUrl ?? null}
+        redirectPath="/settings/templates"
       />
     </div>
   );

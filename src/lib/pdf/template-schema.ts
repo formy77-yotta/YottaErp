@@ -24,12 +24,40 @@ export const columnsConfigSchema = z.object({
 });
 
 /**
- * Stile tabella (intestazione e righe alternate)
+ * Stile tabella (intestazione, righe alternate, bordi)
  */
 export const tableStyleSchema = z.object({
   headerColor: hexColor.default('#374151'),
   stripedRows: z.boolean().default(true),
+  showBorders: z.boolean().default(true),
 });
+
+/**
+ * Posizionamento dinamico per Report Builder (destinatario e logo)
+ * - recipient: 'right' per buste con finestra italiane
+ * - logo: posizione nell'header
+ */
+export const positionsSchema = z.object({
+  recipient: z.enum(['left', 'right']).default('left'),
+  logo: z.enum(['left', 'right', 'center']).default('left'),
+});
+
+/**
+ * Stile condizionale: applicato a riga o cella quando la condizione è vera.
+ * - target: 'row' = intera riga, 'cell' = singola cella
+ * - condition: campo da controllare (es. 'productType', 'productCategoryCode')
+ * - value: valore che attiva la regola (es. 'SERVICE')
+ * - backgroundColor: colore sfondo (preferire pastello per leggibilità)
+ * - color: colore testo (se sfondo scuro usare '#ffffff')
+ */
+export const conditionalStyleSchema = z.object({
+  target: z.enum(['row', 'cell']).default('row'),
+  condition: z.string().min(1),
+  value: z.string().min(1),
+  backgroundColor: hexColor,
+  color: hexColor.optional(),
+});
+export type ConditionalStyleRule = z.infer<typeof conditionalStyleSchema>;
 
 /**
  * Schema completo configurazione template stampa PDF
@@ -43,7 +71,7 @@ export const PrintTemplateConfigSchema = z.object({
     .default('standard'),
   showLogo: z.boolean().default(true),
   showWatermark: z.boolean().default(false),
-  tableStyle: tableStyleSchema.default({ headerColor: '#374151', stripedRows: true }),
+  tableStyle: tableStyleSchema.default({ headerColor: '#374151', stripedRows: true, showBorders: true }),
   columnsConfig: columnsConfigSchema.default({
     showSku: true,
     showDiscount: false,
@@ -52,11 +80,14 @@ export const PrintTemplateConfigSchema = z.object({
     showVatAmount: true,
     showGrossAmount: true,
   }),
+  positions: positionsSchema.default({ recipient: 'left', logo: 'left' }),
+  conditionalStyles: z.array(conditionalStyleSchema).default([]),
 });
 
 export type PrintTemplateConfig = z.infer<typeof PrintTemplateConfigSchema>;
 export type ColumnsConfig = z.infer<typeof columnsConfigSchema>;
 export type TableStyle = z.infer<typeof tableStyleSchema>;
+export type PositionsConfig = z.infer<typeof positionsSchema>;
 
 /** Valori di default per nuovo template */
 export const defaultPrintTemplateConfig: PrintTemplateConfig = {
@@ -66,7 +97,7 @@ export const defaultPrintTemplateConfig: PrintTemplateConfig = {
   layoutType: 'standard',
   showLogo: true,
   showWatermark: false,
-  tableStyle: { headerColor: '#374151', stripedRows: true },
+  tableStyle: { headerColor: '#374151', stripedRows: true, showBorders: true },
   columnsConfig: {
     showSku: true,
     showDiscount: false,
@@ -75,6 +106,24 @@ export const defaultPrintTemplateConfig: PrintTemplateConfig = {
     showVatAmount: true,
     showGrossAmount: true,
   },
+  positions: { recipient: 'left', logo: 'left' },
+  conditionalStyles: [],
+};
+
+/**
+ * Template di test "Alert Service": evidenzia le righe con productType === 'SERVICE'
+ * in rosso pastello (#fecaca). Usato per verificare stili condizionali in anteprima PDF.
+ */
+export const alertServiceTemplateConfig: PrintTemplateConfig = {
+  ...defaultPrintTemplateConfig,
+  conditionalStyles: [
+    {
+      target: 'row',
+      condition: 'productType',
+      value: 'SERVICE',
+      backgroundColor: '#fecaca',
+    },
+  ],
 };
 
 /**

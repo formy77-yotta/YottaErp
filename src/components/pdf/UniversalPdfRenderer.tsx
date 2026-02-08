@@ -12,12 +12,13 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
 } from '@react-pdf/renderer';
 import { Decimal } from 'decimal.js';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
-import type { PrintTemplateConfig } from '@/lib/pdf/template-schema';
+import type { PrintTemplateConfig, ConditionalStyleRule } from '@/lib/pdf/template-schema';
 import { formatDecimalItalian } from '@/lib/decimal-utils';
 
 /** Snapshot riga documento per PDF (amounts come string per Decimal) */
@@ -30,6 +31,40 @@ export interface DocumentLineSnapshot {
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
+  /** Tipo articolo per stili condizionali (es. 'SERVICE', 'GOODS') */
+  productType?: string;
+}
+
+/** Luminanza hex: < 0.4 = sfondo scuro → testo chiaro per leggibilità */
+function hexLuminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) / 255, g = ((n >> 8) & 0xff) / 255, b = (n & 0xff) / 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
+ * Restituisce lo stile da applicare alla riga (e colore testo) in base a conditionalStyles.
+ * Se lo sfondo è scuro imposta automaticamente il testo bianco se non specificato.
+ */
+function getConditionalRowStyle(
+  line: DocumentLineSnapshot,
+  rules: ConditionalStyleRule[] | undefined
+): { rowStyle: { backgroundColor?: string; color?: string }; textColor?: string } {
+  if (!rules?.length) return { rowStyle: {} };
+  const lineRecord = line as Record<string, unknown>;
+  for (const rule of rules) {
+    const fieldValue = lineRecord[rule.condition];
+    const match = String(fieldValue ?? '') === String(rule.value);
+    if (!match) continue;
+    const bg = rule.backgroundColor;
+    const luminance = hexLuminance(bg);
+    const textColor = rule.color ?? (luminance < 0.4 ? '#ffffff' : undefined);
+    return {
+      rowStyle: { backgroundColor: bg },
+      textColor: textColor ?? (luminance < 0.4 ? '#ffffff' : undefined),
+    };
+  }
+  return { rowStyle: {} };
 }
 
 /** Snapshot documento per rendering PDF */
@@ -65,19 +100,34 @@ interface UniversalPdfRendererProps {
   templateConfig: PrintTemplateConfig;
   /** Nome organizzazione (intestazione) */
   organizationName?: string;
+  /** URL logo organizzazione (da anagrafica). Se assente e showLogo=true viene mostrato solo il nome. */
+  organizationLogoUrl?: string | null;
 }
 
 export function UniversalPdfRenderer({
   document: doc,
   templateConfig: config,
   organizationName = 'Organizzazione',
+  organizationLogoUrl,
 }: UniversalPdfRendererProps) {
+  const logoSrc =
+    organizationLogoUrl &&
+    (organizationLogoUrl.startsWith('http')
+      ? organizationLogoUrl
+      : typeof window !== 'undefined'
+        ? `${window.location.origin}${organizationLogoUrl}`
+        : organizationLogoUrl);
   const fs = config.fontSize;
   const primary = config.primaryColor;
   const secondary = config.secondaryColor;
   const headerBg = config.tableStyle.headerColor;
   const striped = config.tableStyle.stripedRows;
   const cols = config.columnsConfig;
+  const pos = config.positions ?? { recipient: 'left', logo: 'left' };
+  const recipientRight = pos.recipient === 'right';
+  const logoPos = pos.logo ?? 'left';
+  const showBorders = config.tableStyle.showBorders !== false;
+  const conditionalStyles = config.conditionalStyles ?? [];
 
   const styles = StyleSheet.create({
     page: {
@@ -86,11 +136,22 @@ export function UniversalPdfRenderer({
       fontFamily: 'Helvetica',
     },
     header: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
       marginBottom: 20,
       borderBottomWidth: 2,
       borderBottomColor: primary,
       paddingBottom: 10,
     },
+    headerLeft: { width: logoPos === 'left' ? 180 : 0, marginRight: logoPos === 'left' ? 12 : 0 },
+    headerCenter: { flex: 1 },
+    headerRight: { width: logoPos === 'right' ? 180 : 0, marginLeft: logoPos === 'right' ? 12 : 0 },
+    logo: {
+      maxHeight: 48,
+      maxWidth: 180,
+      marginBottom: 6,
+    },
+    logoCenterWrap: { alignItems: 'center', marginBottom: 6 },
     title: {
       fontSize: fs + 4,
       color: primary,
@@ -115,6 +176,7 @@ export function UniversalPdfRenderer({
       flexDirection: 'row',
       justifyContent: 'space-between',
       marginBottom: 16,
+      marginLeft: recipientRight ? 90 : 0,
     },
     leftCol: { width: '48%' },
     rightCol: { width: '48%' },
@@ -124,8 +186,7 @@ export function UniversalPdfRenderer({
     },
     tableRow: {
       flexDirection: 'row',
-      borderBottomWidth: 1,
-      borderBottomColor: '#e5e7eb',
+      ...(showBorders ? { borderBottomWidth: 1, borderBottomColor: '#e5e7eb' } : {}),
       paddingVertical: 4,
     },
     tableRowStriped: {
@@ -138,6 +199,7 @@ export function UniversalPdfRenderer({
       paddingVertical: 6,
       paddingHorizontal: 4,
       marginBottom: 0,
+      ...(showBorders ? { borderBottomWidth: 1, borderBottomColor: '#e5e7eb' } : {}),
     },
     tableCell: {
       paddingHorizontal: 4,
@@ -204,29 +266,73 @@ export function UniversalPdfRenderer({
           </View>
         )}
         <View style={styles.header}>
-          {config.showLogo && (
-            <Text style={styles.subtitle}>{organizationName}</Text>
-          )}
-          <Text style={styles.title}>
-            {doc.documentTypeDescription} n. {doc.number}
-          </Text>
-          <Text style={styles.subtitle}>
-            Data: {format(new Date(doc.date), 'dd MMMM yyyy', { locale: it })}
-          </Text>
+          <View style={styles.headerLeft}>
+            {config.showLogo && logoPos === 'left' && (
+              logoSrc ? (
+                <Image src={logoSrc} style={styles.logo} />
+              ) : (
+                <Text style={styles.subtitle}>{organizationName}</Text>
+              )
+            )}
+          </View>
+          <View style={styles.headerCenter}>
+            {config.showLogo && logoPos === 'center' && (
+              <View style={styles.logoCenterWrap}>
+                {logoSrc ? (
+                  <Image src={logoSrc} style={styles.logo} />
+                ) : (
+                  <Text style={styles.subtitle}>{organizationName}</Text>
+                )}
+              </View>
+            )}
+            <Text style={styles.title}>
+              {doc.documentTypeDescription} n. {doc.number}
+            </Text>
+            <Text style={styles.subtitle}>
+              Data: {format(new Date(doc.date), 'dd MMMM yyyy', { locale: it })}
+            </Text>
+          </View>
+          <View style={styles.headerRight}>
+            {config.showLogo && logoPos === 'right' && (
+              logoSrc ? (
+                <Image src={logoSrc} style={styles.logo} />
+              ) : (
+                <Text style={styles.subtitle}>{organizationName}</Text>
+              )
+            )}
+          </View>
         </View>
 
         <View style={styles.twoCol}>
-          <View style={styles.leftCol}>
-            <View style={styles.section}>
-              <Text style={styles.label}>Destinatario</Text>
-              <Text style={styles.value}>{doc.customerNameSnapshot}</Text>
-              {doc.customerVatSnapshot && (
-                <Text style={styles.value}>P.IVA / CF: {doc.customerVatSnapshot}</Text>
-              )}
-              <Text style={styles.value}>{customerAddress}</Text>
-            </View>
-          </View>
-          <View style={styles.rightCol} />
+          {recipientRight ? (
+            <>
+              <View style={styles.rightCol} />
+              <View style={styles.leftCol}>
+                <View style={styles.section}>
+                  <Text style={styles.label}>Destinatario</Text>
+                  <Text style={styles.value}>{doc.customerNameSnapshot}</Text>
+                  {doc.customerVatSnapshot && (
+                    <Text style={styles.value}>P.IVA / CF: {doc.customerVatSnapshot}</Text>
+                  )}
+                  <Text style={styles.value}>{customerAddress}</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.leftCol}>
+                <View style={styles.section}>
+                  <Text style={styles.label}>Destinatario</Text>
+                  <Text style={styles.value}>{doc.customerNameSnapshot}</Text>
+                  {doc.customerVatSnapshot && (
+                    <Text style={styles.value}>P.IVA / CF: {doc.customerVatSnapshot}</Text>
+                  )}
+                  <Text style={styles.value}>{customerAddress}</Text>
+                </View>
+              </View>
+              <View style={styles.rightCol} />
+            </>
+          )}
         </View>
 
         <View style={styles.table}>
@@ -266,50 +372,55 @@ export function UniversalPdfRenderer({
               </View>
             )}
           </View>
-          {doc.lines.map((line, idx) => (
-            <View
-              key={idx}
-              style={[
-                styles.tableRow,
-                ...(striped && idx % 2 === 1 ? [styles.tableRowStriped] : []),
-              ]}
-            >
-              {cols.showSku && (
-                <View style={[styles.tableCell, styles.colCode]}>
-                  <Text>{line.productCode}</Text>
+          {doc.lines.map((line, idx) => {
+            const { rowStyle: condRowStyle, textColor: condTextColor } = getConditionalRowStyle(line, conditionalStyles);
+            const textStyleCond = condTextColor ? { color: condTextColor } : undefined;
+            return (
+              <View
+                key={idx}
+                style={[
+                  styles.tableRow,
+                  ...(striped && idx % 2 === 1 ? [styles.tableRowStriped] : []),
+                  condRowStyle,
+                ]}
+              >
+                {cols.showSku && (
+                  <View style={[styles.tableCell, styles.colCode]}>
+                    <Text style={textStyleCond}>{line.productCode}</Text>
+                  </View>
+                )}
+                <View style={[styles.tableCell, styles.colDesc]}>
+                  <Text style={textStyleCond}>{line.description}</Text>
                 </View>
-              )}
-              <View style={[styles.tableCell, styles.colDesc]}>
-                <Text>{line.description}</Text>
+                <View style={[styles.tableCell, styles.colQty]}>
+                  <Text style={textStyleCond}>{formatDecimalItalian(toDec(line.quantity))}</Text>
+                </View>
+                <View style={[styles.tableCell, styles.colPrice]}>
+                  <Text style={textStyleCond}>{fmt(line.unitPrice)}</Text>
+                </View>
+                {cols.showVatRate && (
+                  <View style={[styles.tableCell, styles.colVat]}>
+                    <Text style={textStyleCond}>{formatDecimalItalian(toDec(line.vatRate).mul(100))}%</Text>
+                  </View>
+                )}
+                {cols.showNetAmount && (
+                  <View style={[styles.tableCell, styles.colNet]}>
+                    <Text style={textStyleCond}>{fmt(line.netAmount)}</Text>
+                  </View>
+                )}
+                {cols.showVatAmount && (
+                  <View style={[styles.tableCell, styles.colVatAmt]}>
+                    <Text style={textStyleCond}>{fmt(line.vatAmount)}</Text>
+                  </View>
+                )}
+                {cols.showGrossAmount && (
+                  <View style={[styles.tableCell, styles.colGross]}>
+                    <Text style={textStyleCond}>{fmt(line.grossAmount)}</Text>
+                  </View>
+                )}
               </View>
-              <View style={[styles.tableCell, styles.colQty]}>
-                <Text>{formatDecimalItalian(toDec(line.quantity))}</Text>
-              </View>
-              <View style={[styles.tableCell, styles.colPrice]}>
-                <Text>{fmt(line.unitPrice)}</Text>
-              </View>
-              {cols.showVatRate && (
-                <View style={[styles.tableCell, styles.colVat]}>
-                  <Text>{formatDecimalItalian(toDec(line.vatRate).mul(100))}%</Text>
-                </View>
-              )}
-              {cols.showNetAmount && (
-                <View style={[styles.tableCell, styles.colNet]}>
-                  <Text>{fmt(line.netAmount)}</Text>
-                </View>
-              )}
-              {cols.showVatAmount && (
-                <View style={[styles.tableCell, styles.colVatAmt]}>
-                  <Text>{fmt(line.vatAmount)}</Text>
-                </View>
-              )}
-              {cols.showGrossAmount && (
-                <View style={[styles.tableCell, styles.colGross]}>
-                  <Text>{fmt(line.grossAmount)}</Text>
-                </View>
-              )}
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <View style={styles.totals}>

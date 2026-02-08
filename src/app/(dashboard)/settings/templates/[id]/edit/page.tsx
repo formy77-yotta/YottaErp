@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { getAuthContext, verifyOrganizationAccess } from '@/lib/auth';
 import { TemplateEditor } from '@/components/features/templates/TemplateEditor';
 import { parseTemplateConfig } from '@/lib/pdf/template-schema';
+import { getCurrentOrganizationAction } from '@/services/actions/organization-actions';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 
@@ -20,10 +21,13 @@ interface EditTemplatePageProps {
 export default async function EditTemplatePage({ params }: EditTemplatePageProps) {
   const { id } = await params;
   const ctx = await getAuthContext();
-  const template = await prisma.printTemplate.findUnique({
-    where: { id },
-    select: { id: true, organizationId: true, name: true, config: true },
-  });
+  const [template, orgResult] = await Promise.all([
+    prisma.printTemplate.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true, name: true, config: true },
+    }),
+    getCurrentOrganizationAction(),
+  ]);
 
   if (!template) {
     notFound();
@@ -31,6 +35,7 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
   verifyOrganizationAccess(ctx, { organizationId: template.organizationId });
 
   const parsed = parseTemplateConfig(template.config);
+  const org = orgResult.success && orgResult.organization ? orgResult.organization : null;
 
   return (
     <div className="space-y-6">
@@ -53,9 +58,9 @@ export default async function EditTemplatePage({ params }: EditTemplatePageProps
         initialConfig={parsed.data}
         initialName={template.name}
         templateId={template.id}
-        organizationName="La tua organizzazione"
-        onSuccess={() => window.location.replace('/settings/templates')}
-        onError={(msg) => alert(msg)}
+        organizationName={org?.businessName ?? 'La tua organizzazione'}
+        organizationLogoUrl={org?.logoUrl ?? null}
+        redirectPath="/settings/templates"
       />
     </div>
   );
