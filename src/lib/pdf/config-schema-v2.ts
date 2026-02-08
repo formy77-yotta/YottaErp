@@ -40,7 +40,7 @@ export const PrintTemplateConfigSchemaV2 = z.object({
       showWatermark: z.boolean().default(false),
       showLogo: z.boolean().default(true),
     })
-    .default({}),
+    .default({} as any),
 
   header: z
     .object({
@@ -50,7 +50,7 @@ export const PrintTemplateConfigSchemaV2 = z.object({
       backgroundColor: hexColor.optional(),
       textColor: hexColor.optional(),
     })
-    .default({}),
+    .default({} as any),
 
   table: z
     .object({
@@ -67,7 +67,7 @@ export const PrintTemplateConfigSchemaV2 = z.object({
           showVatAmount: z.boolean().default(false),
           showGrossAmount: z.boolean().default(true),
         })
-        .default({}),
+        .default({} as any),
       style: z
         .object({
           headerColor: hexColor.default('#1e40af'),
@@ -75,9 +75,9 @@ export const PrintTemplateConfigSchemaV2 = z.object({
           showBorders: z.boolean().default(true),
           fontSize: z.enum(['8', '10', '12']).default('10'),
         })
-        .default({}),
+        .default({} as any),
     })
-    .default({}),
+    .default({} as any),
 
   conditionalStyles: z.array(ConditionalStyleSchema).default([]),
 
@@ -102,7 +102,7 @@ export const PrintTemplateConfigSchemaV2 = z.object({
       secondary: hexColor.default('#64748b'),
       text: hexColor.default('#0f172a'),
     })
-    .default({}),
+    .default({} as any),
 });
 
 export type PrintTemplateConfigV2 = z.infer<typeof PrintTemplateConfigSchemaV2>;

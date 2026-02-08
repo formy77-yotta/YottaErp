@@ -31,7 +31,7 @@ export async function renderDocumentPDF(options: RenderOptions): Promise<Blob> {
     organization: options.organization,
   });
 
-  const blob = await pdf(pdfDocument).toBlob();
+  const blob = await pdf(pdfDocument as React.ReactElement).toBlob();
   return blob;
 }
 

@@ -113,58 +113,59 @@ export const StandardTable: React.FC<BaseTableProps> = ({
         const isStriped = tableStyle.stripedRows && idx % 2 === 1;
         const vatRatePercent = formatDecimalItalian(new Decimal(line.vatRate).mul(100).toString());
 
+        const rowStyleExtras = [
+          ...(isStriped ? [{ backgroundColor: '#f8fafc' as const }] : []),
+          ...(rowStyles.backgroundColor ? [{ backgroundColor: rowStyles.backgroundColor as string }] : []),
+          ...(rowStyles.color ? [{ color: rowStyles.color }] : []),
+        ];
+        const cellColorStyle = rowStyles.color ? [{ color: rowStyles.color }] : [];
         return (
           <View
             key={idx}
-            style={[
-              styles.dataRow,
-              borderStyle,
-              isStriped && { backgroundColor: '#f8fafc' },
-              rowStyles,
-            ]}
+            style={[styles.dataRow, borderStyle, ...rowStyleExtras]}
           >
             {columns.showSku && (
-              <Text style={[styles.cell, { flex: columnWidths.sku }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, { flex: columnWidths.sku }, ...cellColorStyle]}>
                 {line.productCode}
               </Text>
             )}
             {columns.showDescription && (
-              <Text style={[styles.cell, { flex: columnWidths.description }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, { flex: columnWidths.description }, ...cellColorStyle]}>
                 {line.description}
               </Text>
             )}
             {columns.showQuantity && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.quantity }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.quantity }, ...cellColorStyle]}>
                 {formatDecimalItalian(line.quantity)}
               </Text>
             )}
             {columns.showUnitPrice && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.unitPrice }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.unitPrice }, ...cellColorStyle]}>
                 {formatDecimalItalian(line.unitPrice)}
               </Text>
             )}
             {columns.showDiscount && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.discount }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.discount }, ...cellColorStyle]}>
                 {line.discount ? `${line.discount}%` : '-'}
               </Text>
             )}
             {columns.showVatRate && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.vatRate }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.vatRate }, ...cellColorStyle]}>
                 {vatRatePercent}%
               </Text>
             )}
             {columns.showNetAmount && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.netAmount }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.netAmount }, ...cellColorStyle]}>
                 {formatDecimalItalian(line.netAmount)}
               </Text>
             )}
             {columns.showVatAmount && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.vatAmount }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.vatAmount }, ...cellColorStyle]}>
                 {formatDecimalItalian(line.vatAmount)}
               </Text>
             )}
             {columns.showGrossAmount && (
-              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.grossAmount }, rowStyles.color && { color: rowStyles.color }]}>
+              <Text style={[styles.cell, styles.alignRight, { flex: columnWidths.grossAmount }, ...cellColorStyle]}>
                 {formatDecimalItalian(line.grossAmount)}
               </Text>
             )}
