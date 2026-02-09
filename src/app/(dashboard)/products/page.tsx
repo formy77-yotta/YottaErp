@@ -175,7 +175,9 @@ function ProductRow({ product }: { product: ProductRow }) {
         )}
       </TableCell>
       <TableCell className="text-right font-mono text-sm tabular-nums">
-        {product.stock !== null ? product.stock : '-'}
+        {product.stock != null && String(product.stock).trim() !== ''
+          ? product.stock
+          : '-'}
       </TableCell>
       <TableCell className="font-medium">
         {formatCurrency(priceDecimal)}
@@ -256,10 +258,10 @@ function ProductsTableSkeleton() {
             <TableHead>Nome</TableHead>
             <TableHead>Categoria</TableHead>
             <TableHead>Tipologia</TableHead>
+            <TableHead className="text-right">Giacenza</TableHead>
             <TableHead>Prezzo</TableHead>
             <TableHead>IVA</TableHead>
             <TableHead>Stato</TableHead>
-            <TableHead className="text-right">Giacenza</TableHead>
             <TableHead className="text-right" />
             <TableHead className="text-right">Azioni</TableHead>
           </TableRow>
@@ -280,6 +282,9 @@ function ProductsTableSkeleton() {
                 <div className="h-4 w-16 bg-muted animate-pulse rounded" />
               </TableCell>
               <TableCell>
+                <div className="h-4 w-12 bg-muted animate-pulse rounded ml-auto" />
+              </TableCell>
+              <TableCell>
                 <div className="h-4 w-16 bg-muted animate-pulse rounded" />
               </TableCell>
               <TableCell>
@@ -287,9 +292,6 @@ function ProductsTableSkeleton() {
               </TableCell>
               <TableCell>
                 <div className="h-4 w-16 bg-muted animate-pulse rounded" />
-              </TableCell>
-              <TableCell>
-                <div className="h-4 w-12 bg-muted animate-pulse rounded ml-auto" />
               </TableCell>
               <TableCell />
               <TableCell className="text-right">

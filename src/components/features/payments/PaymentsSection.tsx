@@ -32,6 +32,7 @@ export function PaymentsSection() {
       <PaymentsTable
         refreshKey={refreshKey}
         onCollegaScadenze={(paymentId) => setLinkPaymentId(paymentId)}
+        onDeleted={handleSuccess}
       />
 
       <ReconcilePaymentDialog

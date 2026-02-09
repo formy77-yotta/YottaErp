@@ -63,6 +63,7 @@ interface DocumentTypeFormProps {
     documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
     active: boolean;
     templateId?: string | null;
+    color?: string | null;
   };
   
   /**
@@ -126,6 +127,7 @@ export function DocumentTypeForm({
       documentDirection: 'SALE' as const,
       active: true,
       templateId: null,
+      color: '',
       ...(isEditing && documentType ? { id: documentType.id } : {}),
     },
   });
@@ -158,9 +160,10 @@ export function DocumentTypeForm({
         valuationImpact: documentType.valuationImpact,
         operationSignStock: normalizedOperationSignStock,
         operationSignValuation: normalizedOperationSignValuation,
-        documentDirection: documentType.documentDirection,
+        documentDirection: documentType.documentDirection ?? 'SALE',
         active: documentType.active,
         templateId: documentType.templateId ?? null,
+        color: (documentType.color && documentType.color.trim()) ? documentType.color.trim() : '',
         ...(isEditing ? { id: documentType.id } : {}),
       }, { keepDefaultValues: false });
 
@@ -186,6 +189,7 @@ export function DocumentTypeForm({
         operationSignValuation: null,
         active: true,
         templateId: null,
+        color: '',
       }, { keepDefaultValues: false });
       setStockSignValue(undefined);
       setValuationSignValue(undefined);
@@ -349,6 +353,42 @@ export function DocumentTypeForm({
               </FormControl>
               <FormDescription>
                 Codice per raggruppare tipi documento con stessa serie numerica (es. "FATTURE", "DDT")
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Colore etichetta */}
+        <FormField
+          control={form.control}
+          name="color"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Colore etichetta</FormLabel>
+              <div className="flex items-center gap-3">
+                <FormControl>
+                  <input
+                    type="color"
+                    className="h-10 w-14 cursor-pointer rounded border border-input bg-background p-1"
+                    value={field.value && /^#[0-9A-Fa-f]{6}$/.test(field.value) ? field.value : '#3b82f6'}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </FormControl>
+                <Input
+                  placeholder="#3b82f6"
+                  className="max-w-[120px] font-mono"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    field.onChange(v === '' ? '' : v.startsWith('#') ? v : '#' + v);
+                  }}
+                  disabled={isLoading}
+                />
+              </div>
+              <FormDescription>
+                Colore usato per l&apos;etichetta del tipo documento nell&apos;elenco documenti
               </FormDescription>
               <FormMessage />
             </FormItem>

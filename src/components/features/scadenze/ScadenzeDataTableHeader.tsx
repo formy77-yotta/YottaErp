@@ -34,7 +34,7 @@ function parseSort(sortParam: string | null): { field: string; order: 'asc' | 'd
   return null;
 }
 
-export function ScadenzeDataTableHeader() {
+export function ScadenzeDataTableHeader({ showSelectColumn }: { showSelectColumn?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -76,11 +76,12 @@ export function ScadenzeDataTableHeader() {
 
   return (
     <TableHeader>
-      <TableRow>
+      <TableRow className="whitespace-nowrap">
+        {showSelectColumn && <TableHead className="w-10 shrink-0">Selez.</TableHead>}
         {SORTABLE_COLUMNS.slice(0, 4).map(({ label, field }) => {
           const isSorted = currentSort?.field === field;
           return (
-            <TableHead key={field}>
+            <TableHead key={field} className="whitespace-nowrap">
               <Button
                 variant="ghost"
                 size="sm"
@@ -101,11 +102,11 @@ export function ScadenzeDataTableHeader() {
             </TableHead>
           );
         })}
-        <TableHead className="w-[200px]">Pagato</TableHead>
+        <TableHead className="w-[140px] min-w-[140px] shrink-0">Pagato</TableHead>
         {SORTABLE_COLUMNS.slice(4).map(({ label, field }) => {
           const isSorted = currentSort?.field === field;
           return (
-            <TableHead key={field}>
+            <TableHead key={field} className="whitespace-nowrap">
               <Button
                 variant="ghost"
                 size="sm"
@@ -126,18 +127,18 @@ export function ScadenzeDataTableHeader() {
             </TableHead>
           );
         })}
-        <TableHead className="text-right">
-          <div className="flex items-center justify-end gap-2">
+        <TableHead className="text-right whitespace-nowrap">
+          <div className="flex items-center justify-end gap-2 min-w-[200px]">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <DataTableSearchInput
               value={qParam}
               onDebouncedChange={updateSearchUrl}
               debounceMs={DEBOUNCE_MS}
-              placeholder="Cerca documento o cliente..."
+              placeholder="Cerca..."
             />
           </div>
         </TableHead>
-        <TableHead className="text-right w-[120px]">Azioni</TableHead>
+        <TableHead className="text-right w-[180px] shrink-0">Azioni</TableHead>
       </TableRow>
     </TableHeader>
   );

@@ -34,7 +34,17 @@ export function DocumentsTableBody({ documents }: DocumentsTableBodyProps) {
             })}
           </TableCell>,
           <TableCell key="type">
-            <Badge variant="outline">{doc.documentType.description}</Badge>
+            <Badge
+              variant="outline"
+              className={doc.documentType.color
+                ? 'border-transparent text-white'
+                : ''}
+              style={doc.documentType.color
+                ? { backgroundColor: doc.documentType.color }
+                : undefined}
+            >
+              {doc.documentType.description}
+            </Badge>
           </TableCell>,
           <TableCell key="entity">
             {doc.entity ? (

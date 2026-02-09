@@ -455,6 +455,7 @@ model DocumentTypeConfig {
   valuationImpact        Boolean         @default(false)
   documentDirection      String          @default("SALE") // PURCHASE, SALE, INTERNAL
   active                 Boolean         @default(true)
+  color                  String?         // Colore etichetta (es. #3b82f6)
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt
   operationSignStock     Int?

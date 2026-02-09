@@ -36,6 +36,7 @@ export type DocumentRow = {
     id: string;
     code: string;
     description: string;
+    color?: string | null;
   };
   entity: {
     id: string;
@@ -143,6 +144,7 @@ export async function getDocumentsAction(
               id: true,
               code: true,
               description: true,
+              color: true,
             },
           },
           entity: {
@@ -258,6 +260,11 @@ export async function getDocumentAction(
     vatAmount: string;
     grossAmount: string;
   }>;
+  installments: Array<{
+    id: string;
+    dueDate: Date;
+    amount: string;
+  }>;
 }>> {
   try {
     // 1. ✅ Ottieni contesto autenticazione
@@ -276,6 +283,7 @@ export async function getDocumentAction(
             id: true,
             code: true,
             description: true,
+            color: true,
           },
         },
         entityId: true,
@@ -342,6 +350,14 @@ export async function getDocumentAction(
             grossAmount: true,
           },
         },
+        installments: {
+          orderBy: { dueDate: 'asc' },
+          select: {
+            id: true,
+            dueDate: true,
+            amount: true,
+          },
+        },
       },
     });
 
@@ -403,6 +419,11 @@ export async function getDocumentAction(
           netAmount: line.netAmount.toString(),
           vatAmount: line.vatAmount.toString(),
           grossAmount: line.grossAmount.toString(),
+        })),
+        installments: document.installments.map((inst) => ({
+          id: inst.id,
+          dueDate: inst.dueDate,
+          amount: inst.amount.toString(),
         })),
       },
     };

@@ -57,6 +57,7 @@ type DocumentTypeConfigOutput = {
   active: boolean;
   templateId: string | null;
   templateName: string | null;
+  color?: string | null; // presente dopo migration add_document_type_color
   createdAt: Date;
   updatedAt: Date;
 };
@@ -93,6 +94,7 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
         documentDirection: true,
         active: true,
         templateId: true,
+        color: true,
         template: { select: { name: true } },
         createdAt: true,
         updatedAt: true,
@@ -114,6 +116,7 @@ export async function getDocumentTypesAction(): Promise<ActionResult<DocumentTyp
         active: type.active,
         templateId: type.templateId,
         templateName: type.template?.name ?? null,
+        color: type.color,
         createdAt: type.createdAt,
         updatedAt: type.updatedAt,
       })),
@@ -194,6 +197,7 @@ export async function createDocumentTypeAction(
         documentDirection: validatedData.documentDirection,
         active: validatedData.active,
         templateId: validatedData.templateId ?? null,
+        color: (validatedData.color && validatedData.color.trim()) ? validatedData.color.trim() : null,
       },
     });
 
@@ -334,6 +338,9 @@ export async function updateDocumentTypeAction(
         }),
         ...(validatedData.active !== undefined && { active: validatedData.active }),
         ...(validatedData.templateId !== undefined && { templateId: validatedData.templateId }),
+        ...(validatedData.color !== undefined && {
+          color: (validatedData.color && validatedData.color.trim()) ? validatedData.color.trim() : null,
+        }),
       },
     });
 

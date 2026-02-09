@@ -99,6 +99,7 @@ async function DocumentTypesTable() {
               <TableRow>
                 <TableHead>Codice</TableHead>
                 <TableHead>Descrizione</TableHead>
+                <TableHead>Colore</TableHead>
                 <TableHead>Numerazione</TableHead>
                 <TableHead>Movimenta Stock</TableHead>
                 <TableHead>Impatto Valutazione</TableHead>
@@ -137,6 +138,7 @@ function DocumentTypeRow({ documentType }: { documentType: {
   active: boolean;
   templateId: string | null;
   templateName: string | null;
+  color: string | null;
   createdAt: Date;
   updatedAt: Date;
 } }) {
@@ -147,6 +149,17 @@ function DocumentTypeRow({ documentType }: { documentType: {
       </TableCell>
       <TableCell>
         {documentType.description}
+      </TableCell>
+      <TableCell>
+        {documentType.color ? (
+          <span
+            className="inline-block h-6 w-8 rounded border border-input"
+            style={{ backgroundColor: documentType.color }}
+            title={documentType.color}
+          />
+        ) : (
+          <span className="text-muted-foreground text-sm">—</span>
+        )}
       </TableCell>
       <TableCell>
         <Badge variant="outline">

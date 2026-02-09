@@ -66,6 +66,12 @@ export const createDocumentTypeSchema = z.object({
   documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).default('SALE'),
   active: z.boolean().default(true),
   templateId: z.string().cuid().optional().nullable(),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Colore in esadecimale (es. #3b82f6)')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
 }).refine(
   (data) => {
     // Se inventoryMovement è true, operationSignStock deve essere definito
@@ -130,6 +136,12 @@ export const updateDocumentTypeSchema = z.object({
   documentDirection: z.enum(['PURCHASE', 'SALE', 'INTERNAL']).optional(),
   active: z.boolean().optional(),
   templateId: z.string().cuid().optional().nullable(),
+  color: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Colore deve essere in formato esadecimale (es. #3b82f6)')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
 }).refine(
   (data) => {
     // Se inventoryMovement è true, operationSignStock deve essere definito

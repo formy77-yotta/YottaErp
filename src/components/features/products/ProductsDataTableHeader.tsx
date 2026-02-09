@@ -78,7 +78,32 @@ export function ProductsDataTableHeader() {
   return (
     <TableHeader>
       <TableRow>
-        {SORTABLE_COLUMNS.map(({ label, field }) => {
+        {SORTABLE_COLUMNS.slice(0, 4).map(({ label, field }) => {
+          const isSorted = currentSort?.field === field;
+          return (
+            <TableHead key={field}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-ml-3 h-8 font-medium"
+                onClick={() => updateSort(field)}
+              >
+                {label}
+                {isSorted ? (
+                  currentSort.order === 'asc' ? (
+                    <ArrowUp className="ml-2 h-4 w-4" />
+                  ) : (
+                    <ArrowDown className="ml-2 h-4 w-4" />
+                  )
+                ) : (
+                  <ArrowUpDown className="ml-2 h-4 w-4 opacity-50" />
+                )}
+              </Button>
+            </TableHead>
+          );
+        })}
+        <TableHead className="text-right font-medium">Giacenza</TableHead>
+        {SORTABLE_COLUMNS.slice(4).map(({ label, field }) => {
           const isSorted = currentSort?.field === field;
           return (
             <TableHead key={field}>
@@ -102,7 +127,6 @@ export function ProductsDataTableHeader() {
             </TableHead>
           );
         })}
-        <TableHead className="text-right font-medium">Giacenza</TableHead>
         <TableHead className="text-right">
           <div className="flex items-center justify-end gap-2">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />

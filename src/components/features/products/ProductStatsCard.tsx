@@ -82,8 +82,16 @@ export function ProductStatsCard({ productId }: ProductStatsCardProps) {
 
   const purchasedTotal = new Decimal(stats.purchasedTotalAmount || '0');
   const soldTotal = new Decimal(stats.soldTotalAmount || '0');
-  const margin = soldTotal.minus(purchasedTotal);
+  // Margine = somma (i movimenti hanno già il segno corretto: acquisti negativi, vendite positive)
+  const margin = soldTotal.plus(purchasedTotal);
   const weightedAverageCost = new Decimal(stats.weightedAverageCost || '0');
+
+  // Valori in valore assoluto per la visualizzazione (senza segno)
+  const purchasedAbs = purchasedTotal.abs();
+  const soldAbs = soldTotal.abs();
+  const purchasedQtyAbs = new Decimal(stats.purchasedQuantity || '0').abs();
+  const soldQtyAbs = new Decimal(stats.soldQuantity || '0').abs();
+  const stockAbs = new Decimal(stats.currentStock ?? '0').abs();
 
   return (
     <Card>
@@ -122,10 +130,10 @@ export function ProductStatsCard({ productId }: ProductStatsCardProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-xl font-semibold whitespace-nowrap">
-                  {formatCurrency(purchasedTotal.toString())}
+                  {formatCurrency(purchasedAbs.toString())}
                 </div>
                 <div className="text-sm text-muted-foreground whitespace-nowrap">
-                  Q.tà {formatQuantity(stats.purchasedQuantity, stats.quantityDecimals ?? 4)}
+                  Q.tà {formatQuantity(purchasedQtyAbs.toString(), stats.quantityDecimals ?? 4)}
                 </div>
               </CardContent>
             </Card>
@@ -137,10 +145,10 @@ export function ProductStatsCard({ productId }: ProductStatsCardProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-xl font-semibold whitespace-nowrap">
-                  {formatCurrency(soldTotal.toString())}
+                  {formatCurrency(soldAbs.toString())}
                 </div>
                 <div className="text-sm text-muted-foreground whitespace-nowrap">
-                  Q.tà {formatQuantity(stats.soldQuantity, stats.quantityDecimals ?? 4)}
+                  Q.tà {formatQuantity(soldQtyAbs.toString(), stats.quantityDecimals ?? 4)}
                 </div>
               </CardContent>
             </Card>
@@ -152,7 +160,7 @@ export function ProductStatsCard({ productId }: ProductStatsCardProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-xl font-semibold whitespace-nowrap">
-                  {formatQuantity(stats.currentStock ?? '0', stats.quantityDecimals ?? 4)}
+                  {formatQuantity(stockAbs.toString(), stats.quantityDecimals ?? 4)}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   Da movimenti di magazzino

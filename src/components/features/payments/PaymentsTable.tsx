@@ -10,10 +10,20 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { listPayments, type ListPaymentItem } from '@/actions/finance';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { listPayments, deletePayment, type ListPaymentItem } from '@/actions/finance';
 import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
-import { Link2 } from 'lucide-react';
+import { Link2, Trash2, Loader2 } from 'lucide-react';
 
 const DIRECTION_LABELS: Record<string, string> = {
   INFLOW: 'Entrata',
@@ -23,11 +33,15 @@ const DIRECTION_LABELS: Record<string, string> = {
 interface PaymentsTableProps {
   refreshKey?: number;
   onCollegaScadenze: (paymentId: string) => void;
+  onDeleted?: () => void;
 }
 
-export function PaymentsTable({ refreshKey = 0, onCollegaScadenze }: PaymentsTableProps) {
+export function PaymentsTable({ refreshKey = 0, onCollegaScadenze, onDeleted }: PaymentsTableProps) {
   const [rows, setRows] = useState<ListPaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<ListPaymentItem | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -89,7 +103,7 @@ export function PaymentsTable({ refreshKey = 0, onCollegaScadenze }: PaymentsTab
             <TableHead>Conto</TableHead>
             <TableHead className="text-right">Allocato</TableHead>
             <TableHead className="text-right">Residuo</TableHead>
-            <TableHead className="w-[120px]" />
+            <TableHead className="w-[180px]" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -108,21 +122,75 @@ export function PaymentsTable({ refreshKey = 0, onCollegaScadenze }: PaymentsTab
                 <TableCell className="text-right">{formatCurrency(new Decimal(allocated))}</TableCell>
                 <TableCell className="text-right">{formatCurrency(new Decimal(residual))}</TableCell>
                 <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onCollegaScadenze(row.id)}
-                    title="Collega scadenze"
-                  >
-                    <Link2 className="h-4 w-4 mr-1" />
-                    Collega scadenze
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onCollegaScadenze(row.id)}
+                      title="Collega scadenze"
+                    >
+                      <Link2 className="h-4 w-4 mr-1" />
+                      Collega scadenze
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        setPaymentToDelete(row);
+                        setDeleteDialogOpen(true);
+                      }}
+                      title="Elimina pagamento"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             );
           })}
         </TableBody>
       </Table>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setPaymentToDelete(null); } setDeleteDialogOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare il pagamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {paymentToDelete && (
+                <>
+                  Verrà rimosso il pagamento del {new Date(paymentToDelete.date).toLocaleDateString('it-IT')} su {paymentToDelete.accountName} ({formatCurrency(new Decimal(paymentToDelete.amount))}).
+                  Le eventuali allocazioni alle scadenze verranno rimosse. Questa operazione non si può annullare.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletePending}>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!paymentToDelete) return;
+                setDeletePending(true);
+                const result = await deletePayment(paymentToDelete.id);
+                setDeletePending(false);
+                if (result.success) {
+                  setDeleteDialogOpen(false);
+                  setPaymentToDelete(null);
+                  onDeleted?.();
+                } else {
+                  alert(result.error);
+                }
+              }}
+              disabled={deletePending}
+            >
+              {deletePending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

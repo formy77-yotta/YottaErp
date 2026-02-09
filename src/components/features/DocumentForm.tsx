@@ -56,6 +56,18 @@ import {
 } from '@/components/ui/table';
 import { Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
 
+/** Parses user input to Decimal; returns Decimal(0) for empty, whitespace, or invalid input to avoid DecimalError. */
+function parseDecimalInput(raw: string): Decimal {
+  const trimmed = raw.trim();
+  if (trimmed === '') return new Decimal('0');
+  const normalized = trimmed.replace(',', '.');
+  try {
+    return new Decimal(normalized);
+  } catch {
+    return new Decimal('0');
+  }
+}
+
 interface DocumentFormProps {
   /**
    * Documento da modificare (undefined = creazione nuova)
@@ -1266,8 +1278,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                                 placeholder="1.0000"
                                 value={field.value != null ? String(field.value) : ''}
                                 onChange={(e) => {
-                                  const raw = e.target.value.trim();
-                                  field.onChange(raw === '' ? new Decimal('0') : new Decimal(raw));
+                                  field.onChange(parseDecimalInput(e.target.value));
                                 }}
                                 onBlur={field.onBlur}
                                 disabled={isLoading}
@@ -1292,8 +1303,7 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                                 placeholder="0.00"
                                 value={field.value != null ? String(field.value) : ''}
                                 onChange={(e) => {
-                                  const raw = e.target.value.trim();
-                                  field.onChange(raw === '' ? new Decimal('0') : new Decimal(raw));
+                                  field.onChange(parseDecimalInput(e.target.value));
                                 }}
                                 onBlur={field.onBlur}
                                 disabled={isLoading}
@@ -1332,8 +1342,12 @@ export function DocumentForm({ documentId, onSuccess, onError }: DocumentFormPro
                                     field.onChange(new Decimal('0'));
                                     return;
                                   }
-                                  const pct = parseFloat(raw);
-                                  field.onChange(Number.isNaN(pct) ? new Decimal('0') : new Decimal(pct / 100));
+                                  const pct = parseFloat(raw.replace(',', '.'));
+                                  if (Number.isNaN(pct)) {
+                                    field.onChange(new Decimal('0'));
+                                    return;
+                                  }
+                                  field.onChange(new Decimal(pct / 100));
                                 }}
                                 onBlur={field.onBlur}
                                 disabled={isLoading}

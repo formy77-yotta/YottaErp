@@ -48,6 +48,7 @@ type DocumentForXML = Prisma.DocumentGetPayload<{
         vatRateRef: true;
       };
     };
+    installments: true; // Scadenze pagamento (per DataScadenzaPagamento)
   };
 }>;
 
@@ -79,6 +80,9 @@ export async function generateInvoiceXML(
         orderBy: {
           createdAt: 'asc', // Ordine righe
         },
+      },
+      installments: {
+        orderBy: { dueDate: 'asc' },
       },
     },
   });
@@ -443,9 +447,16 @@ function buildFatturaPAXML(
     .txt(formatDecimal(document.grossTotal, 2));
 
   // ✅ Causale (opzionale ma suggerito dalle Technical Rules)
-  // Utile per riferimenti normativi, condizioni commerciali, annotazioni
+  // Include note e condizioni di pagamento (utile per riferimenti normativi, condizioni commerciali)
+  const causaleParts: string[] = [];
   if (document.notes) {
-    datiGeneraliDocumento.ele('Causale').txt(document.notes);
+    causaleParts.push(document.notes);
+  }
+  if (document.paymentTerms) {
+    causaleParts.push(`Condizioni di pagamento: ${document.paymentTerms}`);
+  }
+  if (causaleParts.length > 0) {
+    datiGeneraliDocumento.ele('Causale').txt(causaleParts.join(' | '));
   }
 
   // ✅ DatiOrdineAcquisto (obbligatorio per fatture verso PA - FeX Id: 192)
@@ -480,11 +491,19 @@ function buildFatturaPAXML(
     const dettaglioLinea = datiBeniServizi.ele('DettaglioLinee');
     dettaglioLinea.ele('NumeroLinea').txt(String(index + 1));
 
+    // ✅ CodiceArticolo (FeX 209) - con CodiceTipo e CodiceValore obbligatori (FeX 141)
+    const codiceArticolo = dettaglioLinea.ele('CodiceArticolo');
+    codiceArticolo.ele('CodiceTipo').txt('CODICE'); // Tipo codice (es. CODICE, EAN, ...)
+    codiceArticolo.ele('CodiceValore').txt(line.productCode);
+
     // Descrizione
     dettaglioLinea.ele('Descrizione').txt(line.description);
 
     // Quantità (8 decimali per conformità SdI)
     dettaglioLinea.ele('Quantita').txt(formatDecimal(line.quantity, 8));
+
+    // ✅ UnitaMisura (FeX 219) - default "PZ" (pezzi) se non presente in futuro su DocumentLine
+    dettaglioLinea.ele('UnitaMisura').txt('PZ');
 
     // PrezzoUnitario (4 decimali)
     dettaglioLinea.ele('PrezzoUnitario').txt(formatDecimal(line.unitPrice, 4));
@@ -500,6 +519,11 @@ function buildFatturaPAXML(
     if (line.vatRateRef?.nature) {
       dettaglioLinea.ele('Natura').txt(line.vatRateRef.nature);
     }
+
+    // ✅ AltriDatiGestionali (FeX 214) - TipoDato max 10 caratteri (FeX 143)
+    const altriDati = dettaglioLinea.ele('AltriDatiGestionali');
+    altriDati.ele('TipoDato').txt('COD_ART'); // Max 10 caratteri
+    altriDati.ele('RiferimentoTesto').txt(line.productCode);
   });
 
   // ✅ DatiRiepilogo: DEVE essere dentro DatiBeniServizi, non direttamente in Body
@@ -524,6 +548,35 @@ function buildFatturaPAXML(
       datiRiepilogo.ele('Natura').txt(riepilogo.nature);
     }
   });
+
+  // ✅ DatiPagamento: scadenze dal documento (installments); se assenti, fallback a data doc + 30 gg
+  // Ordine DettaglioPagamento (FeX 145): ModalitaPagamento, DataScadenzaPagamento, ImportoPagamento
+  const datiPagamento = body.ele('DatiPagamento');
+  const hasInstallments = document.installments && document.installments.length > 0;
+  datiPagamento
+    .ele('CondizioniPagamento')
+    .txt(hasInstallments && document.installments!.length > 1 ? 'TP01' : 'TP02'); // TP01=rate, TP02=completo
+  if (hasInstallments) {
+    for (const scadenza of document.installments!) {
+      const dettaglioPagamento = datiPagamento.ele('DettaglioPagamento');
+      dettaglioPagamento.ele('ModalitaPagamento').txt('MP05');
+      dettaglioPagamento
+        .ele('DataScadenzaPagamento')
+        .txt(formatDate(scadenza.dueDate));
+      dettaglioPagamento
+        .ele('ImportoPagamento')
+        .txt(formatDecimal(scadenza.amount, 2));
+    }
+  } else {
+    const dettaglioPagamento = datiPagamento.ele('DettaglioPagamento');
+    dettaglioPagamento.ele('ModalitaPagamento').txt('MP05');
+    const dataScadenza = addDays(document.date, 30);
+    dettaglioPagamento.ele('DataScadenzaPagamento').txt(formatDate(dataScadenza));
+    dettaglioPagamento
+      .ele('ImportoPagamento')
+      .txt(formatDecimal(document.grossTotal, 2));
+  }
+  // Le condizioni di pagamento in testo sono già in Causale
 
   // Genera XML string
   const xml = root.end({ prettyPrint: true });
@@ -550,6 +603,15 @@ function formatDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Aggiunge n giorni a una data (per DataScadenzaPagamento)
+ */
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
 }
 
 /**

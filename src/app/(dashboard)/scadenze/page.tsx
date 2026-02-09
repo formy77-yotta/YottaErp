@@ -23,17 +23,27 @@ import { formatCurrency } from '@/lib/decimal-utils';
 import { Decimal } from 'decimal.js';
 import { parseSearchParams } from '@/lib/validations/search-params';
 import { ScadenzeDataTableHeader } from '@/components/features/scadenze/ScadenzeDataTableHeader';
-import { AllocaPagamentoButton } from '@/components/features/scadenze/AllocaPagamentoButton';
+import { ScadenzeTableBodyWithSelection } from '@/components/features/scadenze/ScadenzeTableBodyWithSelection';
 
 export const dynamic = 'force-dynamic';
 
-const CATEGORY_LABELS: Record<string, string> = {
-  QUOTE: 'Preventivo',
-  ORDER: 'Ordine',
-  DELIVERY_NOTE: 'DDT',
-  INVOICE: 'Fattura',
-  CREDIT_NOTE: 'Nota credito',
-};
+/** Colore importo: verde se positivo (entrata), rosso se negativo (uscita) */
+function AmountCell({ amount, operationSignValuation }: { amount: string; operationSignValuation: number }) {
+  const decimal = new Decimal(amount);
+  const signed = decimal.mul(operationSignValuation);
+  const isNegative = signed.lessThan(0);
+  return (
+    <span
+      className={
+        isNegative
+          ? 'font-medium text-red-600 dark:text-red-400'
+          : 'font-medium text-green-600 dark:text-green-400'
+      }
+    >
+      {formatCurrency(signed)}
+    </span>
+  );
+}
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Da pagare',
@@ -47,20 +57,31 @@ const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'des
   PARTIAL: 'secondary',
 };
 
-/** Barra avanzamento pagamento: "Pagato X€ di Y€" (paid/total da somma PaymentMapping) */
-function ScadenzaProgressBar({ paid, total }: { paid: string; total: string }) {
+/** Importo già pagato (somma PaymentMapping); segno e colore come tipo documento; barra di avanzamento */
+function ScadenzaProgressBar({
+  paid,
+  total,
+  operationSignValuation,
+}: {
+  paid: string;
+  total: string;
+  operationSignValuation: number;
+}) {
   const paidNum = parseFloat(paid);
   const totalNum = parseFloat(total);
-  const pct = totalNum > 0 ? Math.min(100, (paidNum / totalNum) * 100) : 0;
+  const pct = totalNum !== 0 ? Math.min(100, (paidNum / totalNum) * 100) : 0;
+  const signedPaid = new Decimal(paid).mul(operationSignValuation);
+  const isNegative = signedPaid.lessThan(0);
+  const textClass = isNegative
+    ? 'text-xs text-red-600 dark:text-red-400'
+    : 'text-xs text-green-600 dark:text-green-400';
   return (
     <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">
-        Pagato {formatCurrency(new Decimal(paid))} di {formatCurrency(new Decimal(total))}
-      </p>
+      <p className={textClass}>{formatCurrency(signedPaid)}</p>
       <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
         <div
           className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${pct}%` }}
+          style={{ width: `${Math.abs(pct)}%` }}
         />
       </div>
     </div>
@@ -107,10 +128,10 @@ async function ScadenzeTable({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border">
-        <Table>
-          <ScadenzeDataTableHeader />
-          {isEmpty ? (
+      <div className="rounded-lg border overflow-x-auto">
+        {isEmpty ? (
+          <Table className="min-w-[900px]">
+            <ScadenzeDataTableHeader />
             <TableBody>
               <TableRow>
                 <TableCell colSpan={8} className="h-32 text-center">
@@ -124,69 +145,10 @@ async function ScadenzeTable({
                 </TableCell>
               </TableRow>
             </TableBody>
-          ) : (
-            <TableBody>
-              {deadlines.map((d) => (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">
-                    {new Date(d.dueDate).toLocaleDateString('it-IT', {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-mono text-sm">{d.document.number}</span>
-                      <Badge variant="outline" className="w-fit text-xs">
-                        {CATEGORY_LABELS[d.document.category] ?? d.document.category}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm">
-                      {d.document.customerNameSnapshot || '—'}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(new Decimal(d.amount))}
-                  </TableCell>
-                  <TableCell className="w-[200px]">
-                    <ScadenzaProgressBar
-                      paid={d.paidAmount}
-                      total={d.amount}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANTS[d.status] ?? 'outline'}>
-                      {STATUS_LABELS[d.status] ?? d.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell />
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <AllocaPagamentoButton
-                        row={{
-                          id: d.id,
-                          amount: d.amount,
-                          paidAmount: d.paidAmount,
-                          document: { number: d.document.number },
-                        }}
-                      />
-                      <Link href={`/documents/${d.documentId}`}>
-                        <Button variant="ghost" size="sm">
-                          <FileText className="h-4 w-4 mr-1" />
-                          Documento
-                        </Button>
-                      </Link>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          )}
-        </Table>
+          </Table>
+        ) : (
+          <ScadenzeTableBodyWithSelection deadlines={deadlines} />
+        )}
       </div>
 
       {totalPages > 1 && (
@@ -252,8 +214,8 @@ function PaginationLink({
 
 function ScadenzeTableSkeleton() {
   return (
-    <div className="rounded-lg border">
-      <Table>
+    <div className="rounded-lg border overflow-x-auto">
+      <Table className="min-w-[900px]">
         <TableHeader>
           <TableRow>
             <TableHead>Scadenza</TableHead>

@@ -131,16 +131,17 @@ export async function applyDocumentStats(
         .plus(deltaAmount)
         .toDecimalPlaces(2);
 
+      // Ultimo costo e CMP in valore assoluto (quantità/importi possono essere negativi per segno documento)
       let nextLastCost = lastCost;
-      if (deltaQty.greaterThan(0) && lineQuantity.greaterThan(0)) {
-        nextLastCost = lineNetAmount.div(lineQuantity).toDecimalPlaces(4);
+      if (lineQuantity.abs().greaterThan(0)) {
+        nextLastCost = lineNetAmount.abs().div(lineQuantity.abs()).toDecimalPlaces(4);
       }
 
-      // CMP: (ValoreTotaleAttuale + deltaAmount) / (QuantitàTotaleAttuale + deltaQty)
+      // CMP = totale valore assoluto / totale quantità assoluta (così non è 0 con segni negativi)
       const totalQty = purchasedQuantity.plus(deltaQty);
       const totalAmount = purchasedTotalAmount.plus(deltaAmount);
-      const nextWeightedAverageCost = totalQty.greaterThan(0)
-        ? totalAmount.div(totalQty).toDecimalPlaces(4)
+      const nextWeightedAverageCost = totalQty.abs().greaterThan(0)
+        ? totalAmount.abs().div(totalQty.abs()).toDecimalPlaces(4)
         : new Decimal(0);
 
       await tx.productAnnualStat.update({
@@ -213,10 +214,9 @@ export async function revertDocumentStats(
         .toDecimalPlaces(2);
       const totalQty = nextPurchasedQuantity;
       const totalAmount = nextPurchasedTotalAmount;
-      const nextWeightedAverageCost =
-        totalQty.greaterThan(0) && totalAmount.greaterThanOrEqualTo(0)
-          ? totalAmount.div(totalQty).toDecimalPlaces(4)
-          : new Decimal(0);
+      const nextWeightedAverageCost = totalQty.abs().greaterThan(0)
+        ? totalAmount.abs().div(totalQty.abs()).toDecimalPlaces(4)
+        : new Decimal(0);
       await tx.productAnnualStat.update({
         where: { id: stat.id },
         data: {

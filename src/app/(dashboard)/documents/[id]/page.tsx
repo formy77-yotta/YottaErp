@@ -257,29 +257,82 @@ export default async function DocumentDetailPage({ params }: DocumentDetailPageP
         </CardContent>
       </Card>
 
-      {/* Card Totali */}
+      {/* Card Scadenze (sinistra) + Totali documento (destra) */}
       <Card>
-        <CardHeader>
-          <CardTitle>Totali Documento</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex justify-end">
-            <div className="w-full max-w-md space-y-2">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Imponibile:</span>
-                <span className="font-medium">
-                  {formatCurrency(new Decimal(document.netTotal))}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">IVA:</span>
-                <span className="font-medium">
-                  {formatCurrency(new Decimal(document.vatTotal))}
-                </span>
-              </div>
-              <div className="flex justify-between text-lg font-bold pt-2 border-t">
-                <span>Totale:</span>
-                <span>{formatCurrency(new Decimal(document.grossTotal))}</span>
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Colonna sinistra: Scadenze */}
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Scadenze di pagamento</h3>
+              {document.installments && document.installments.length > 0 ? (
+                <>
+                  <div className="rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Rata</TableHead>
+                          <TableHead>Data scadenza</TableHead>
+                          <TableHead className="text-right">Importo</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {document.installments.map((inst, index) => (
+                          <TableRow key={inst.id}>
+                            <TableCell className="font-medium">
+                              Rata {index + 1}
+                            </TableCell>
+                            <TableCell>
+                              {new Date(inst.dueDate).toLocaleDateString('it-IT', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                              })}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(new Decimal(inst.amount))}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex justify-end mt-3">
+                    <span className="text-sm font-semibold">
+                      Totale scadenze: {formatCurrency(
+                        document.installments.reduce(
+                          (sum, inst) => sum.plus(inst.amount),
+                          new Decimal(0)
+                        )
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Nessuna scadenza (assegna una condizione di pagamento in modifica per generarle).
+                </p>
+              )}
+            </div>
+            {/* Colonna destra: Totali documento */}
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Totali documento</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Imponibile:</span>
+                  <span className="font-medium">
+                    {formatCurrency(new Decimal(document.netTotal))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">IVA:</span>
+                  <span className="font-medium">
+                    {formatCurrency(new Decimal(document.vatTotal))}
+                  </span>
+                </div>
+                <div className="flex justify-between text-lg font-bold pt-2 border-t">
+                  <span>Totale:</span>
+                  <span>{formatCurrency(new Decimal(document.grossTotal))}</span>
+                </div>
               </div>
             </div>
           </div>

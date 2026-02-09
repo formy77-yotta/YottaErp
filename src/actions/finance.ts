@@ -65,6 +65,7 @@ export async function createFinancialAccount(
 
 /**
  * Restituisce i conti finanziari dell'organizzazione (per selector e liste).
+ * Restituisce solo oggetti serializzabili (no Decimal) per uso in Client Components.
  */
 export async function getFinancialAccounts(activeOnly = true) {
   const ctx = await getAuthContext();
@@ -75,7 +76,18 @@ export async function getFinancialAccounts(activeOnly = true) {
     },
     orderBy: [{ type: 'asc' }, { name: 'asc' }],
   });
-  return accounts;
+  return accounts.map((a) => ({
+    id: a.id,
+    organizationId: a.organizationId,
+    name: a.name,
+    type: a.type,
+    iban: a.iban,
+    bicSwift: a.bicSwift,
+    initialBalance: a.initialBalance.toString(),
+    active: a.active,
+    createdAt: a.createdAt,
+    updatedAt: a.updatedAt,
+  }));
 }
 
 /**
@@ -247,7 +259,12 @@ export async function reconcilePayment(
   const installments = await prisma.installment.findMany({
     where: { id: { in: installmentIds } },
     include: {
-      document: { select: { organizationId: true } },
+      document: {
+        select: {
+          organizationId: true,
+          documentType: { select: { documentDirection: true } },
+        },
+      },
       payments: true,
     },
   });
@@ -270,6 +287,28 @@ export async function reconcilePayment(
       return {
         success: false,
         error: `Scadenza ${inst.id}: allocazione ${alloc?.toFixed(2) ?? 0} supera il residuo ${residual.toFixed(2)}.`,
+      };
+    }
+  }
+
+  // Coerenza direzione pagamento ↔ tipo documento: acquisto = uscita, vendita = entrata
+  if (!paymentId && newPayment) {
+    const requiredDirections = new Set(
+      installments.map((inst) => {
+        const dir = (inst.document as { documentType?: { documentDirection: string } | null }).documentType?.documentDirection;
+        return dir === 'PURCHASE' ? 'OUTFLOW' : 'INFLOW';
+      })
+    );
+    if (requiredDirections.size > 1) {
+      return { success: false, error: 'Le scadenze selezionate hanno tipi documento misti (vendita/acquisto). Collega solo scadenze dello stesso tipo.' };
+    }
+    const required = requiredDirections.has('OUTFLOW') ? 'OUTFLOW' : 'INFLOW';
+    if (newPayment.direction !== required) {
+      return {
+        success: false,
+        error: required === 'OUTFLOW'
+          ? 'Per saldare un debito (fattura acquisto) devi registrare un\'uscita, non un\'entrata.'
+          : 'Per incassare un credito (fattura vendita) devi registrare un\'entrata, non un\'uscita.',
       };
     }
   }
@@ -355,13 +394,39 @@ export async function listPayments(options?: { direction?: 'INFLOW' | 'OUTFLOW';
   }));
 }
 
-/** Scadenze con residuo per dropdown "Collega scadenze" (serializzabile) */
+export type DeletePaymentResult =
+  | { success: true }
+  | { success: false; error: string };
+
+/**
+ * Elimina un pagamento e i relativi mapping sulle scadenze.
+ * Verifica che il pagamento appartenga all'organizzazione corrente.
+ */
+export async function deletePayment(paymentId: string): Promise<DeletePaymentResult> {
+  const ctx = await getAuthContext();
+  try {
+    const payment = await prisma.payment.findFirst({
+      where: { id: paymentId, organizationId: ctx.organizationId },
+      select: { id: true },
+    });
+    if (!payment) {
+      return { success: false, error: 'Pagamento non trovato o non autorizzato.' };
+    }
+    await prisma.payment.delete({ where: { id: paymentId } });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Errore durante l\'eliminazione del pagamento.' };
+  }
+}
+
+/** Scadenze con residuo per "Collega scadenze" (serializzabile). documentDirection: SALE/PURCHASE/INTERNAL per preimpostare entrata/uscita. */
 export type InstallmentOption = {
   id: string;
   dueDate: string;
   amount: string;
   paidAmount: string;
   documentNumber: string;
+  documentDirection: string;
 };
 
 export async function getInstallmentsForAllocation(limit = 200): Promise<InstallmentOption[]> {
@@ -374,7 +439,12 @@ export async function getInstallmentsForAllocation(limit = 200): Promise<Install
       id: true,
       dueDate: true,
       amount: true,
-      document: { select: { number: true } },
+      document: {
+        select: {
+          number: true,
+          documentType: { select: { documentDirection: true } },
+        },
+      },
       payments: { select: { amount: true } },
     },
   });
@@ -386,6 +456,7 @@ export async function getInstallmentsForAllocation(limit = 200): Promise<Install
       amount: inst.amount.toString(),
       paidAmount: paid.toFixed(2),
       documentNumber: inst.document.number,
+      documentDirection: inst.document.documentType?.documentDirection ?? 'SALE',
     };
   });
 }

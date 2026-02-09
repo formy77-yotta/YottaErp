@@ -33,7 +33,7 @@ export type ScadenzaRow = {
   id: string;
   amount: string;
   paidAmount: string;
-  document: { number: string };
+  document: { number: string; documentDirection?: string };
 };
 
 type PaymentOption = {
@@ -50,17 +50,20 @@ type PaymentTypeOption = { id: string; name: string };
 const residual = (p: PaymentOption) =>
   new Decimal(p.amount).minus(p.allocated).toNumber();
 
+/** Scadenze: una sola (da riga) o più (selezione multipla). Se scadenze è fornito e non vuoto ha priorità. */
 export function ReconcilePaymentDialog({
   open,
   onOpenChange,
   scadenza,
+  scadenze,
   initialPaymentId = null,
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  scadenza: ScadenzaRow | null;
-  /** Quando aperto dalla pagina Pagamenti "Collega scadenze" */
+  scadenza?: ScadenzaRow | null;
+  /** Più scadenze da collegare in un colpo solo (totale = somma residui) */
+  scadenze?: ScadenzaRow[] | null;
   initialPaymentId?: string | null;
   onSuccess?: () => void;
 }) {
@@ -68,7 +71,7 @@ export function ReconcilePaymentDialog({
   const [payments, setPayments] = useState<PaymentOption[]>([]);
   const [paymentTypes, setPaymentTypes] = useState<PaymentTypeOption[]>([]);
   const [installmentOptions, setInstallmentOptions] = useState<InstallmentOption[]>([]);
-  const [selectedInstallmentId, setSelectedInstallmentId] = useState<string>('');
+  const [selectedInstallmentIds, setSelectedInstallmentIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,20 +86,30 @@ export function ReconcilePaymentDialog({
 
   const [existingPaymentId, setExistingPaymentId] = useState<string>('');
   const [allocateAmount, setAllocateAmount] = useState('');
+  /** Per più scadenze: importo allocato per ogni installmentId */
+  const [allocationAmounts, setAllocationAmounts] = useState<Record<string, string>>({});
 
-  /** Scadenza effettiva: da prop o dalla selezione dropdown (pagina Pagamenti) */
-  const effectiveScadenza: ScadenzaRow | null = scadenza
-    ? scadenza
-    : selectedInstallmentId
-      ? (() => {
-          const opt = installmentOptions.find((o) => o.id === selectedInstallmentId);
-          return opt ? { id: opt.id, amount: opt.amount, paidAmount: opt.paidAmount, document: { number: opt.documentNumber } } : null;
-        })()
-      : null;
+  const effectiveScadenze: ScadenzaRow[] =
+    scadenze && scadenze.length > 0
+      ? scadenze
+      : scadenza
+        ? [scadenza]
+        : Array.from(selectedInstallmentIds)
+            .map((id) => installmentOptions.find((o) => o.id === id))
+            .filter((o): o is InstallmentOption => !!o)
+            .map((o) => ({
+              id: o.id,
+              amount: o.amount,
+              paidAmount: o.paidAmount,
+              document: { number: o.documentNumber, documentDirection: o.documentDirection },
+            }));
 
-  const deadlineResidual = effectiveScadenza
-    ? new Decimal(effectiveScadenza.amount).minus(effectiveScadenza.paidAmount).toNumber()
-    : 0;
+  const isMultiple = effectiveScadenze.length > 1;
+  const effectiveScadenzaSingle = effectiveScadenze[0] ?? null;
+  const totalResidual = effectiveScadenze.reduce(
+    (sum, s) => sum.plus(new Decimal(s.amount).minus(s.paidAmount)),
+    new Decimal(0)
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -105,52 +118,116 @@ export function ReconcilePaymentDialog({
       setMode('existing');
       setExistingPaymentId(initialPaymentId);
     }
-    if (scadenza) {
+    if (scadenze && scadenze.length > 0) {
+      const amounts: Record<string, string> = {};
+      let sum = new Decimal(0);
+      scadenze.forEach((s) => {
+        const res = new Decimal(s.amount).minus(s.paidAmount).toFixed(2);
+        amounts[s.id] = res;
+        sum = sum.plus(res);
+      });
+      setAllocationAmounts(amounts);
+      setNewAmount(sum.toFixed(2));
+      setAllocateAmount(scadenze.length === 1 ? amounts[scadenze[0].id] ?? '' : '');
+      const dir = scadenze[0]?.document?.documentDirection;
+      setNewDirection(dir === 'PURCHASE' ? 'OUTFLOW' : 'INFLOW');
+    } else if (scadenza) {
       const residualScadenza = new Decimal(scadenza.amount).minus(scadenza.paidAmount).toFixed(2);
       setAllocateAmount(residualScadenza);
+      setAllocationAmounts({});
+      const dir = scadenza.document?.documentDirection;
+      setNewDirection(dir === 'PURCHASE' ? 'OUTFLOW' : 'INFLOW');
     } else {
       setAllocateAmount('');
-      setSelectedInstallmentId('');
+      setAllocationAmounts({});
+      setSelectedInstallmentIds(new Set());
     }
 
     Promise.all([
       listPayments(),
       getPaymentTypesAction(true),
       getFinancialAccounts(),
-      ...(scadenza ? [] : [getInstallmentsForAllocation()]),
+      ...(scadenza || (scadenze && scadenze.length > 0) ? [] : [getInstallmentsForAllocation()]),
     ])
       .then((results) => {
         const [payList, typesRes, accounts, instOpts] = results;
         setPayments(payList);
         if (typesRes?.success && typesRes?.data) setPaymentTypes(typesRes.data);
         setFinancialAccounts((accounts ?? []).map((a: { id: string; name: string }) => ({ id: a.id, name: a.name })));
-        if (!scadenza && Array.isArray(instOpts)) setInstallmentOptions(instOpts);
+        if (!scadenza && !(scadenze && scadenze.length > 0) && Array.isArray(instOpts)) setInstallmentOptions(instOpts);
       })
       .catch(() => setPayments([]));
-  }, [open, scadenza, initialPaymentId]);
+  }, [open, scadenza, scadenze, initialPaymentId]);
 
-  const allocateNum = parseFloat(allocateAmount) || 0;
+  // Quando si selezionano/deselezionano scadenze dalla lista (pagina Pagamenti), aggiorna importi, totale e direzione
+  useEffect(() => {
+    if (scadenza || (scadenze && scadenze.length > 0) || selectedInstallmentIds.size === 0) return;
+    const amounts: Record<string, string> = {};
+    let sum = new Decimal(0);
+    effectiveScadenze.forEach((s) => {
+      const res = new Decimal(s.amount).minus(s.paidAmount).toFixed(2);
+      amounts[s.id] = res;
+      sum = sum.plus(res);
+    });
+    setAllocationAmounts(amounts);
+    setNewAmount(sum.toFixed(2));
+    if (effectiveScadenze.length === 1) setAllocateAmount(amounts[effectiveScadenze[0].id] ?? '');
+    else setAllocateAmount('');
+    // Acquisto = uscita, Vendita = entrata
+    const dir = effectiveScadenze[0]?.document?.documentDirection;
+    setNewDirection(dir === 'PURCHASE' ? 'OUTFLOW' : 'INFLOW');
+  }, [selectedInstallmentIds, installmentOptions]);
+
+  const totalAllocate = isMultiple
+    ? effectiveScadenze.reduce((s, sc) => s.plus(allocationAmounts[sc.id]?.replace(',', '.') || '0'), new Decimal(0))
+    : new Decimal(allocateAmount.replace(',', '.') || '0');
+  const totalAllocateNum = totalAllocate.toNumber();
+
   const validAllocate =
-    !!effectiveScadenza &&
-    allocateNum > 0 &&
-    allocateNum <= deadlineResidual &&
-    (mode === 'new'
-      ? !!newFinancialAccountId && new Decimal(newAmount || 0).gte(allocateNum)
-      : true) &&
-    (mode === 'existing'
-      ? (() => {
-          const p = payments.find((x) => x.id === existingPaymentId);
-          return p ? allocateNum <= residual(p) : false;
-        })()
-      : true);
+    effectiveScadenze.length > 0 &&
+    totalAllocateNum > 0 &&
+    (isMultiple
+      ? effectiveScadenze.every((s) => {
+          const res = new Decimal(s.amount).minus(s.paidAmount).toNumber();
+          const alloc = parseFloat(allocationAmounts[s.id]?.replace(',', '.') || '0');
+          return alloc >= 0 && alloc <= res;
+        }) && (mode === 'new' ? new Decimal(newAmount || 0).gte(totalAllocate) && !!newFinancialAccountId : true) &&
+          (mode === 'existing'
+            ? (() => {
+                const p = payments.find((x) => x.id === existingPaymentId);
+                return p ? totalAllocateNum <= residual(p) : false;
+              })()
+            : true)
+      : (() => {
+          const deadlineResidual = new Decimal(effectiveScadenzaSingle!.amount).minus(effectiveScadenzaSingle!.paidAmount).toNumber();
+          return (
+            totalAllocateNum <= deadlineResidual &&
+            (mode === 'new' ? !!newFinancialAccountId && new Decimal(newAmount || 0).gte(totalAllocate) : true) &&
+            (mode === 'existing'
+              ? (() => {
+                  const p = payments.find((x) => x.id === existingPaymentId);
+                  return p ? totalAllocateNum <= residual(p) : false;
+                })()
+              : true)
+          );
+        })());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!effectiveScadenza || !validAllocate) return;
+    if (effectiveScadenze.length === 0 || !validAllocate) return;
     setLoading(true);
     setError(null);
     try {
-      const amountStr = allocateAmount.replace(',', '.');
+      const allocations = isMultiple
+        ? effectiveScadenze
+            .map((s) => ({ installmentId: s.id, amount: (allocationAmounts[s.id] ?? '0').replace(',', '.') }))
+            .filter((a) => parseFloat(a.amount) > 0)
+        : [{ installmentId: effectiveScadenzaSingle!.id, amount: allocateAmount.replace(',', '.') }];
+      if (allocations.length === 0) {
+        setError('Inserisci almeno un importo da allocare.');
+        setLoading(false);
+        return;
+      }
       if (mode === 'new') {
         const res = await reconcilePayment({
           newPayment: {
@@ -162,7 +239,7 @@ export function ReconcilePaymentDialog({
             reference: newReference || undefined,
             notes: newNotes || undefined,
           },
-          allocations: [{ installmentId: effectiveScadenza.id, amount: amountStr }],
+          allocations,
         });
         if (res.success) {
           onOpenChange(false);
@@ -173,7 +250,7 @@ export function ReconcilePaymentDialog({
       } else {
         const res = await reconcilePayment({
           paymentId: existingPaymentId,
-          allocations: [{ installmentId: effectiveScadenza.id, amount: amountStr }],
+          allocations,
         });
         if (res.success) {
           onOpenChange(false);
@@ -189,36 +266,71 @@ export function ReconcilePaymentDialog({
     }
   };
 
+  const toggleInstallmentSelection = (id: string) => {
+    setSelectedInstallmentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Pagamento</DialogTitle>
         </DialogHeader>
-        {effectiveScadenza ? (
-          <p className="text-sm text-muted-foreground">
-            Scadenza doc. {effectiveScadenza.document.number} · Residuo{' '}
-            {formatCurrency(new Decimal(effectiveScadenza.amount).minus(effectiveScadenza.paidAmount))}
-          </p>
-        ) : !scadenza && installmentOptions.length > 0 ? (
+        {effectiveScadenze.length > 0 ? (
+          isMultiple ? (
+            <p className="text-sm text-muted-foreground">
+              {effectiveScadenze.length} scadenze selezionate · Totale residuo{' '}
+              {formatCurrency(totalResidual)}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Scadenza doc. {effectiveScadenzaSingle!.document.number} · Residuo{' '}
+              {formatCurrency(new Decimal(effectiveScadenzaSingle!.amount).minus(effectiveScadenzaSingle!.paidAmount))}
+            </p>
+          )
+        ) : !scadenza && !scadenze?.length && installmentOptions.length > 0 ? (
           <div className="space-y-2">
-            <Label>Scadenza da collegare</Label>
-            <Select value={selectedInstallmentId} onValueChange={(v) => { setSelectedInstallmentId(v); const o = installmentOptions.find((x) => x.id === v); if (o) setAllocateAmount(new Decimal(o.amount).minus(o.paidAmount).toFixed(2)); }}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona scadenza" />
-              </SelectTrigger>
-              <SelectContent>
-                {installmentOptions.map((o) => {
-                  const res = new Decimal(o.amount).minus(o.paidAmount).toNumber();
-                  if (res <= 0) return null;
-                  return (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.documentNumber} · {new Date(o.dueDate).toLocaleDateString('it-IT')} · Residuo {formatCurrency(new Decimal(res))}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            <Label>Scadenze da collegare (seleziona una o più)</Label>
+            <div className="max-h-56 overflow-y-auto rounded border p-2 space-y-1">
+              {installmentOptions.map((o) => {
+                const res = new Decimal(o.amount).minus(o.paidAmount).toNumber();
+                if (res <= 0) return null;
+                const checked = selectedInstallmentIds.has(o.id);
+                return (
+                  <label
+                    key={o.id}
+                    className="flex items-center gap-3 py-2 px-2 rounded hover:bg-muted/50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleInstallmentSelection(o.id)}
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    <span className="font-mono text-sm shrink-0 w-28 truncate" title={o.documentNumber}>
+                      {o.documentNumber}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(o.dueDate).toLocaleDateString('it-IT')}
+                    </span>
+                    <span className="text-xs font-medium ml-auto">
+                      Residuo {formatCurrency(new Decimal(res))}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {effectiveScadenze.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {effectiveScadenze.length} scadenza/e selezionate · Totale residuo{' '}
+                {formatCurrency(totalResidual)}
+              </p>
+            )}
           </div>
         ) : null}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -340,20 +452,54 @@ export function ReconcilePaymentDialog({
             </div>
           )}
 
-          {effectiveScadenza && (
-          <div className="space-y-2">
-            <Label>Importo da allocare a questa scadenza</Label>
-            <Input
-              type="text"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={allocateAmount}
-              onChange={(e) => setAllocateAmount(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Max {formatCurrency(new Decimal(deadlineResidual))}
-            </p>
-          </div>
+          {effectiveScadenze.length > 0 && (
+            isMultiple ? (
+              <div className="space-y-2">
+                <Label>Importi da allocare per scadenza</Label>
+                <div className="max-h-48 overflow-y-auto space-y-2 rounded border p-2">
+                  {effectiveScadenze.map((s) => {
+                    const res = new Decimal(s.amount).minus(s.paidAmount);
+                    return (
+                      <div key={s.id} className="flex items-center gap-2">
+                        <span className="text-xs shrink-0 w-24 truncate" title={s.document.number}>
+                          {s.document.number}
+                        </span>
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          className="h-8 text-sm"
+                          value={allocationAmounts[s.id] ?? ''}
+                          onChange={(e) =>
+                            setAllocationAmounts((prev) => ({ ...prev, [s.id]: e.target.value }))
+                          }
+                        />
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          max {formatCurrency(res)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Totale allocato: {formatCurrency(totalAllocate)}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Importo da allocare a questa scadenza</Label>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={allocateAmount}
+                  onChange={(e) => setAllocateAmount(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Max {formatCurrency(new Decimal(effectiveScadenzaSingle!.amount).minus(effectiveScadenzaSingle!.paidAmount))}
+                </p>
+              </div>
+            )
           )}
 
           {error && (

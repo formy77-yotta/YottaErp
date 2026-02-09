@@ -129,6 +129,7 @@ export async function getPaymentDeadlines(
     amount: string;
     status: string;
     paidAmount: string;
+    operationSignValuation: number;
     document: {
       id: string;
       number: string;
@@ -136,6 +137,7 @@ export async function getPaymentDeadlines(
       customerNameSnapshot: string;
       grossTotal: string;
       category: string;
+      documentTypeDescription: string;
     };
   }>
 > {
@@ -164,6 +166,9 @@ export async function getPaymentDeadlines(
           customerNameSnapshot: true,
           grossTotal: true,
           category: true,
+          documentType: {
+            select: { description: true, operationSignValuation: true },
+          },
         },
       },
       payments: { select: { amount: true } },
@@ -186,6 +191,7 @@ export async function getPaymentDeadlines(
         : paidFromMappings > 0
           ? 'PARTIAL'
           : d.status.toString();
+    const sign = d.document.documentType?.operationSignValuation ?? 1;
     return {
       id: d.id,
       documentId: d.documentId,
@@ -193,6 +199,7 @@ export async function getPaymentDeadlines(
       amount: d.amount.toString(),
       status,
       paidAmount: paidAmountStr,
+      operationSignValuation: sign,
       document: {
         id: d.document.id,
         number: d.document.number,
@@ -200,6 +207,8 @@ export async function getPaymentDeadlines(
         customerNameSnapshot: d.document.customerNameSnapshot,
         grossTotal: d.document.grossTotal.toString(),
         category: d.document.category,
+        documentTypeDescription: d.document.documentType?.description ?? d.document.category,
+        documentDirection: d.document.documentType?.documentDirection ?? 'SALE',
       },
     };
   });
@@ -213,6 +222,8 @@ export type PaymentDeadlineRow = {
   amount: string;
   status: string;
   paidAmount: string;
+  /** Segno per valorizzazione: -1 = uscita (es. acquisti), +1 = entrata (es. vendite) */
+  operationSignValuation: number;
   document: {
     id: string;
     number: string;
@@ -220,6 +231,10 @@ export type PaymentDeadlineRow = {
     customerNameSnapshot: string;
     grossTotal: string;
     category: string;
+    /** Descrizione tipo documento (es. "Fattura acquisto", "Fattura") */
+    documentTypeDescription: string;
+    /** PURCHASE = uscita per saldare, SALE = entrata per incassare */
+    documentDirection: string;
   };
 };
 
@@ -285,6 +300,9 @@ export async function getPaymentDeadlinesPage(
             customerNameSnapshot: true,
             grossTotal: true,
             category: true,
+            documentType: {
+              select: { description: true, operationSignValuation: true, documentDirection: true },
+            },
           },
         },
         payments: { select: { amount: true } },
@@ -306,6 +324,7 @@ export async function getPaymentDeadlinesPage(
         : paidFromMappings > 0
           ? 'PARTIAL'
           : d.status.toString();
+    const sign = d.document.documentType?.operationSignValuation ?? 1;
     return {
       id: d.id,
       documentId: d.documentId,
@@ -313,6 +332,7 @@ export async function getPaymentDeadlinesPage(
       amount: d.amount.toString(),
       status,
       paidAmount: paidAmountStr,
+      operationSignValuation: sign,
       document: {
         id: d.document.id,
         number: d.document.number,
@@ -320,6 +340,8 @@ export async function getPaymentDeadlinesPage(
         customerNameSnapshot: d.document.customerNameSnapshot,
         grossTotal: d.document.grossTotal.toString(),
         category: d.document.category,
+        documentTypeDescription: d.document.documentType?.description ?? d.document.category,
+        documentDirection: d.document.documentType?.documentDirection ?? 'SALE',
       },
     };
   });

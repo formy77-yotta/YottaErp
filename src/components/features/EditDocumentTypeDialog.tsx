@@ -30,6 +30,8 @@ interface EditDocumentTypeDialogProps {
     documentDirection: 'PURCHASE' | 'SALE' | 'INTERNAL';
     active: boolean;
     templateId?: string | null;
+    templateName?: string | null;
+    color?: string | null;
   };
 }
 
@@ -52,7 +54,7 @@ export function EditDocumentTypeDialog({ documentType }: EditDocumentTypeDialogP
           </DialogDescription>
         </DialogHeader>
         <DocumentTypeForm
-          key={key}
+          key={`${key}-${documentType.id}`}
           documentType={documentType}
           onSuccess={() => {
             setOpen(false);
