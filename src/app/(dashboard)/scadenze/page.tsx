@@ -17,76 +17,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { CalendarClock, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
-import { formatCurrency } from '@/lib/decimal-utils';
-import { Decimal } from 'decimal.js';
+import { CalendarClock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { parseSearchParams } from '@/lib/validations/search-params';
 import { ScadenzeDataTableHeader } from '@/components/features/scadenze/ScadenzeDataTableHeader';
 import { ScadenzeTableBodyWithSelection } from '@/components/features/scadenze/ScadenzeTableBodyWithSelection';
 
 export const dynamic = 'force-dynamic';
-
-/** Colore importo: verde se positivo (entrata), rosso se negativo (uscita) */
-function AmountCell({ amount, operationSignValuation }: { amount: string; operationSignValuation: number }) {
-  const decimal = new Decimal(amount);
-  const signed = decimal.mul(operationSignValuation);
-  const isNegative = signed.lessThan(0);
-  return (
-    <span
-      className={
-        isNegative
-          ? 'font-medium text-red-600 dark:text-red-400'
-          : 'font-medium text-green-600 dark:text-green-400'
-      }
-    >
-      {formatCurrency(signed)}
-    </span>
-  );
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Da pagare',
-  PAID: 'Pagata',
-  PARTIAL: 'Parziale',
-};
-
-const STATUS_VARIANTS: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
-  PENDING: 'outline',
-  PAID: 'default',
-  PARTIAL: 'secondary',
-};
-
-/** Importo già pagato (somma PaymentMapping); segno e colore come tipo documento; barra di avanzamento */
-function ScadenzaProgressBar({
-  paid,
-  total,
-  operationSignValuation,
-}: {
-  paid: string;
-  total: string;
-  operationSignValuation: number;
-}) {
-  const paidNum = parseFloat(paid);
-  const totalNum = parseFloat(total);
-  const pct = totalNum !== 0 ? Math.min(100, (paidNum / totalNum) * 100) : 0;
-  const signedPaid = new Decimal(paid).mul(operationSignValuation);
-  const isNegative = signedPaid.lessThan(0);
-  const textClass = isNegative
-    ? 'text-xs text-red-600 dark:text-red-400'
-    : 'text-xs text-green-600 dark:text-green-400';
-  return (
-    <div className="space-y-1">
-      <p className={textClass}>{formatCurrency(signedPaid)}</p>
-      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${Math.abs(pct)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
 
 export default async function ScadenzePage({
   searchParams,

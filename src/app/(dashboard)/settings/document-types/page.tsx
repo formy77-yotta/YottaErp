@@ -112,7 +112,10 @@ async function DocumentTypesTable() {
             </TableHeader>
             <TableBody>
               {documentTypes.map((docType) => (
-                <DocumentTypeRow key={docType.id} documentType={docType} />
+                <DocumentTypeRow
+                  key={docType.id}
+                  documentType={{ ...docType, color: docType.color ?? null }}
+                />
               ))}
             </TableBody>
           </Table>

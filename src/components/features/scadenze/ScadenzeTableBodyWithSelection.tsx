@@ -97,10 +97,6 @@ export function ScadenzeTableBodyWithSelection({ deadlines }: { deadlines: Payme
       return next;
     });
   };
-  const toggleAll = () => {
-    if (selectedIds.size === deadlines.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(deadlines.map((d) => d.id)));
-  };
 
   return (
     <>

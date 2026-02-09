@@ -167,7 +167,7 @@ export async function getPaymentDeadlines(
           grossTotal: true,
           category: true,
           documentType: {
-            select: { description: true, operationSignValuation: true },
+            select: { description: true, operationSignValuation: true, documentDirection: true },
           },
         },
       },

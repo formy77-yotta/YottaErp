@@ -95,6 +95,7 @@ model Organization {
   financialAccounts   FinancialAccount[]
   installments        Installment[]
   printTemplates      PrintTemplate[]
+  documentImports     DocumentImport[]
 
   @@index([businessName])
 }
@@ -168,6 +169,7 @@ model Entity {
   documents      Document[]
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   defaultVatRate VatRate?         @relation(fields: [vatRateId], references: [id])
+  documentImports DocumentImport[]
 
   @@unique([organizationId, vatNumber])
   @@index([organizationId])
@@ -528,6 +530,7 @@ model Document {
   paymentCondition           PaymentCondition?  @relation(fields: [paymentConditionId], references: [id])
   lines                      DocumentLine[]
   installments               Installment[]
+  documentImports            DocumentImport[]
 
   @@unique([organizationId, number])
   @@index([shippingAddressId])
@@ -844,4 +847,43 @@ enum DocumentCategory {
   DELIVERY_NOTE
   INVOICE
   CREDIT_NOTE
+}
+
+/// *
+///  * DocumentImport: Wizard importazione documenti (PDF/Immagine/XML)
+///  * File caricati su Supabase Storage, dati estratti in parsedData (JSON).
+///  * MULTITENANT: organizationId su ogni record
+enum DocumentImportStatus {
+  UPLOADED
+  PARSING
+  PARSED
+  REVIEWING
+  COMPLETED
+  FAILED
+}
+
+model DocumentImport {
+  id              String                @id @default(cuid())
+  organizationId  String
+  fileUrl         String?
+  fileStoragePath String?               // Path in storage per delete
+  fileName        String
+  fileType        String                // "PDF", "IMAGE", "XML"
+  fileSize        Int
+  status          DocumentImportStatus  @default(UPLOADED)
+  parsedData      Json?
+  supplierId      String?
+  documentId      String?
+  errorMessage    String?               @db.Text
+  userId          String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier        Entity?               @relation(fields: [supplierId], references: [id])
+  document        Document?             @relation(fields: [documentId], references: [id])
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([userId])
 }
