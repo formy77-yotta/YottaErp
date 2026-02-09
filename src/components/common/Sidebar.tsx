@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Users,
   FileText,
+  FileUp,
   Package,
   Warehouse,
   Menu,
@@ -80,6 +81,11 @@ const navItems: NavItem[] = [
         title: 'Documenti',
         href: '/documents',
         icon: FileText,
+      },
+      {
+        title: 'Importa documento',
+        href: '/documents/import',
+        icon: FileUp,
       },
       {
         title: 'Scadenze',
